@@ -51,7 +51,7 @@ const HASSStudioGraphics = (() => {
     const left=side==='left',inside=side==='inside';
     const bx=inside?x-width/2:(left?x-width-8:x+8),by=y-height/2;
     const badgeScale=clampBadge(part.display_scale)/clampBadge(parentScale,0.5,2.4);
-    return '<g class="ss-temperature-badge" transform="translate('+x+' '+y+') scale('+badgeScale+') translate('+(-x)+' '+(-y)+')"'++(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>'+
+    return '<g class="ss-temperature-badge" transform="translate('+x+' '+y+') scale('+badgeScale+') translate('+(-x)+' '+(-y)+')"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>'+
       (!inside?'<path d="M'+x+' '+y+'H'+(left?x-8:x+8)+'" stroke="'+c+'" stroke-width="1.6"/>':'')+
       '<rect x="'+bx+'" y="'+by+'" width="'+width+'" height="'+height+'" rx="10" fill="#22272d" fill-opacity=".97" stroke="'+c+'" stroke-width="1.5"/>'+
       (hasLabel?'<text x="'+(bx+width/2)+'" y="'+(y-4)+'" font-size="8.5" text-anchor="middle" font-weight="600" letter-spacing=".45" fill="#c5cbd2">'+label+'</text>':'')+
