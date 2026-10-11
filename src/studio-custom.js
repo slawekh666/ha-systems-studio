@@ -205,7 +205,8 @@
   const symbolOnPipe=(item,pipe,hass)=>{
     const at=onPipe(pipe,item.position),isPump=item.type==='pump';
     const enabled=HASSStudioGraphics.on(hass,item.entity);
-    return '<g transform="translate('+at.x+' '+at.y+')" class="ss-accessory" data-pipe="'+esc(pipe.id)+'">'+
+    return '<g transform="translate('+at.x+' '+at.y+')" class="ss-accessory" data-pipe="'+esc(pipe.id)+'"'+
+      (item.entity?' data-more="'+esc(item.entity)+'"':'')+'>'+
       '<circle r="17" fill="#405669" stroke="'+(enabled?'#68c69b':'#d7e5ee')+'" stroke-width="2"/>'+ 
       (isPump&&enabled?'<circle class="ss-pump-pulse" r="17" fill="none" stroke="#68c69b"/>':'')+
       (isPump?'<path d="M-7 -10L10 0L-7 10Z" fill="#dceaf3"/>':
@@ -247,7 +248,7 @@
         (reading&&!(node.type==='boiler'&&node.visual==='warmwasser')?'<text x="60" y="145" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
         '</g>';
     }).join('');
-    return '<svg class="ss-svg" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
+    return '<svg class="ss-svg'+(editable?' ss-svg-editor':'')+'" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
       HASSStudioGraphics.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
       '<rect width="'+W+'" height="'+H+'" rx="10" fill="var(--secondary-background-color,#17222d)"/>'+
       '<g class="ss-devices">'+nodes+'</g><g class="ss-pipe-layer" stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-pipe-handles">'+handles+'</g></svg>';
@@ -310,7 +311,9 @@
       '.ss-library button span{font-size:19px;display:inline-block;width:24px;text-align:center}'+
       '.ss-canvas{min-width:0;min-height:0;overflow:auto;background:var(--secondary-background-color,#18222e);padding:16px}'+
       '.ss-stage{width:max-content;max-width:none}.ss-svg{display:block;width:1200px;height:720px;max-height:none;padding:0;touch-action:none}'+
-      '.ss-node{cursor:grab}.ss-pipe-hit{cursor:pointer;pointer-events:stroke}.ss-handle{cursor:move}.ss-accessory{pointer-events:none}'+
+      '.ss-svg-editor .ss-node{cursor:grab}.ss-svg-editor .ss-pipe-hit{cursor:pointer;pointer-events:stroke}.ss-handle{cursor:move}'+
+      '.ss-svg-editor .ss-accessory{pointer-events:none}.ss-svg:not(.ss-svg-editor) .ss-pipe{pointer-events:none}'+
+      '.ss-svg:not(.ss-svg-editor) [data-more]{cursor:pointer}'+
       '.ss-props section{border-top:1px solid var(--divider-color,#555);padding:12px 0;display:grid;gap:10px}'+
       '.ss-props section:first-of-type{border-top:0}.ss-props h4{margin:0;font-size:13px}'+
       '.ss-props p,.ss-note{font-size:12px;color:var(--secondary-text-color)}'+
