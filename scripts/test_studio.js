@@ -36,7 +36,7 @@ const partRender=api.render({
 assert.match(partRender,/<g class="ss-temperature-badge" data-more="sensor.tank_top">/);
 assert.match(partRender,/<g class="ss-heater" data-more="switch.heater">/);
 assert.match(partRender,/<g class="ss-coil" data-more="binary_sensor.coil">/);
-assert.match(src,/class="ss-accessory" data-pipe="[^\n]*data-more/);
+assert(src.includes('class="ss-accessory" data-pipe=') && src.includes("item.entity?' data-more="), 'accessory history binding missing');
 assert.match(src,/\.ss-svg:not\(\.ss-svg-editor\) \.ss-pipe\{pointer-events:none\}/);
 assert.match(src,/\(editable\?' ss-svg-editor':''\)/);
 assert.match(src,/const ent=node.entity\?' data-more="/);
