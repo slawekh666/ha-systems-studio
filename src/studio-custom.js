@@ -24,7 +24,7 @@
       temperature:'Temperature',pressure:'Pressure'}
   };
   const words={
-    pl:{compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
+    pl:{boilerState:'Praca palnika / grzania',burnerEntity:'Encja pracy palnika',solarSensors:'Czujniki kolektora',solarPump:'Encja pompy solarnej',pipeStart:'Króciec na początku',pipeEnd:'Króciec na końcu',yes:'Tak',no:'Nie',compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
       flowOn:'Włączona (podgląd)',flowAuto:'Według encji',flowDirection:'Kierunek przepływu',
       flowSpeed:'Czas animacji (s)',flowEntity:'Encja sterująca przepływem',
       forward:'Początek → koniec',reverse:'Koniec → początek',mode:'Tryb układu',auto:'Automatyczny (Warmwasser)',custom:'Własny układ',language:'Język',
@@ -42,7 +42,7 @@
       boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',pipes:'Rury',
       link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
       zoom:'Powiększenie',noValues:'Bez pomiaru',editor:'Projektant instalacji'},
-    en:{compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
+    en:{boilerState:'Burner / heating state',burnerEntity:'Burner status entity',solarSensors:'Collector sensors',solarPump:'Solar pump entity',pipeStart:'Start connector',pipeEnd:'End connector',yes:'Yes',no:'No',compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
       flowOn:'On (preview)',flowAuto:'Controlled by entity',flowDirection:'Flow direction',
       flowSpeed:'Animation duration (s)',flowEntity:'Flow control entity',
       forward:'Start → end',reverse:'End → start',mode:'Layout mode',auto:'Automatic (Warmwasser)',custom:'Custom layout',language:'Language',
@@ -93,7 +93,11 @@
       id:v.id.slice(0,32),type:v.type,
       x:clamp(v.x,0,W-120,40),y:clamp(v.y,0,H-140,40),
       scale:clamp(v.scale,0.5,2.4,1),
+      // Old manual scaling is preserved for later parametric resizing.
       scale_x:clamp(v.scale_x ?? v.scale,0.4,3.5,1),scale_y:clamp(v.scale_y ?? v.scale,0.4,4.5,1),
+      burner_entity:validEntity(v.burner_entity)?v.burner_entity:'',
+      burner_mode:['auto','on','off'].includes(v.burner_mode)?v.burner_mode:'auto',
+      pump_entity:validEntity(v.pump_entity)?v.pump_entity:'',
       visual:v.visual==='studio'?'studio':'warmwasser',
       variant:graphics[v.type].includes(v.variant)?v.variant:graphics[v.type][0],
       label:String(v.label||'').slice(0,64),
@@ -109,7 +113,8 @@
       flow_mode:['auto','on','off'].includes(v.flow_mode)?v.flow_mode:'auto',
       flow_entity:validEntity(v.flow_entity)?v.flow_entity:'',
       flow_direction:v.flow_direction==='reverse'?'reverse':'forward',
-      flow_speed:clamp(v.flow_speed,.35,5,1),
+      flow_speed:clamp(v.flow_speed,.35,5,1),cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
+      cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
       points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
         x:clamp(q.x,0,W,100),y:clamp(q.y,0,H,100)})),
       accessories:(Array.isArray(v.accessories)?v.accessories:[]).slice(0,20).map(normalizeAccessory)
@@ -126,7 +131,7 @@
         const bx=to.x+b[0]*to.scale,by=to.y+b[1]*to.scale;
         const mx=(ax+bx)/2;
         pipes.push({id:'migrated-'+index,label:'',color:colors[edge.color]?edge.color:'hot',
-          width:7,flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,
+          width:7,flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,cap_start:true,cap_end:true,
           points:[{x:ax,y:ay},{x:mx,y:ay},{x:mx,y:by},{x:bx,y:by}],accessories:[]});
       });
     }
@@ -208,37 +213,40 @@
     const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser')
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
     const pipes=data.pipes.map(pipe=>{
-      const active=selected?.type==='pipe' && selected.id===pipe.id;
-      const d=pipePath(pipe.points);
-      const flowing=pipe.flow_mode==='on'||(pipe.flow_mode==='auto' &&
-        HASSStudioGraphics.on(hass,pipe.flow_entity));
-      const flow=flowing?'<path class="ss-line ss-flow" d="'+d+'" style="--ss-speed:'+pipe.flow_speed+
-        's;animation-direction:'+pipe.flow_direction+'"/>':'';
-      const handles=editable&&active?pipe.points.map((pt,index)=>
-        '<circle class="ss-handle" data-id="'+esc(pipe.id)+'" data-point="'+index+
-        '" cx="'+pt.x+'" cy="'+pt.y+'" r="8" fill="#fff" stroke="#2196f3" stroke-width="2"/>').join(''):'';
-      return '<g class="ss-pipe" data-id="'+esc(pipe.id)+'">'+
-        '<path class="ss-pipe-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
+      const d=pipePath(pipe.points),enabled=pipe.flow_mode==='on'||(pipe.flow_mode==='auto'&&HASSStudioGraphics.on(hass,pipe.flow_entity));
+      const endcap=(first)=>{
+        if(first&&pipe.cap_start===false||!first&&pipe.cap_end===false)return '';
+        const pts=pipe.points,at=first?pts[0]:pts[pts.length-1],near=first?pts[1]:pts[pts.length-2];
+        const angle=Math.atan2(at.y-near.y,at.x-near.x)*180/Math.PI;
+        return '<g class="ss-cap" data-cap="'+(first?'start':'end')+'" transform="translate('+at.x+' '+at.y+') rotate('+angle+')">'+
+          '<rect x="-6" y="-7" width="12" height="14" rx="2" fill="#7c8793" stroke="#b6c1cc"/></g>';
+      };
+      return '<g class="ss-pipe" data-id="'+esc(pipe.id)+'"><path class="ss-pipe-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="#142332" stroke-width="'+(pipe.width+3)+'" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="'+colors[pipe.color]+'" stroke-width="'+pipe.width+'" fill="none"/>'+
-        flow+pipe.accessories.map(item=>symbolOnPipe(item,pipe,hass)).join('')+handles+'</g>';
+        (enabled?'<path class="ss-line ss-flow" d="'+d+'" style="--ss-speed:'+pipe.flow_speed+'s;animation-direction:'+pipe.flow_direction+'"/>':'')+
+        endcap(true)+endcap(false)+'</g>';
     }).join('');
+    const accessories=data.pipes.map(pipe=>pipe.accessories.map(item=>symbolOnPipe(item,pipe,hass)).join('')).join('');
+    const handles=editable&&selected?.type==='pipe'?data.pipes.filter(p=>p.id===selected.id).map(pipe=>pipe.points.map((pt,index)=>
+      '<circle class="ss-handle" data-id="'+esc(pipe.id)+'" data-point="'+index+'" cx="'+pt.x+'" cy="'+pt.y+
+      '" r="8" fill="#fff" stroke="#2196f3" stroke-width="2"/>').join('')).join(''):'';
     const nodes=data.nodes.map(node=>{
       const active=selected?.type==='node'&&selected.id===node.id;
       const reading=valueOf(hass,node.entity);
       const name=esc(node.label||L[node.type]||node.type);
       const ent=node.entity?' data-more="'+esc(node.entity)+'"':'';
-      return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale_x+' '+node.scale_y+')">'+
+      return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale+')">'+
         (node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
         (editable&&active?'<rect class="ss-selection" x="4" y="3" width="112" height="113" rx="8" fill="none" stroke="#52bfff" stroke-dasharray="5 4" stroke-width="1.6" pointer-events="none"/>':'')+
         '<text x="60" y="130" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
-        (reading?'<text x="60" y="145" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
+        (reading&&!(node.type==='boiler'&&node.visual==='warmwasser')?'<text x="60" y="145" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
         '</g>';
     }).join('');
     return '<svg class="ss-svg" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
       HASSStudioGraphics.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
       '<rect width="'+W+'" height="'+H+'" rx="10" fill="var(--secondary-background-color,#17222d)"/>'+
-      '<g stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g>'+nodes+'</svg>';
+      '<g class="ss-devices">'+nodes+'</g><g class="ss-pipe-layer" stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-pipe-handles">'+handles+'</g></svg>';
   };
   const nativeRender=WarmwasserSchemaCard.prototype._render;
   WarmwasserSchemaCard.prototype._render=function(){
@@ -387,22 +395,26 @@
         markup+='<div class="ss-preview"><svg viewBox="0 0 120 120" width="120" height="120">'+
           HASSStudioGraphics.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
           (obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,this._hass):variantShape(obj))+'</svg></div>';
-        markup+=field(L.widthScale||'Width','scale_x',obj.scale_x,'range',null,'min="0.4" max="3.5" step="0.1"');
-        markup+=field(L.heightScale||'Height','scale_y',obj.scale_y,'range',null,'min="0.4" max="4.5" step="0.1"');
+        markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
         markup+='<div class="ss-row">'+field('X','x',obj.x,'number')+field('Y','y',obj.y,'number')+'</div>';
         markup+=field(L.entity,'entity',obj.entity,'search',null,'list="ss-entity-list"');
+        if(obj.type==='boiler'){
+          markup+=field(L.boilerState,'burner_mode',obj.burner_mode,'text',[['auto',L.flowAuto],['on',L.flowOn],['off',L.flowOff]]);
+          markup+=field(L.burnerEntity,'burner_entity',obj.burner_entity,'search',null,'list="ss-entity-list"');
+        }
+        if(obj.type==='solar')markup+=field(L.solarPump,'pump_entity',obj.pump_entity,'search',null,'list="ss-entity-list"');
         markup+='</section><section><h4>'+esc(L.entities)+'</h4>'+
           obj.entities.map((en,index)=>'<div class="ss-row">'+
             entityField(en.entity,'multiEntity',index)+
             '<button type="button" data-delete-entity="'+index+'">×</button></div>'+
             field(L.label,'multiLabel',en.label,'text',null,'data-index="'+index+'"')).join('')+
           '<button type="button" data-action="entity">'+esc(L.addEntity)+'</button></section>';
-        if(obj.type==='tank'){
-          markup+='<section><h4>'+esc(L.sensors)+'</h4>'+
+        if(obj.type==='tank'||obj.type==='solar'){
+          markup+='<section><h4>'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'</h4'+
           obj.parts.map((item,index)=>'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+'</strong>'+
             '<button type="button" data-delete-part="'+index+'">×</button></div>'+
-            field(L.graphic,'partKind',item.kind,'text',
-              [['sensor',L.sensor],['heater',L.heater],['coil',L.coil]],'data-index="'+index+'"')+
+            (obj.type==='solar'?'':field(L.graphic,'partKind',item.kind,'text',
+              [['sensor',L.sensor],['heater',L.heater],['coil',L.coil]],'data-index="'+index+'"'))+
             field(L.visual,'partVariant',item.variant,'text',
               [['warmwasser','Warmwasser'],['compact',L.compact||'Compact'],['extended',L.extended||'Extended']],
               'data-index="'+index+'"')+
@@ -411,12 +423,14 @@
               'min="0" max="100" data-index="'+index+'"')+
             '<label>'+esc(L.entity)+entityField(item.entity,'partEntity',index)+'</label>'
           ).join('')+
-          '<div class="ss-row">'+[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]].map(v=>
+          '<div class="ss-row">'+(obj.type==='solar'?[['sensor',L.sensor]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]]).map(v=>
             '<button type="button" data-add-part="'+v[0]+'">+ '+esc(v[1])+'</button>').join('')+'</div></section>';
         }
       }else{
         markup+=field(L.pipeColor,'color',obj.color,'text',colorsList);
         markup+=field(L.pipeWidth,'width',obj.width,'range',null,'min="3" max="14" step="1"');
+        markup+=field(L.pipeStart,'cap_start',obj.cap_start?'true':'false','text',[['true',L.yes],['false',L.no]]);
+        markup+=field(L.pipeEnd,'cap_end',obj.cap_end?'true':'false','text',[['true',L.yes],['false',L.no]]);
         markup+=field(L.flowMode||'Flow animation','flow_mode',obj.flow_mode,'text',
           [['off',L.flowOff||'Off'],['auto',L.flowAuto||'Entity-controlled'],['on',L.flowOn||'On (preview)']]);
         markup+=field(L.flowDirection||'Flow direction','flow_direction',obj.flow_direction,'text',
@@ -488,12 +502,18 @@
         const group=[...svg.querySelectorAll('.ss-pipe')].find(el=>el.dataset.id===pipe.id);
         if(!group)continue;
         const d=pipePath(pipe.points);
-        group.querySelectorAll('path').forEach(el=>el.setAttribute('d',d));
-        group.querySelectorAll('.ss-handle').forEach(el=>{
+        group.querySelectorAll('path.ss-line,path.ss-pipe-hit').forEach(el=>el.setAttribute('d',d));
+        group.querySelectorAll('.ss-cap').forEach(el=>{
+          const first=el.dataset.cap==='start',pt=first?pipe.points[0]:pipe.points[pipe.points.length-1],
+          near=first?pipe.points[1]:pipe.points[pipe.points.length-2];
+          el.setAttribute('transform','translate('+pt.x+' '+pt.y+') rotate('+(Math.atan2(pt.y-near.y,pt.x-near.x)*180/Math.PI)+')');
+        });
+        svg.querySelectorAll('.ss-handle').forEach(el=>{
+          if(el.dataset.id!==pipe.id)return;
           const p=pipe.points[Number(el.dataset.point)];
           if(p){el.setAttribute('cx',p.x);el.setAttribute('cy',p.y);}
         });
-        group.querySelectorAll('.ss-accessory').forEach((el,i)=>{
+        svg.querySelectorAll('.ss-accessory[data-pipe="'+pipe.id+'"]').forEach((el,i)=>{
           const accessory=pipe.accessories[i];
           if(accessory){const p=onPipe(pipe,accessory.position);
             el.setAttribute('transform','translate('+p.x+' '+p.y+')');}
@@ -506,14 +526,14 @@
         if(model.pipes.length>=MAX_PIPES)return;
         const n=model.pipes.length;
         const pipe={id:freshId('p'),label:'',color:'hot',width:7,
-          flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,
+          flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,cap_start:true,cap_end:true,
           points:[{x:180+n*10,y:120+n*12},{x:470+n*10,y:120+n*12}],accessories:[]};
         model.pipes.push(pipe);selection={type:'pipe',id:pipe.id};
       }else{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,scale_x:1,scale_y:1,visual:'warmwasser',variant:graphics[kind][0],label:'',entity:'',entities:[],parts:[]};
+          scale:1,scale_x:1,scale_y:1,visual:'warmwasser',variant:graphics[kind][0],label:'',entity:'',burner_entity:'',burner_mode:'auto',pump_entity:'',entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -559,8 +579,10 @@
       if(['x','y','scale','scale_x','scale_y','width','flow_speed'].includes(key)){
         obj[key]=clamp(val,key==='scale'?0.5:key==='scale_x'||key==='scale_y'?0.4:key==='width'?3:key==='flow_speed'?0.35:0,
           key==='scale'?2.4:key==='scale_x'?3.5:key==='scale_y'?4.5:key==='width'?14:key==='flow_speed'?5:key==='x'?W:H,obj[key]);
-      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity'].includes(key)){
-        if(key==='entity'||key==='flow_entity')obj[key]=validEntity(val)?val:'';
+      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity','burner_entity','burner_mode','pump_entity','cap_start','cap_end'].includes(key)){
+        if(['entity','flow_entity','burner_entity','pump_entity'].includes(key))obj[key]=validEntity(val)?val:'';
+        else if(key==='burner_mode')obj.burner_mode=['auto','on','off'].includes(val)?val:'auto';
+        else if(key==='cap_start'||key==='cap_end')obj[key]=val==='true';
         else if(key==='visual')obj.visual=val==='studio'?'studio':'warmwasser';
         else if(key==='flow_mode')obj.flow_mode=['on','off','auto'].includes(val)?val:'auto';
         else if(key==='flow_direction')obj.flow_direction=val==='reverse'?'reverse':'forward';
@@ -592,8 +614,8 @@
       else if(button.hasAttribute('data-delete-entity'))obj.entities.splice(index,1);
       else if(button.dataset.addPart){
         if(obj.parts.length>=20)return;
-        obj.parts.push({id:freshId('i'),kind:button.dataset.addPart,label:'',
-          side:'left',height:50,variant:'warmwasser',entity:''});
+        obj.parts.push({id:freshId('i'),kind:obj.type==='solar'?'sensor':button.dataset.addPart,label:obj.type==='solar'?'Kolektor':'',
+          side:obj.type==='solar'?'right':'left',height:obj.type==='solar'?80:50,variant:'warmwasser',entity:''});
       }else if(button.dataset.addAccessory){
         if(obj.accessories.length>=20)return;
         obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,position:50,entity:''});
