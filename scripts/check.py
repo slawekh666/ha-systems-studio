@@ -16,7 +16,8 @@ for tag in ["customElements.define('ha-systems-studio'", "customElements.define(
     assert tag in s, f'Missing registered component: {tag}'
 assert 'studio_readonly !== false && el.dataset.act' in s, 'Missing action safety guard'
 assert 'custom:warmwasser-schema-card' not in s
-assert 'studio_layout' in s and "layout_mode!=='custom'" in s, 'Missing custom-layout editor', 'Original card tag leaked into release'
+assert 'custom:warmwasser-schema-card' not in s, 'Original card tag leaked into release'
+assert 'studio_layout' in s and "layout_mode!=='custom'" in s, 'Missing custom-layout editor'
 try:
     subprocess.run(['node','--check',str(js)],check=True)
 except FileNotFoundError:
