@@ -9,4 +9,5 @@ validate_card:
   script:
     - python3 scripts/build.py
     - python3 scripts/check.py
+    - node scripts/test_studio.js
     - git diff --exit-code -- dist/ha-systems-studio.js

@@ -4,6 +4,13 @@ const HASSStudioGraphics = (() => {
   const sensorState=(h,e)=>e&&h?.states?.[e]?h.states[e].state:'unknown';
   const numeric=v=>v!==''&&v!==null&&v!==undefined&&Number.isFinite(Number(v));
   const on=(h,e)=>['on','open','active','running','heating'].includes(String(sensorState(h,e)).toLowerCase());
+  const burningStates=new Map(),collectorStates=new Map();
+  const thresholdActive=(states,id,value,onAt,offAt)=>{
+    if(!numeric(value)){states.delete(id);return false;}
+    const active=states.get(id)===true;
+    const next=active?Number(value)>offAt:Number(value)>=onAt;
+    states.set(id,next);return next;
+  };
   const color=value=>{
     if(!numeric(value))return 'rgb(138,144,153)';
     const x=Math.max(0,Math.min(1,Number(value)/90));
@@ -25,19 +32,26 @@ const HASSStudioGraphics = (() => {
       '<linearGradient id="'+id(n)+'Steel" x1="0" y1="0" x2="1" y2="0">'+
       '<stop stop-color="#69717d"/><stop offset=".5" stop-color="#39414a"/><stop offset="1" stop-color="#222a32"/></linearGradient>';
   };
-  // Compact Warmwasser-style temperature capsules with color derived from the HA reading.
+  // Fit badges to measured string lengths rather than stretching all to 94px.
+  const approxTextWidth=(text,size)=>Array.from(String(text)).reduce((total,ch)=>{
+    const fraction=/[ilI1.,:!'|]/.test(ch)?0.34:/[MW@%]/.test(ch)?0.88:/[0-9]/.test(ch)?0.60:0.58;
+    return total+size*fraction;
+  },0);
   const temperatureBadge=(part,h,x,y,side='left')=>{
     const v=sensorState(h,part.entity),c=color(v);
-    const label=esc(String(part.label||'').slice(0,24));
-    const reading=numeric(v)?Number(v).toFixed(1)+'°':(part.entity?'—':'—');
-    const left=side==='left', inside=side==='inside';
-    const bx=inside?x-37:(left?x-102:x+8),by=y-16;
-    const width=inside?74:94;
+    const rawLabel=String(part.label||'').slice(0,24),label=esc(rawLabel);
+    const reading=numeric(v)?Number(v).toFixed(1)+'°':'—';
+    const hasLabel=rawLabel.trim().length>0;
+    const width=Math.ceil(Math.max(30,approxTextWidth(reading,13)+18,
+      hasLabel?approxTextWidth(rawLabel,8.5)+18:0));
+    const height=hasLabel?32:25;
+    const left=side==='left',inside=side==='inside';
+    const bx=inside?x-width/2:(left?x-width-8:x+8),by=y-height/2;
     return '<g class="ss-temperature-badge">'+
       (!inside?'<path d="M'+x+' '+y+'H'+(left?x-8:x+8)+'" stroke="'+c+'" stroke-width="1.6"/>':'')+
-      '<rect x="'+bx+'" y="'+by+'" width="'+width+'" height="32" rx="10" fill="#22272d" fill-opacity=".97" stroke="'+c+'" stroke-width="1.5"/>'+
-      '<text x="'+(bx+width/2)+'" y="'+(y-4)+'" font-size="8.5" text-anchor="middle" font-weight="600" letter-spacing=".45" fill="#c5cbd2">'+label+'</text>'+
-      '<text x="'+(bx+width/2)+'" y="'+(y+10)+'" font-size="13" font-weight="700" text-anchor="middle" fill="#f0f3f6">'+reading+'</text>'+
+      '<rect x="'+bx+'" y="'+by+'" width="'+width+'" height="'+height+'" rx="10" fill="#22272d" fill-opacity=".97" stroke="'+c+'" stroke-width="1.5"/>'+
+      (hasLabel?'<text x="'+(bx+width/2)+'" y="'+(y-4)+'" font-size="8.5" text-anchor="middle" font-weight="600" letter-spacing=".45" fill="#c5cbd2">'+label+'</text>':'')+
+      '<text x="'+(bx+width/2)+'" y="'+(hasLabel?y+10:y+4.5)+'" font-size="13" font-weight="700" text-anchor="middle" fill="#f0f3f6">'+reading+'</text>'+
       '<circle cx="'+x+'" cy="'+y+'" r="4" fill="'+c+'" stroke="#fff" stroke-width="1.4"/></g>';
   };
   const tank=(n,h)=>{
@@ -87,7 +101,10 @@ const HASSStudioGraphics = (() => {
   };
   const boiler=(n,h)=>{
     const v=n.variant,temp=sensorState(h,n.entity);
-    const burning=n.burner_mode==='on'||(n.burner_mode!=='off'&&on(h,n.burner_entity));
+    const fallbackTemp=thresholdActive(burningStates,n.id,temp,
+      Number(n.burner_on_temp??35),Math.min(Number(n.burner_off_temp??32),Number(n.burner_on_temp??35)-0.5));
+    const burning=n.burner_mode==='on'||(n.burner_mode!=='off'&&
+      (n.burner_entity?on(h,n.burner_entity):fallbackTemp));
     const isWood=['wood','pellet'].includes(v),isGas=['gas','oil'].includes(v),electric=v==='electric',heatpump=v==='heatpump';
     const pale=isGas||electric,steel=id(n)+'Steel';
     const flame=(x,y,w,height,duration)=>{
@@ -137,7 +154,14 @@ const HASSStudioGraphics = (() => {
     return out;
   };
   const solar=(n,h)=>{
-    const lit=on(h,n.pump_entity||n.entity),cx=101,cy=27;
+    const collectorPart=(n.parts||[]).find(p=>p.kind==='sensor'&&p.entity&&/kolektor|collector/i.test(p.label||''))||
+      (n.parts||[]).find(p=>p.kind==='sensor'&&p.entity);
+    const collectorTemp=sensorState(h,collectorPart?.entity||n.entity);
+    const tankTemp=sensorState(h,n.tank_entity);
+    const delta=numeric(collectorTemp)&&numeric(tankTemp)?Number(collectorTemp)-Number(tankTemp):null;
+    const lit=thresholdActive(collectorStates,n.id,delta,Number(n.solar_on_delta??6),
+      Math.min(Number(n.solar_off_delta??3),Number(n.solar_on_delta??6)-0.5));
+    const cx=101,cy=27;
     const rays=Array.from({length:8},(_,i)=>{
       const a=i*Math.PI/4,x1=cx+11*Math.cos(a),y1=cy+11*Math.sin(a);
       const x2=cx+16*Math.cos(a),y2=cy+16*Math.sin(a);
