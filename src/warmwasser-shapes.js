@@ -47,7 +47,7 @@ const HASSStudioGraphics = (() => {
     const height=hasLabel?32:25;
     const left=side==='left',inside=side==='inside';
     const bx=inside?x-width/2:(left?x-width-8:x+8),by=y-height/2;
-    return '<g class="ss-temperature-badge">'+
+    return '<g class="ss-temperature-badge"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>'+
       (!inside?'<path d="M'+x+' '+y+'H'+(left?x-8:x+8)+'" stroke="'+c+'" stroke-width="1.6"/>':'')+
       '<rect x="'+bx+'" y="'+by+'" width="'+width+'" height="'+height+'" rx="10" fill="#22272d" fill-opacity=".97" stroke="'+c+'" stroke-width="1.5"/>'+
       (hasLabel?'<text x="'+(bx+width/2)+'" y="'+(y-4)+'" font-size="8.5" text-anchor="middle" font-weight="600" letter-spacing=".45" fill="#c5cbd2">'+label+'</text>':'')+
@@ -79,6 +79,7 @@ const HASSStudioGraphics = (() => {
         out+=temperatureBadge(part,h,x,y,part.side);
       }else if(part.kind==='heater'){
         const active=on(h,part.entity)||(numeric(sensorState(h,part.entity))&&Number(sensorState(h,part.entity))>5);
+        out+='<g class="ss-heater"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>';
         const c=active?'#ffc52f':'#b9c0c8',length=part.variant==='extended'?76:part.variant==='compact'?42:60;
         const right=part.side!=='left';
         const connector=right?93:29,sign=right?-1:1;
@@ -88,13 +89,14 @@ const HASSStudioGraphics = (() => {
         out+='<g><path d="'+d+'" stroke="'+c+'" stroke-width="3" stroke-linejoin="round" fill="none"/>'+
           '<rect x="'+(connector-(right?0:16))+'" y="'+(y-11)+'" width="16" height="22" rx="3" fill="#343940" stroke="'+c+'" stroke-width="1.6"/>'+
           '<text x="'+(right?connector-4:connector+20)+'" y="'+(y-15)+'" text-anchor="'+(right?'end':'start')+
-          '" font-size="9" fill="'+c+'">'+esc(String(part.label||'').slice(0,25))+'</text></g>';
+          '" font-size="9" fill="'+c+'">'+esc(String(part.label||'').slice(0,25))+'</text></g></g>';
       }else if(part.kind==='coil'){
+        out+='<g class="ss-coil"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>';
         const reach=part.variant==='extended'?28:part.variant==='compact'?11:19;
         const mid=part.side==='left'?45:part.side==='right'?78:61;
         out+='<path d="M'+(mid-reach)+' '+y+'C'+(mid-reach)+' '+(y-13)+' '+(mid+reach)+' '+(y-7)+' '+(mid+reach)+' '+(y-19)+
           'C'+(mid+reach)+' '+(y-31)+' '+(mid-reach)+' '+(y-23)+' '+(mid-reach)+' '+(y-35)+
-          '" fill="none" stroke="#d1d9e0" stroke-width="2.6" stroke-linecap="round"/>';
+          '" fill="none" stroke="#d1d9e0" stroke-width="2.6" stroke-linecap="round"/></g>';
       }
     }
     return out;

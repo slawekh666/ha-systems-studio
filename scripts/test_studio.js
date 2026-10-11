@@ -24,3 +24,20 @@ assert.match(api.render(solar,state({'sensor.collector':45,'sensor.tank':40})),/
 assert.doesNotMatch(api.render(solar,state({'sensor.collector':42,'sensor.tank':40})),/class="ss-solar-sun"/);
 assert.doesNotMatch(api.render({...solar,id:'solar_missing',tank_entity:''},state({'sensor.collector':48,'sensor.tank':40})),/class="ss-solar-sun"/);
 console.log('OK: stable scaling, compact badges, boiler and collector states');
+
+/* Native HA more-info uses the innermost data-more target. */
+const partRender=api.render({
+  id:'tank_history',type:'tank',variant:'dual_coil',
+  parts:[
+    {kind:'sensor',side:'left',height:80,label:'Góra',entity:'sensor.tank_top'},
+    {kind:'heater',side:'right',height:40,label:'Grzałka',entity:'switch.heater'},
+    {kind:'coil',side:'inside',height:20,entity:'binary_sensor.coil'}]
+},state({'sensor.tank_top':63.5,'switch.heater':'on','binary_sensor.coil':'off'}));
+assert.match(partRender,/<g class="ss-temperature-badge" data-more="sensor.tank_top">/);
+assert.match(partRender,/<g class="ss-heater" data-more="switch.heater">/);
+assert.match(partRender,/<g class="ss-coil" data-more="binary_sensor.coil">/);
+assert.match(src,/class="ss-accessory" data-pipe="[^\n]*data-more/);
+assert.match(src,/\.ss-svg:not\(\.ss-svg-editor\) \.ss-pipe\{pointer-events:none\}/);
+assert.match(src,/\(editable\?' ss-svg-editor':''\)/);
+assert.match(src,/const ent=node.entity\?' data-more="/);
+console.log('OK: history click targets for individual sensors, heaters, coils and pipe accessories.');
