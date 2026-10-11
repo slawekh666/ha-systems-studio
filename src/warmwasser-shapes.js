@@ -48,11 +48,18 @@ const HASSStudioGraphics = (() => {
       const y=107-Number(part.height)*.95,x=part.side==='left'?31:part.side==='right'?92:61;
       if(part.kind==='sensor'){
         const v=sensorState(h,part.entity);
-        out+='<circle cx="'+x+'" cy="'+y+'" r="4.5" fill="'+color(v)+'" stroke="#27313c" stroke-width="1.3"/>';
+        const radius=part.variant==='extended'?6:part.variant==='compact'?3:4.5;
+        out+='<circle cx="'+x+'" cy="'+y+'" r="'+radius+'" fill="'+color(v)+'" stroke="#27313c" stroke-width="1.3"/>';
+        if(part.variant==='extended')out+='<path d="M'+x+' '+(y-8)+'v16" stroke="#f1d19b" stroke-width="2"/>';
         if(numeric(v))out+='<text x="'+(part.side==='left'?x-8:x+8)+'" y="'+(y+3)+'" text-anchor="'+(part.side==='left'?'end':'start')+
           '" font-size="10" fill="var(--primary-text-color,#eee)">'+esc(Number(v).toFixed(1))+'°</text>';
-      }else if(part.kind==='heater')out+='<path d="M'+(x-11)+' '+y+'h22m-16-5v10m10-10v10" stroke="#f3bf73" stroke-width="2.6" fill="none"/>';
-      else if(part.kind==='coil')out+='<path d="M'+(x-13)+' '+y+'q7-13 14 0t14 0" stroke="#ccd4dd" stroke-width="2.6" fill="none"/>';
+      }else if(part.kind==='heater'){
+        const reach=part.variant==='extended'?22:part.variant==='compact'?7:12;
+        out+='<path d="M'+(x-reach)+' '+y+'h'+(reach*2)+'m-'+(reach*1.5)+'-5v10m'+reach+'-10v10" stroke="#f3bf73" stroke-width="2.6" fill="none"/>';
+      }else if(part.kind==='coil'){
+        const reach=part.variant==='extended'?22:part.variant==='compact'?8:13;
+        out+='<path d="M'+(x-reach)+' '+y+'q'+(reach/2)+'-13 '+reach+' 0t'+reach+' 0" stroke="#ccd4dd" stroke-width="2.6" fill="none"/>';
+      }
     }
     return out;
   };
