@@ -25,6 +25,21 @@ const HASSStudioGraphics = (() => {
       '<linearGradient id="'+id(n)+'Steel" x1="0" y1="0" x2="1" y2="0">'+
       '<stop stop-color="#69717d"/><stop offset=".5" stop-color="#39414a"/><stop offset="1" stop-color="#222a32"/></linearGradient>';
   };
+  // Compact Warmwasser-style temperature capsules with color derived from the HA reading.
+  const temperatureBadge=(part,h,x,y,side='left')=>{
+    const v=sensorState(h,part.entity),c=color(v);
+    const label=esc(String(part.label||'').slice(0,24));
+    const reading=numeric(v)?Number(v).toFixed(1)+'°':(part.entity?'—':'—');
+    const left=side==='left', inside=side==='inside';
+    const bx=inside?x-37:(left?x-102:x+8),by=y-16;
+    const width=inside?74:94;
+    return '<g class="ss-temperature-badge">'+
+      (!inside?'<path d="M'+x+' '+y+'H'+(left?x-8:x+8)+'" stroke="'+c+'" stroke-width="1.6"/>':'')+
+      '<rect x="'+bx+'" y="'+by+'" width="'+width+'" height="32" rx="10" fill="#22272d" fill-opacity=".97" stroke="'+c+'" stroke-width="1.5"/>'+
+      '<text x="'+(bx+width/2)+'" y="'+(y-4)+'" font-size="8.5" text-anchor="middle" font-weight="600" letter-spacing=".45" fill="#c5cbd2">'+label+'</text>'+
+      '<text x="'+(bx+width/2)+'" y="'+(y+10)+'" font-size="13" font-weight="700" text-anchor="middle" fill="#f0f3f6">'+reading+'</text>'+
+      '<circle cx="'+x+'" cy="'+y+'" r="4" fill="'+c+'" stroke="#fff" stroke-width="1.4"/></g>';
+  };
   const tank=(n,h)=>{
     let out='<g transform="translate(0 2) scale(.45 .29)">'+
       '<rect x="72" y="14" width="130" height="360" rx="65" ry="22" fill="url(#'+id(n)+'Temp)"/>'+
@@ -45,52 +60,104 @@ const HASSStudioGraphics = (() => {
     }
     out+='</g>';
     for(const part of n.parts||[]){
-      const y=107-Number(part.height)*.95,x=part.side==='left'?31:part.side==='right'?92:61;
+      const y=107-Number(part.height)*.95,x=part.side==='left'?32:part.side==='right'?91:61;
       if(part.kind==='sensor'){
-        const v=sensorState(h,part.entity);
-        const radius=part.variant==='extended'?6:part.variant==='compact'?3:4.5;
-        out+='<circle cx="'+x+'" cy="'+y+'" r="'+radius+'" fill="'+color(v)+'" stroke="#27313c" stroke-width="1.3"/>';
-        if(part.variant==='extended')out+='<path d="M'+x+' '+(y-8)+'v16" stroke="#f1d19b" stroke-width="2"/>';
-        if(numeric(v))out+='<text x="'+(part.side==='left'?x-8:x+8)+'" y="'+(y+3)+'" text-anchor="'+(part.side==='left'?'end':'start')+
-          '" font-size="10" fill="var(--primary-text-color,#eee)">'+esc(Number(v).toFixed(1))+'°</text>';
+        out+=temperatureBadge(part,h,x,y,part.side);
       }else if(part.kind==='heater'){
-        const reach=part.variant==='extended'?22:part.variant==='compact'?7:12;
-        out+='<path d="M'+(x-reach)+' '+y+'h'+(reach*2)+'m-'+(reach*1.5)+'-5v10m'+reach+'-10v10" stroke="#f3bf73" stroke-width="2.6" fill="none"/>';
+        const active=on(h,part.entity)||(numeric(sensorState(h,part.entity))&&Number(sensorState(h,part.entity))>5);
+        const c=active?'#ffc52f':'#b9c0c8',length=part.variant==='extended'?76:part.variant==='compact'?42:60;
+        const right=part.side!=='left';
+        const connector=right?93:29,sign=right?-1:1;
+        const x0=connector+sign*11,pitch=length/8;
+        let d='M'+x0+' '+y;
+        for(let k=1;k<=8;k++) d+='L'+(x0+sign*k*pitch).toFixed(2)+' '+(y+(k%2?-4:4));
+        out+='<g><path d="'+d+'" stroke="'+c+'" stroke-width="3" stroke-linejoin="round" fill="none"/>'+
+          '<rect x="'+(connector-(right?0:16))+'" y="'+(y-11)+'" width="16" height="22" rx="3" fill="#343940" stroke="'+c+'" stroke-width="1.6"/>'+
+          '<text x="'+(right?connector-4:connector+20)+'" y="'+(y-15)+'" text-anchor="'+(right?'end':'start')+
+          '" font-size="9" fill="'+c+'">'+esc(String(part.label||'').slice(0,25))+'</text></g>';
       }else if(part.kind==='coil'){
-        const reach=part.variant==='extended'?22:part.variant==='compact'?8:13;
-        out+='<path d="M'+(x-reach)+' '+y+'q'+(reach/2)+'-13 '+reach+' 0t'+reach+' 0" stroke="#ccd4dd" stroke-width="2.6" fill="none"/>';
+        const reach=part.variant==='extended'?28:part.variant==='compact'?11:19;
+        const mid=part.side==='left'?45:part.side==='right'?78:61;
+        out+='<path d="M'+(mid-reach)+' '+y+'C'+(mid-reach)+' '+(y-13)+' '+(mid+reach)+' '+(y-7)+' '+(mid+reach)+' '+(y-19)+
+          'C'+(mid+reach)+' '+(y-31)+' '+(mid-reach)+' '+(y-23)+' '+(mid-reach)+' '+(y-35)+
+          '" fill="none" stroke="#d1d9e0" stroke-width="2.6" stroke-linecap="round"/>';
       }
     }
     return out;
   };
   const boiler=(n,h)=>{
-    const running=on(h,n.entity),bright=['pellet','gas','oil','electric'].includes(n.variant),gas=['gas','oil'].includes(n.variant);
-    return '<rect x="19" y="20" width="15" height="76" fill="#4b535f"/><rect x="16" y="27" width="21" height="5" rx="1" fill="#222830"/>'+
-      '<rect x="27" y="16" width="78" height="96" rx="9" fill="url(#'+id(n)+'Steel)" stroke="#89919b" stroke-width="1.2"/>'+
-      (bright?'<rect x="27" y="16" width="78" height="96" rx="9" fill="#d5dae1" opacity=".29"/>':'')+
-      '<rect x="33" y="43" width="66" height="52" rx="5" fill="#101419" stroke="#8a949e" stroke-width="1.2"/>'+
-      (numeric(sensorState(h,n.entity))?'<rect x="35" y="24" width="61" height="17" rx="4" fill="#080c10"/>'+
-      '<text x="65" y="36" font-size="13" font-weight="700" text-anchor="middle" fill="#ffc43d">'+
-      Number(sensorState(h,n.entity)).toFixed(1)+'°</text>':'')+
-      (n.variant==='electric'?'<path d="M69 49L53 71H65L58 89L82 62H69Z" fill="#f5cb67"/>':
-      n.variant==='heatpump'?'<circle cx="66" cy="69" r="20" stroke="#74bddd" stroke-width="3" fill="none"/><path d="M57 56L80 69L57 82Z" fill="#a5cee7"/>':
-      running?'<g class="ss-fire"><path d="M65 88Q39 70 66 49Q58 70 78 66Q93 84 65 88Z" fill="'+(gas?'#70baff':'#ff7a22')+'"/><path d="M66 88Q51 77 67 62Q64 74 75 73Q81 83 66 88Z" fill="'+(gas?'#d5e8ff':'#ffd444')+'"/></g>':
-      '<path d="M47 90H85" stroke="#596069" stroke-width="2"/>')+
-      '<path d="M38 101H93" stroke="#bfc4ce" stroke-width="2" stroke-opacity=".4"/>';
+    const v=n.variant,temp=sensorState(h,n.entity);
+    const burning=n.burner_mode==='on'||(n.burner_mode!=='off'&&on(h,n.burner_entity));
+    const isWood=['wood','pellet'].includes(v),isGas=['gas','oil'].includes(v),electric=v==='electric',heatpump=v==='heatpump';
+    const pale=isGas||electric,steel=id(n)+'Steel';
+    const flame=(x,y,w,height,duration)=>{
+      const path=(width,hh)=>'M'+(-width)+' 0C'+(-width-2)+' '+(-hh*.45)+' '+(-width*.15)+' '+(-hh*.6)+' '+(width*.1)+' '+(-hh)+
+        'C'+(width*.5)+' '+(-hh*.6)+' '+(width+2)+' '+(-hh*.4)+' '+width+' 0Z';
+      return '<g transform="translate('+x+' '+y+')"><g class="ss-fire" style="animation-duration:'+duration+'s">'+
+        '<path d="'+path(w,height)+'" fill="'+(isGas?'#1f6fff':'#ff5a1f')+'"/>'+
+        '<path d="'+path(w*.65,height*.7)+'" fill="'+(isGas?'#5fa0ff':'#ffa21c')+'"/>'+
+        '<path d="'+path(w*.35,height*.42)+'" fill="'+(isGas?'#cfe3ff':'#ffe27a')+'"/></g></g>';
+    };
+    let out='<g class="ss-boiler">'+
+      '<rect x="19" y="-28" width="15" height="73" rx="2" fill="url(#'+steel+')"/>'+
+      '<rect x="16" y="-19" width="21" height="5" rx="1" fill="#252a31"/>'+
+      '<rect x="26" y="102" width="12" height="9" rx="1" fill="#414750"/>'+
+      '<rect x="94" y="102" width="12" height="9" rx="1" fill="#414750"/>'+
+      '<rect x="21" y="5" width="91" height="99" rx="10" fill="url(#'+steel+')" stroke="#9098a1" stroke-width="1.2"/>'+
+      (pale?'<rect x="21" y="5" width="91" height="99" rx="10" fill="#c7d0d8" opacity=".18"/>':'')+
+      '<rect x="25" y="5" width="84" height="7" rx="2" fill="#31363e"/>'+
+      '<text x="30" y="19" fill="#d5dce5" font-size="9" font-weight="600" letter-spacing=".7">'+
+      esc(({wood:'DREWNO',pellet:'PELLET',gas:'GAZ',oil:'OLEJ',electric:'ELEKTR.',heatpump:'POMPA C.'})[v]||'KOCIOŁ')+'</text>';
+    if(numeric(temp)){
+      out+='<rect x="30" y="22" width="72" height="19" rx="5" fill="#0b1117"/>'+
+        '<text x="66" y="36" font-size="14" font-weight="700" text-anchor="middle" fill="#ffca36">'+Number(temp).toFixed(1)+'°</text>';
+    }
+    out+='<rect x="29" y="44" width="76" height="50" rx="7" fill="#0d1014" stroke="#59616d" stroke-width="1.5"/>'+
+      '<rect x="35" y="49" width="64" height="40" rx="4" fill="#0a0b0e"/>';
+    if(isWood||isGas){
+      if(burning){
+        out+='<rect x="35" y="49" width="64" height="40" fill="'+(isGas?'#193159':'#522016')+'" opacity=".35" class="ss-embers"/>';
+        out+=flame(54,87,9,isGas?20:26,.9)+flame(70,87,11,isGas?31:38,1.15)+flame(87,87,8,isGas?23:29,.8);
+        if(isWood)out+='<ellipse cx="68" cy="86" rx="28" ry="5" fill="#ff7625" opacity=".55" class="ss-embers"/>';
+      }
+      if(v==='wood')out+='<rect x="47" y="84" width="45" height="7" rx="3" fill="#55331e" stroke="'+(burning?'#ff842d':'#785238')+'" transform="rotate(-8 65 86)"/>';
+      if(v==='pellet')out+=Array.from({length:9},(_,k)=>'<rect x="'+(42+(k%5)*10)+'" y="'+(83+Math.floor(k/5)*4)+'" width="7" height="3" rx="1" fill="#92623d"/>').join('');
+      if(isGas)out+='<path d="M43 87H93" stroke="#536173" stroke-width="3"/>';
+    }else if(electric){
+      out+='<path d="M41 64H92M41 77H92" stroke="'+(burning?'#ffca38':'#79828b')+'" stroke-width="3" stroke-dasharray="7 4"'+(burning?' class="ss-embers"':'')+'/>';
+      out+='<path d="M69 52L55 69H66L58 85L83 63H69Z" fill="'+(burning?'#ffd24b':'#7f8790')+'"/>';
+    }else if(heatpump){
+      out+='<g'+(burning?' class="ss-fan"':'')+'><circle cx="67" cy="68" r="16" stroke="#77b7d9" stroke-width="2" fill="none"/>'+
+        '<path d="M64 53Q83 57 69 68Q83 84 67 71Q50 82 64 67Q52 55 64 53Z" fill="#91c6df"/></g>';
+    }
+    out+='<path d="M37 94H96" stroke="#79818c" stroke-opacity=".55" stroke-width="1.6"/>'+
+      '<rect x="30" y="96" width="73" height="16" rx="4" fill="#313941" stroke="#79818c"/>'+
+      '<text x="66" y="107" text-anchor="middle" font-size="9" font-weight="700" fill="'+(burning?'#ffbf35':'#9da7b2')+'">'+
+      (burning?(isWood?'Burning':isGas?'Burner on':electric?'Heating':'Running'):'Off')+'</text></g>';
+    return out;
   };
   const solar=(n,h)=>{
-    const lit=on(h,n.entity),cx=101,cy=27;
+    const lit=on(h,n.pump_entity||n.entity),cx=101,cy=27;
     const rays=Array.from({length:8},(_,i)=>{
       const a=i*Math.PI/4,x1=cx+11*Math.cos(a),y1=cy+11*Math.sin(a);
       const x2=cx+16*Math.cos(a),y2=cy+16*Math.sin(a);
       return '<path d="M'+x1.toFixed(1)+' '+y1.toFixed(1)+'L'+x2.toFixed(1)+' '+y2.toFixed(1)+'" stroke="'+(lit?'#ffd23f':'#858e98')+'" stroke-width="1.7" stroke-linecap="round"/>';
     }).join('');
-    return '<path d="M17 93L39 33H84L63 93Z" fill="#233f70" stroke="#a4b1c4" stroke-width="1.7"/>'+
+    let out='<path d="M17 93L39 33H84L63 93Z" fill="#233f70" stroke="#a4b1c4" stroke-width="1.7"/>'+
       [1,2,3].map(i=>'<path d="M'+(17+i*12)+' 93L'+(39+i*12)+' 33" stroke="#93a4c2" stroke-width="1.3"/>').join('')+
       '<path d="M27 59H75" stroke="#93a4c2" stroke-opacity=".6"/>'+
       '<g'+(lit?' class="ss-solar-sun"':'')+'>'+rays+
       '<circle cx="'+cx+'" cy="'+cy+'" r="7" fill="'+(lit?'#ffd23f':'#858e98')+'"/></g>';
+    // Collector sensor positions belong to the solar node, so moving/scaling
+    // the collector preserves both label and data source.
+    for(const part of (n.parts||[]).filter(p=>p.kind==='sensor')){
+      const yy=93-(Number(part.height)/100)*60;
+      const side=part.side==='left'?'left':'right';
+      out+=temperatureBadge({...part,label:part.label||'Kolektor'},h,side==='left'?17:85,yy,side);
+    }
+    return out;
   };
+
   const pump=(n,h)=>'<circle cx="60" cy="62" r="30" fill="#2b2f35" stroke="'+(on(h,n.entity)?'#66c998':'#8a9099')+'" stroke-width="2"/>'+
     (on(h,n.entity)?'<circle cx="60" cy="62" r="30" fill="none" stroke="#66c998" stroke-width="1.5" class="ss-pump-pulse"/>':'')+
     '<path d="M77 62L47 79L47 45Z" fill="'+(on(h,n.entity)?'#66c998':'#7c8894')+'"/>';
@@ -112,6 +179,10 @@ const HASSStudioGraphics = (() => {
     '.ss-pump-pulse{animation:ssWWPulse 1.6s infinite;transform-box:fill-box;transform-origin:center}'+
     '.ss-fire{animation:ssWWFire .9s infinite;transform-box:fill-box;transform-origin:center}'+
     '.ss-solar-sun{animation:ssWWFire 3s infinite;transform-box:fill-box;transform-origin:center}'+
+    '@keyframes ssWWEmbers{50%{opacity:.45}}'+
+    '@keyframes ssWWRotate{to{transform:rotate(360deg)}}'+
+    '.ss-embers{animation:ssWWEmbers 1.7s infinite}'+
+    '.ss-fan{animation:ssWWRotate 1.8s linear infinite;transform-box:fill-box;transform-origin:center}'+
     '.ss-flow{stroke:#fff;stroke-width:2.5;stroke-dasharray:1 13;animation:ssWWFlow var(--ss-speed,1s) linear infinite;fill:none;stroke-linecap:round}'+
     '</style>';
   return {defs,render,styles,on};
