@@ -24,7 +24,10 @@
       temperature:'Temperature',pressure:'Pressure'}
   };
   const words={
-    pl:{mode:'Tryb układu',auto:'Automatyczny (Warmwasser)',custom:'Własny układ',language:'Język',
+    pl:{visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
+      flowOn:'Włączona (podgląd)',flowAuto:'Według encji',flowDirection:'Kierunek przepływu',
+      flowSpeed:'Czas animacji (s)',flowEntity:'Encja sterująca przepływem',
+      forward:'Początek → koniec',reverse:'Koniec → początek',mode:'Tryb układu',auto:'Automatyczny (Warmwasser)',custom:'Własny układ',language:'Język',
       automatic:'Automatyczny',open:'Otwórz projektant',close:'Zamknij',add:'Dodaj',remove:'Usuń',
       library:'BIBLIOTEKA SVG',properties:'WŁAŚCIWOŚCI',canvas:'SCHEMAT',choose:'Zaznacz element na schemacie',
       name:'Nazwa',graphic:'Rodzaj / grafika',scale:'Skala',position:'Pozycja',entity:'Encja HA',
@@ -39,7 +42,10 @@
       boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',pipes:'Rury',
       link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
       zoom:'Powiększenie',noValues:'Bez pomiaru',editor:'Projektant instalacji'},
-    en:{mode:'Layout mode',auto:'Automatic (Warmwasser)',custom:'Custom layout',language:'Language',
+    en:{visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
+      flowOn:'On (preview)',flowAuto:'Controlled by entity',flowDirection:'Flow direction',
+      flowSpeed:'Animation duration (s)',flowEntity:'Flow control entity',
+      forward:'Start → end',reverse:'End → start',mode:'Layout mode',auto:'Automatic (Warmwasser)',custom:'Custom layout',language:'Language',
       automatic:'Automatic',open:'Open designer',close:'Close',add:'Add',remove:'Delete',
       library:'SVG LIBRARY',properties:'PROPERTIES',canvas:'DIAGRAM',choose:'Select an element in the diagram',
       name:'Name',graphic:'Type / graphic',scale:'Scale',position:'Position',entity:'HA entity',
@@ -86,6 +92,7 @@
       id:v.id.slice(0,32),type:v.type,
       x:clamp(v.x,0,W-120,40),y:clamp(v.y,0,H-140,40),
       scale:clamp(v.scale,0.5,2.4,1),
+      visual:v.visual==='studio'?'studio':'warmwasser',
       variant:graphics[v.type].includes(v.variant)?v.variant:graphics[v.type][0],
       label:String(v.label||'').slice(0,64),
       entity:validEntity(v.entity)?v.entity:'',
@@ -97,6 +104,10 @@
       id:String(v.id||freshId('p')).slice(0,32),
       label:String(v.label||'').slice(0,64),
       color:colors[v.color]?v.color:'hot',width:clamp(v.width,3,14,7),
+      flow_mode:['auto','on','off'].includes(v.flow_mode)?v.flow_mode:'auto',
+      flow_entity:validEntity(v.flow_entity)?v.flow_entity:'',
+      flow_direction:v.flow_direction==='reverse'?'reverse':'forward',
+      flow_speed:clamp(v.flow_speed,.35,5,1),
       points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
         x:clamp(q.x,0,W,100),y:clamp(q.y,0,H,100)})),
       accessories:(Array.isArray(v.accessories)?v.accessories:[]).slice(0,20).map(normalizeAccessory)
@@ -113,7 +124,8 @@
         const bx=to.x+b[0]*to.scale,by=to.y+b[1]*to.scale;
         const mx=(ax+bx)/2;
         pipes.push({id:'migrated-'+index,label:'',color:colors[edge.color]?edge.color:'hot',
-          width:7,points:[{x:ax,y:ay},{x:mx,y:ay},{x:mx,y:by},{x:bx,y:by}],accessories:[]});
+          width:7,flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,
+          points:[{x:ax,y:ay},{x:mx,y:ay},{x:mx,y:by},{x:bx,y:by}],accessories:[]});
       });
     }
     return {nodes,pipes};
@@ -178,19 +190,27 @@
     return '<circle cx="60" cy="64" r="28" fill="#47647a" stroke="#c0d2de" stroke-width="2"/>'+
       '<path d="M60 38V70" stroke="#ecf2f5" stroke-width="5"/><circle cx="60" cy="79" r="9" fill="#f2bb74"/>';
   };
-  const symbolOnPipe=(item,pipe)=>{
+  const symbolOnPipe=(item,pipe,hass)=>{
     const at=onPipe(pipe,item.position),isPump=item.type==='pump';
+    const enabled=HASSStudioGraphics.on(hass,item.entity);
     return '<g transform="translate('+at.x+' '+at.y+')" class="ss-accessory" data-pipe="'+esc(pipe.id)+'">'+
-      '<circle r="17" fill="#405669" stroke="#d7e5ee" stroke-width="2"/>'+
+      '<circle r="17" fill="#405669" stroke="'+(enabled?'#68c69b':'#d7e5ee')+'" stroke-width="2"/>'+ 
+      (isPump&&enabled?'<circle class="ss-pump-pulse" r="17" fill="none" stroke="#68c69b"/>':'')+
       (isPump?'<path d="M-7 -10L10 0L-7 10Z" fill="#dceaf3"/>':
         '<path d="M-11 -8L0 0L-11 8ZM11 -8L0 0L11 8Z" fill="#e2c78d"/>')+
       '</g>';
   };
   const canvasSvg=(config,hass,editable=false,selected=null)=>{
     const data=normalized(config),language=pickLang(config,hass),L=words[language];
+    const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser')
+      .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
     const pipes=data.pipes.map(pipe=>{
       const active=selected?.type==='pipe' && selected.id===pipe.id;
       const d=pipePath(pipe.points);
+      const flowing=pipe.flow_mode==='on'||(pipe.flow_mode==='auto' &&
+        HASSStudioGraphics.on(hass,pipe.flow_entity));
+      const flow=flowing?'<path class="ss-line ss-flow" d="'+d+'" style="--ss-speed:'+pipe.flow_speed+
+        's;animation-direction:'+pipe.flow_direction+'"/>':'';
       const handles=editable&&active?pipe.points.map((pt,index)=>
         '<circle class="ss-handle" data-id="'+esc(pipe.id)+'" data-point="'+index+
         '" cx="'+pt.x+'" cy="'+pt.y+'" r="8" fill="#fff" stroke="#2196f3" stroke-width="2"/>').join(''):'';
@@ -198,7 +218,7 @@
         '<path class="ss-pipe-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="#142332" stroke-width="'+(pipe.width+3)+'" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="'+colors[pipe.color]+'" stroke-width="'+pipe.width+'" fill="none"/>'+
-        pipe.accessories.map(item=>symbolOnPipe(item,pipe)).join('')+handles+'</g>';
+        flow+pipe.accessories.map(item=>symbolOnPipe(item,pipe,hass)).join('')+handles+'</g>';
     }).join('');
     const nodes=data.nodes.map(node=>{
       const active=selected?.type==='node'&&selected.id===node.id;
@@ -207,13 +227,13 @@
       const ent=node.entity?' data-more="'+esc(node.entity)+'"':'';
       return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale+')">'+
         '<rect x="4" y="6" width="112" height="107" rx="12" fill="var(--card-background-color,#293947)" stroke="'+
-        (active?'#52bfff':'#718da3')+'" stroke-width="'+(active?'3':'1.2')+'"/>'+variantShape(node)+
+        (active?'#52bfff':'#718da3')+'" stroke-width="'+(active?'3':'1.2')+'"/>'+(node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
         '<text x="60" y="130" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
         (reading?'<text x="60" y="145" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
         '</g>';
     }).join('');
     return '<svg class="ss-svg" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
-      '<defs><linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
+      HASSStudioGraphics.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
       '<rect width="'+W+'" height="'+H+'" rx="10" fill="var(--secondary-background-color,#17222d)"/>'+
       '<g stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g>'+nodes+'</svg>';
   };
@@ -263,9 +283,11 @@
       '.ss-launch button,.ss-bar button,.ss-library button,.ss-props button{color:var(--primary-text-color);background:var(--card-background-color,#29323c);border:1px solid var(--divider-color,#555);border-radius:8px;padding:9px;cursor:pointer;font:inherit}'+
       '.ss-launch button{background:var(--primary-color,#168bce);color:var(--text-primary-color,#fff)}'+
       '.ss-modal{position:fixed;inset:0;z-index:100000;background:var(--primary-background-color,#11191f);display:flex;flex-direction:column;padding:0;color:var(--primary-text-color)}'+
-      '.ss-modal[hidden]{display:none} .ss-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--divider-color,#555);flex-wrap:wrap}'+
+      '.ss-modal:not([open]){display:none}.ss-modal.ss-fullscreen{position:fixed;inset:0;width:100vw;height:100vh;max-width:none;max-height:none;border:0;margin:0;padding:0;box-sizing:border-box}'+
+      '.ss-modal.ss-fullscreen::backdrop{background:#071018dd}.ss-modal.ss-fullscreen[open]{display:flex} .ss-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--divider-color,#555);flex-wrap:wrap}'+
       '.ss-bar strong{margin-right:auto}.ss-bar button{white-space:nowrap}'+
-      '.ss-grid{display:grid;grid-template-columns:162px minmax(300px,1fr) 285px;flex:1;min-height:0}'+
+      '.ss-grid{display:grid;grid-template-columns:var(--ss-left,180px) 7px minmax(0,1fr) 7px var(--ss-right,310px);flex:1;min-height:0;height:100%}'+
+      '.ss-splitter{width:7px;cursor:col-resize;background:var(--divider-color,#44505b);opacity:.6;flex-shrink:0}'+
       '.ss-library,.ss-props{padding:12px;overflow-y:auto;border-right:1px solid var(--divider-color,#555)}'+
       '.ss-props{border-right:none;border-left:1px solid var(--divider-color,#555)}'+
       '.ss-library h3,.ss-props h3{font-size:12px;letter-spacing:.06em;color:var(--secondary-text-color);margin:0 0 12px}'+
@@ -280,23 +302,45 @@
       '.ss-props .ss-row{display:flex;align-items:center;gap:6px}.ss-props .ss-row>*{flex:1;min-width:0}'+
       '.ss-props .ss-row button{flex:0 0 auto}.ss-props input[type=range]{padding:0}'+
       '.ss-selected{outline:1px solid var(--primary-color)}'+
+      '.ss-preview{border:1px solid var(--divider-color,#555);border-radius:8px;display:grid;place-items:center;padding:8px}'+
+      '.ss-entities{max-height:210px;overflow-y:auto;border:1px solid var(--divider-color,#555);border-radius:8px}'+
+      '.ss-entity-choice{width:100%;text-align:left;border:0;background:transparent;padding:8px;cursor:pointer;display:block;font-size:12px}'+
+      '.ss-entity-choice:hover{background:var(--secondary-background-color)}'+
       '@media(max-width:900px){.ss-grid{grid-template-columns:110px minmax(230px,1fr) 220px}.ss-library button{font-size:11px;gap:4px}.ss-library button span{font-size:15px}}'+
       '</style>';
     root.innerHTML=style+
       '<div class="ss-launch"><label>'+esc(L.mode)+'<select id="ss-mode">'+opts([['automatic',L.auto],['custom',L.custom]],'custom')+'</select></label>'+
       '<label>'+esc(L.language)+'<select id="ss-lang">'+opts(langs,this._config.studio_language||'auto')+'</select></label>'+
       '<button type="button" id="ss-open">'+esc(L.open)+'</button></div>'+
-      '<div class="ss-modal" id="ss-modal" hidden><div class="ss-bar"><strong>'+esc(L.editor)+'</strong>'+
+      '<dialog class="ss-modal ss-fullscreen" id="ss-modal"><div class="ss-bar"><strong>'+esc(L.editor)+' · v'+esc(VERSION)+'</strong>'+
       '<label>'+esc(L.zoom)+' <select id="ss-zoom">'+opts([['0.65','65%'],['0.8','80%'],['1','100%'],['1.25','125%'],['1.5','150%']],'1')+'</select></label>'+
       '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
       '<button id="ss-close" type="button">'+esc(L.close)+'</button></div>'+
-      '<div class="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+
+      '<div class="ss-grid" id="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+
       types.map(type=>'<button type="button" data-add="'+type+'"><span aria-hidden="true">'+icons[type]+'</span>'+
         esc(L[type==='pump'?'pumps':type==='valve'?'valves':type==='sensor'?'sensorsMenu':type==='pipe'?'pipes':type])+'</button>').join('')+
-      '</aside><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
+      '</aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
       '<p class="ss-note">'+esc(L.editHelp)+'</p></main>'+
-      '<aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></div>';
+      '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
     const modal=root.getElementById('ss-modal'),stage=root.getElementById('ss-stage'),properties=root.getElementById('ss-props');
+    const splitterGrid=root.getElementById('ss-grid');
+    for(const grip of root.querySelectorAll('.ss-splitter')){
+      grip.addEventListener('pointerdown',event=>{
+        if(event.button!==0)return;
+        grip.setPointerCapture(event.pointerId);
+        const move=e=>{
+          if(e.pointerId!==event.pointerId)return;
+          const r=splitterGrid.getBoundingClientRect();
+          const span=grip.dataset.split==='left'?e.clientX-r.left:r.right-e.clientX;
+          splitterGrid.style.setProperty(grip.dataset.split==='left'?'--ss-left':'--ss-right',
+            clamp(Math.round(span),110,500,200)+'px');
+        };
+        const end=()=>{grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',end);grip.removeEventListener('pointercancel',end);};
+        grip.addEventListener('pointermove',move);
+        grip.addEventListener('pointerup',end);
+        grip.addEventListener('pointercancel',end);
+      });
+    }
     let selection=null,drag=null,zoom=1;
     const get=()=>normalized(this._config);
     const commit=(model)=>{
@@ -326,6 +370,7 @@
         ' value="'+esc(value||'')+'" placeholder="sensor..." autocomplete="off"/>';
     };
     const variantOptions=(node)=>graphics[node.type].map(key=>[key,variants[pickLang(this._config,this._hass)][key]]);
+    const styleOptions=[['warmwasser','Warmwasser (default)'],['studio','Studio (simple)']];
     const sides=[['left',L.left],['right',L.right],['inside',L.inside]];
     const colorsList=[['hot',L.hot],['cold',L.cold],['solar',L.solarFlow],['return',L.returnFlow]];
     const renderProps=()=>{
@@ -335,6 +380,10 @@
       markup+='<section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
+        markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
+        markup+='<div class="ss-preview"><svg viewBox="0 0 120 120" width="120" height="120">'+
+          HASSStudioGraphics.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
+          (obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,this._hass):variantShape(obj))+'</svg></div>';
         markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
         markup+='<div class="ss-row">'+field('X','x',obj.x,'number')+field('Y','y',obj.y,'number')+'</div>';
         markup+=field(L.entity,'entity',obj.entity,'search',null,'list="ss-entity-list"');
@@ -361,6 +410,12 @@
       }else{
         markup+=field(L.pipeColor,'color',obj.color,'text',colorsList);
         markup+=field(L.pipeWidth,'width',obj.width,'range',null,'min="3" max="14" step="1"');
+        markup+=field(L.flowMode||'Flow animation','flow_mode',obj.flow_mode,'text',
+          [['off',L.flowOff||'Off'],['auto',L.flowAuto||'Entity-controlled'],['on',L.flowOn||'On (preview)']]);
+        markup+=field(L.flowDirection||'Flow direction','flow_direction',obj.flow_direction,'text',
+          [['forward',L.forward||'Start → End'],['reverse',L.reverse||'End → Start']]);
+        markup+=field(L.flowSpeed||'Animation duration (s)','flow_speed',obj.flow_speed,'number',null,'min="0.35" max="5" step="0.1"');
+        markup+=field(L.flowEntity||'Animation state entity','flow_entity',obj.flow_entity,'search',null,'list="ss-entity-list"');
         markup+='<p>'+esc(L.pipeHelp)+'</p><div class="ss-row">'+
           '<button type="button" data-action="bend">+ '+esc(L.newBend)+'</button>'+
           '<button type="button" data-action="unbend">'+esc(L.removeBend)+'</button></div></section>'+
@@ -375,6 +430,32 @@
           '<button type="button" data-add-accessory="valve">+ '+esc(L.valve)+'</button></div></section>';
       }
       properties.innerHTML=markup+'<datalist id="ss-entity-list">'+entityList()+'</datalist>';
+      // Every entity field gets an HA-like search list from the first typed character.
+      const popup=document.createElement('div');
+      popup.className='ss-entities';popup.hidden=true;
+      properties.appendChild(popup);
+      const inputs=[...properties.querySelectorAll('input[list="ss-entity-list"]')];
+      for(const input of inputs){
+        const update=()=>{
+          const search=input.value.trim().toLocaleLowerCase();
+          if(!search){popup.hidden=true;return;}
+          const matches=Object.entries(this._hass?.states||{}).filter(([entity,state])=>
+            entity.toLocaleLowerCase().includes(search)||
+            String(state?.attributes?.friendly_name||'').toLocaleLowerCase().includes(search)).slice(0,25);
+          popup.replaceChildren();
+          for(const [entity,state] of matches){
+            const button=document.createElement('button');
+            button.type='button';button.className='ss-entity-choice';
+            button.textContent=(state.attributes?.friendly_name||entity)+' — '+entity;
+            button.addEventListener('click',()=>{input.value=entity;input.dispatchEvent(new Event('change',{bubbles:true}));popup.hidden=true;});
+            popup.appendChild(button);
+          }
+          popup.hidden=!matches.length;
+        };
+        input.addEventListener('input',update);
+        input.addEventListener('focus',update);
+      }
+
     };
     const render=()=>{
       stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
@@ -418,24 +499,36 @@
         if(model.pipes.length>=MAX_PIPES)return;
         const n=model.pipes.length;
         const pipe={id:freshId('p'),label:'',color:'hot',width:7,
+          flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,
           points:[{x:180+n*10,y:120+n*12},{x:470+n*10,y:120+n*12}],accessories:[]};
         model.pipes.push(pipe);selection={type:'pipe',id:pipe.id};
       }else{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,variant:graphics[kind][0],label:'',entity:'',entities:[],parts:[]};
+          scale:1,visual:'warmwasser',variant:graphics[kind][0],label:'',entity:'',entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
     };
-    root.getElementById('ss-open').addEventListener('click',()=>{modal.hidden=false;render();});
-    root.getElementById('ss-close').addEventListener('click',()=>{modal.hidden=true;drag=null;});
+    root.getElementById('ss-open').addEventListener('click',()=>{
+      if(typeof modal.showModal==='function')modal.showModal();
+      else modal.setAttribute('open','');
+      render();
+    });
+    const closeDesigner=()=>{
+      if(typeof modal.close==='function'&&modal.open)modal.close();
+      else modal.removeAttribute('open');
+      drag=null;
+    };
+    root.getElementById('ss-close').addEventListener('click',closeDesigner);
+    modal.addEventListener('cancel',()=>{drag=null;});
+
     root.getElementById('ss-mode').addEventListener('change',event=>{
       this._config={...this._config,layout_mode:event.target.value};this._fire();
     });
     root.getElementById('ss-lang').addEventListener('change',event=>{
-      const open=!modal.hidden;
+      const open=modal.open;
       this._config={...this._config,studio_language:event.target.value};this._fire();this._build();
       if(open)this.shadowRoot.getElementById('ss-open')?.click();
     });
@@ -456,11 +549,14 @@
       const model=get(),obj=selectedObject(model);if(!obj)return;
       const index=Number(el.dataset.index);
       const val=el.value;
-      if(['x','y','scale','width'].includes(key)){
-        obj[key]=clamp(val,key==='scale'?0.5:key==='width'?3:0,
-          key==='scale'?2.4:key==='width'?14:key==='x'?W:H,obj[key]);
-      }else if(['label','variant','color','entity'].includes(key)){
-        if(key==='entity')obj.entity=validEntity(val)?val:'';
+      if(['x','y','scale','width','flow_speed'].includes(key)){
+        obj[key]=clamp(val,key==='scale'?0.5:key==='width'?3:key==='flow_speed'?0.35:0,
+          key==='scale'?2.4:key==='width'?14:key==='flow_speed'?5:key==='x'?W:H,obj[key]);
+      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity'].includes(key)){
+        if(key==='entity'||key==='flow_entity')obj[key]=validEntity(val)?val:'';
+        else if(key==='visual')obj.visual=val==='studio'?'studio':'warmwasser';
+        else if(key==='flow_mode')obj.flow_mode=['on','off','auto'].includes(val)?val:'auto';
+        else if(key==='flow_direction')obj.flow_direction=val==='reverse'?'reverse':'forward';
         else if(key==='variant')obj.variant=graphics[obj.type]?.includes(val)?val:obj.variant;
         else if(key==='color')obj.color=colors[val]?val:obj.color;
         else obj.label=val.slice(0,64);
