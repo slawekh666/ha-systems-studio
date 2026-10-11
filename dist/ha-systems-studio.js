@@ -1030,11 +1030,18 @@ const HASSStudioGraphics = (() => {
       const y=107-Number(part.height)*.95,x=part.side==='left'?31:part.side==='right'?92:61;
       if(part.kind==='sensor'){
         const v=sensorState(h,part.entity);
-        out+='<circle cx="'+x+'" cy="'+y+'" r="4.5" fill="'+color(v)+'" stroke="#27313c" stroke-width="1.3"/>';
+        const radius=part.variant==='extended'?6:part.variant==='compact'?3:4.5;
+        out+='<circle cx="'+x+'" cy="'+y+'" r="'+radius+'" fill="'+color(v)+'" stroke="#27313c" stroke-width="1.3"/>';
+        if(part.variant==='extended')out+='<path d="M'+x+' '+(y-8)+'v16" stroke="#f1d19b" stroke-width="2"/>';
         if(numeric(v))out+='<text x="'+(part.side==='left'?x-8:x+8)+'" y="'+(y+3)+'" text-anchor="'+(part.side==='left'?'end':'start')+
           '" font-size="10" fill="var(--primary-text-color,#eee)">'+esc(Number(v).toFixed(1))+'°</text>';
-      }else if(part.kind==='heater')out+='<path d="M'+(x-11)+' '+y+'h22m-16-5v10m10-10v10" stroke="#f3bf73" stroke-width="2.6" fill="none"/>';
-      else if(part.kind==='coil')out+='<path d="M'+(x-13)+' '+y+'q7-13 14 0t14 0" stroke="#ccd4dd" stroke-width="2.6" fill="none"/>';
+      }else if(part.kind==='heater'){
+        const reach=part.variant==='extended'?22:part.variant==='compact'?7:12;
+        out+='<path d="M'+(x-reach)+' '+y+'h'+(reach*2)+'m-'+(reach*1.5)+'-5v10m'+reach+'-10v10" stroke="#f3bf73" stroke-width="2.6" fill="none"/>';
+      }else if(part.kind==='coil'){
+        const reach=part.variant==='extended'?22:part.variant==='compact'?8:13;
+        out+='<path d="M'+(x-reach)+' '+y+'q'+(reach/2)+'-13 '+reach+' 0t'+reach+' 0" stroke="#ccd4dd" stroke-width="2.6" fill="none"/>';
+      }
     }
     return out;
   };
@@ -1119,7 +1126,7 @@ const HASSStudioGraphics = (() => {
       temperature:'Temperature',pressure:'Pressure'}
   };
   const words={
-    pl:{widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
+    pl:{compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
       flowOn:'Włączona (podgląd)',flowAuto:'Według encji',flowDirection:'Kierunek przepływu',
       flowSpeed:'Czas animacji (s)',flowEntity:'Encja sterująca przepływem',
       forward:'Początek → koniec',reverse:'Koniec → początek',mode:'Tryb układu',auto:'Automatyczny (Warmwasser)',custom:'Własny układ',language:'Język',
@@ -1137,7 +1144,7 @@ const HASSStudioGraphics = (() => {
       boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',pipes:'Rury',
       link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
       zoom:'Powiększenie',noValues:'Bez pomiaru',editor:'Projektant instalacji'},
-    en:{widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
+    en:{compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
       flowOn:'On (preview)',flowAuto:'Controlled by entity',flowDirection:'Flow direction',
       flowSpeed:'Animation duration (s)',flowEntity:'Flow control entity',
       forward:'Start → end',reverse:'End → start',mode:'Layout mode',auto:'Automatic (Warmwasser)',custom:'Custom layout',language:'Language',
@@ -1169,6 +1176,7 @@ const HASSStudioGraphics = (() => {
   const normalizeItem=(item)=>({
     id:String(item.id||freshId('i')).slice(0,32),
     kind:['sensor','heater','coil'].includes(item.kind)?item.kind:'sensor',
+    variant:['warmwasser','compact','extended'].includes(item.variant)?item.variant:'warmwasser',
     label:String(item.label||'').slice(0,64),
     side:['left','right','inside'].includes(item.side)?item.side:'left',
     height:clamp(item.height,0,100,50),
@@ -1497,6 +1505,9 @@ const HASSStudioGraphics = (() => {
             '<button type="button" data-delete-part="'+index+'">×</button></div>'+
             field(L.graphic,'partKind',item.kind,'text',
               [['sensor',L.sensor],['heater',L.heater],['coil',L.coil]],'data-index="'+index+'"')+
+            field(L.visual,'partVariant',item.variant,'text',
+              [['warmwasser','Warmwasser'],['compact',L.compact||'Compact'],['extended',L.extended||'Extended']],
+              'data-index="'+index+'"')+
             field(L.side,'partSide',item.side,'text',sides,'data-index="'+index+'"')+
             field(L.height,'partHeight',item.height,'number',null,
               'min="0" max="100" data-index="'+index+'"')+
@@ -1663,6 +1674,7 @@ const HASSStudioGraphics = (() => {
       else if(key.startsWith('part')&&obj.parts?.[index]){
         const part=obj.parts[index];
         if(key==='partKind')part.kind=['sensor','heater','coil'].includes(val)?val:part.kind;
+        if(key==='partVariant')part.variant=['warmwasser','compact','extended'].includes(val)?val:part.variant;
         if(key==='partSide')part.side=['left','right','inside'].includes(val)?val:part.side;
         if(key==='partHeight')part.height=clamp(val,0,100,part.height);
         if(key==='partEntity')part.entity=validEntity(val)?val:'';
@@ -1683,7 +1695,7 @@ const HASSStudioGraphics = (() => {
       else if(button.dataset.addPart){
         if(obj.parts.length>=20)return;
         obj.parts.push({id:freshId('i'),kind:button.dataset.addPart,label:'',
-          side:'left',height:50,entity:''});
+          side:'left',height:50,variant:'warmwasser',entity:''});
       }else if(button.dataset.addAccessory){
         if(obj.accessories.length>=20)return;
         obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,position:50,entity:''});
