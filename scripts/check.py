@@ -2,6 +2,7 @@
 """Basic HACS packaging and safety invariants; no HA server required."""
 from pathlib import Path
 import json
+import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,10 +13,13 @@ assert manifest['filename'] == 'ha-systems-studio.js'
 assert (ROOT / 'LICENSE').is_file(), 'Keep upstream MIT license!'
 assert js.is_file(), 'Run python3 scripts/build.py'
 s = js.read_text(encoding='utf-8')
+version = (ROOT / 'VERSION').read_text(encoding='utf-8').strip()
+assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-dev|-rc\.[0-9]+)?', version), 'Invalid VERSION'
+assert f"const VERSION = '{version}';" in s, 'VERSION and distribution bundle disagree'
+
 for tag in ["customElements.define('ha-systems-studio'", "customElements.define('ha-systems-studio-editor'", "document.createElement('ha-systems-studio-editor')", "type: 'ha-systems-studio'"]:
     assert tag in s, f'Missing registered component: {tag}'
 assert 'studio_readonly !== false && el.dataset.act' in s, 'Missing action safety guard'
-assert 'custom:warmwasser-schema-card' not in s
 assert 'custom:warmwasser-schema-card' not in s, 'Original card tag leaked into release'
 assert 'studio_layout' in s and "layout_mode!=='custom'" in s, 'Missing custom-layout editor'
 try:

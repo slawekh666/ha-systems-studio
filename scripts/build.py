@@ -57,9 +57,13 @@ def build() -> None:
         + transformed[stop_at + len(marker):]
     )
 
+    # One authoritative version for the code and release process.
+    version = (ROOT / 'VERSION').read_text(encoding='utf-8').strip()
+    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-dev|-rc\.[0-9]+)?', version):
+        raise SystemExit(f'Invalid VERSION: {version}')
     transformed, n = re.subn(
         r"const VERSION = '[^']+';",
-        "const VERSION = '0.4.0-dev';",
+        lambda match: f"const VERSION = '{version}';",
         transformed,
         count=1,
     )

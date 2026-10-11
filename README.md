@@ -4,7 +4,10 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 ## Current status
 
-`0.1.0-dev`: working upstream card rebranded to `custom:ha-systems-studio`, separate visual editor; default **read-only** for service actions. The drag-and-drop hydraulic editor is **not implemented yet**.
+**0.4.0-dev (unreleased):** three-pane designer with Warmwasser-style graphics and flow animation controls. Browser acceptance testing is still needed.
+
+The authoritative code version is in `VERSION`. HACS uses **published GitHub Release tags** for displayed release versions, not the JS constant or `hacs.json`.
+See [Release process](docs/RELEASING.md).
 
 ## Local build in VS Code + WSL
 
