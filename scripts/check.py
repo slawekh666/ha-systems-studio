@@ -16,6 +16,8 @@ s = js.read_text(encoding='utf-8')
 version = (ROOT / 'VERSION').read_text(encoding='utf-8').strip()
 assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-dev|-rc\.[0-9]+)?', version), 'Invalid VERSION'
 assert f"const VERSION = '{version}';" in s, 'VERSION and distribution bundle disagree'
+assert f"**{version} (development, unreleased):**" in (ROOT / 'README.md').read_text(encoding='utf-8'), 'README version is stale'
+assert f"**{version}**" in (ROOT / 'docs' / 'RELEASING.md').read_text(encoding='utf-8'), 'Release documentation version is stale'
 
 for tag in ["customElements.define('ha-systems-studio'", "customElements.define('ha-systems-studio-editor'", "document.createElement('ha-systems-studio-editor')", "type: 'ha-systems-studio'"]:
     assert tag in s, f'Missing registered component: {tag}'

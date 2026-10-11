@@ -1,20 +1,28 @@
-# Custom Designer v0.3 (draft)
+# Custom Designer — development status (0.4.4-dev)
 
-This experimental version is on `feature/custom-hydraulic-layout`; `main` is unchanged.
+The custom designer is on `main` and remains experimental. It is built on the original Warmwasser Schema Card; automatic Warmwasser rendering remains available.
 
-## Editor layout
-- Left: hydraulic equipment library (boiler, tank, solar, pump, valve, sensor, pipe)
-- Center: SVG canvas, drag nodes and pipe handles; double-click pipes to insert bends
-- Right: selected item's graphic variant, scaling, position, entities, tank internals, and pipe equipment
-- Languages: Auto (HA language), Polish, English; legacy Warmwasser automatic mode unchanged
-- Pipes are **free-standing geometry** and are not automatically snapped or physically connected to devices
-- Tank sensors/heaters/coils have entity, side, and vertical-position settings
-- Pipes can carry pump/valve icons with an adjustable percentage along the polyline
+## Three-panel editing
 
-## Limitations
-- UI not yet browser-tested on Home Assistant; CI validates source and syntax only
-- Rendered graphics are new SVG interpretations; a full upstream Warmwasser SVG library extraction remains future work
-- Entity selection uses browser searchable datalist; HA entity picker integration can follow
-- No routing collision detection or electrical semantics
-- Read-only action guard stays enabled by default; no service calls in designer
-- Legacy prototype edges migrate to freely editable polylines when you first save
+- **Left:** equipment library: boiler, tank, solar collector, pump, valve, sensor and pipe
+- **Centre:** SVG canvas with device dragging and proportional scaling; draggable pipe points; double-click a pipe to add a bend
+- **Right:** selected object's visual variant, entity, position, scale and component-specific options
+- Languages: Polish, English and automatic Home Assistant locale selection
+- Internal tank/collector sensors: entity, editable label, vertical position, side and independent reading size
+- Tank heaters/coils: optional entity plus placement and visual variant
+- Pipes: standalone polylines, flow animation options and attached pump/valve symbols with editable labels and entity assignment
+- Warmwasser-style boiler animations: optional burner entity, or configurable temperature thresholds
+- Solar icon: collector-to-tank temperature differential with configurable hysteresis, independent of pump state
+- Clicking a bound device/sensor in the **dashboard view** opens Home Assistant's native entity details and history; in the designer, drag/edit interactions take priority
+
+## Limitations and test requirements
+
+- CI checks packaging, JS syntax and selected SVG/state regressions; live Home Assistant visual/browser testing is still necessary
+- SVG geometry and element overlap may vary by viewport and zoom; inspect the tall boiler, sensor badges and pipe accessories after updating
+- Pipes are not automatically routed or physically attached to device ports; editing node positions does not reroute existing pipes
+- Entity selection uses searchable entries from HA; it is not a complete native entity picker
+- No routing collision detection or electrical/hydraulic interlock logic
+- The dashboard remains read-only by default (`studio_readonly: true`); never enable real control actions during visual testing
+- Prototype edges can migrate to free-form pipe polylines
+
+See [README](../README.md) and [release workflow](RELEASING.md).

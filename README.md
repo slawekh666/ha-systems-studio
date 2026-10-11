@@ -4,9 +4,11 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 ## Current status
 
-**0.4.0-dev (unreleased):** three-pane designer with Warmwasser-style graphics and flow animation controls. Browser acceptance testing is still needed.
+**0.4.4-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
 
-The authoritative code version is in `VERSION`. HACS uses **published GitHub Release tags** for displayed release versions, not the JS constant or `hacs.json`.
+**Important:** the card is still under Home Assistant browser acceptance testing. CI checks packaging, JavaScript syntax and selected logic, but cannot verify final SVG appearance and pointer behavior in HA.
+
+The source of truth for the code version is [`VERSION`](VERSION). A GitHub Release with a matching version tag enables clear HACS release versioning; during development, the current `main` branch can also be selected/redownloaded in HACS. Changing this README **does not update the installed JavaScript**.
 See [Release process](docs/RELEASING.md).
 
 ## Local build in VS Code + WSL
@@ -14,29 +16,32 @@ See [Release process](docs/RELEASING.md).
 ```bash
 python3 scripts/build.py
 python3 scripts/check.py
+node scripts/test_studio.js
 ```
 
 The output is `dist/ha-systems-studio.js`, the file HACS installs. The original `warmwasser-schema-card.js` is not overwritten. With Node.js installed, validation also performs `node --check`.
 
-## Git remotes / development
+## Repository remotes and update workflow
+
+This project already uses three configured remotes:
+
+- `origin` — GitLab (`slawekh666/ha-systems-studio`), the development source of truth.
+- `github` — GitHub (`slawekh666/ha-systems-studio`), used for HACS distribution.
+- `upstream` — original Warmwasser repository (fetch only; do not push upstream).
+
+After changes pass CI and are merged into GitLab `main`, sync the exact tested commit from your WSL project directory:
 
 ```bash
-git remote -v # upstream -> author's GitHub
-# First create an EMPTY project on your GitLab account; do not initialize README.
-git remote add origin https://gitlab.com/slawekh666/ha-systems-studio.git
-git add .
-git commit -m "chore: bootstrap Home Assistant Systems Studio from Warmwasser"
-git push -u origin main
+git switch main
+git pull --ff-only origin main
+git log -1 --oneline
+git push github main
+git ls-remote github refs/heads/main
 ```
 
-A **public GitHub mirror is necessary for HACS** (HACS does not support GitLab URLs). After creating a free GitHub account and an **empty public** GitHub repo `ha-systems-studio`:
+Never use `git push --force` or `git push --mirror` for this process. When the GitHub SHA matches the GitLab commit, the source mirror is synchronized, **but HACS may still have an older installed file**. To test the latest development branch, choose `main` in HACS if version selection is available and use **Redownload** / **Pobierz ponownie** (not only **Update information** / **Uaktualnij dane**). Refresh the browser cache afterward.
 
-```bash
-git remote add github https://github.com/YOUR_GITHUB_LOGIN/ha-systems-studio.git
-git push -u github main
-```
-
-After you update code, build and test first, commit `dist/ha-systems-studio.js`, then push to `origin` (GitLab) and `github` (HACS distribution). For initial testing, HACS uses the default branch, so a GitHub release is not mandatory.
+For a numbered installation update, create a matching Git tag **and publish a GitHub Release** (mark development/RC versions as pre-release). Follow [RELEASING.md](docs/RELEASING.md). Only release versions actually tested in Home Assistant.
 
 ## Install with HACS
 
@@ -45,7 +50,8 @@ After you update code, build and test first, commit `dist/ha-systems-studio.js`,
 3. Install **Home Assistant Systems Studio**.
 4. If HA doesn't add the resource automatically, add JavaScript module:
    `/hacsfiles/ha-systems-studio/ha-systems-studio.js`
-5. Refresh browser; create a dedicated test dashboard and paste the YAML in `examples/demo.yaml`.
+5. Refresh the browser; create a dedicated test dashboard and paste the YAML in `examples/demo.yaml`.
+6. To update an existing installation, use **Redownload** / **Pobierz ponownie** in HACS and then reload the dashboard (a hard browser refresh may be needed).
 
 **Do not add an extra resource if HACS has already registered it.** Avoid testing control actions on a working heating system. Default `studio_readonly: true`; only explicit `studio_readonly: false` enables the original click-to-toggle service actions.
 
