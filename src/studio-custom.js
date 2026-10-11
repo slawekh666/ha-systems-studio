@@ -233,7 +233,7 @@
       const reading=valueOf(hass,node.entity);
       const name=esc(node.label||L[node.type]||node.type);
       const ent=node.entity?' data-more="'+esc(node.entity)+'"':'';
-      return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale_x+' '+node.scale_y+')">'+
+      return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale+')">'+
         (node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
         (editable&&active?'<rect class="ss-selection" x="4" y="3" width="112" height="113" rx="8" fill="none" stroke="#52bfff" stroke-dasharray="5 4" stroke-width="1.6" pointer-events="none"/>':'')+
         '<text x="60" y="130" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
@@ -392,22 +392,26 @@
         markup+='<div class="ss-preview"><svg viewBox="0 0 120 120" width="120" height="120">'+
           HASSStudioGraphics.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
           (obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,this._hass):variantShape(obj))+'</svg></div>';
-        markup+=field(L.widthScale||'Width','scale_x',obj.scale_x,'range',null,'min="0.4" max="3.5" step="0.1"');
-        markup+=field(L.heightScale||'Height','scale_y',obj.scale_y,'range',null,'min="0.4" max="4.5" step="0.1"');
+        markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
         markup+='<div class="ss-row">'+field('X','x',obj.x,'number')+field('Y','y',obj.y,'number')+'</div>';
         markup+=field(L.entity,'entity',obj.entity,'search',null,'list="ss-entity-list"');
+        if(obj.type==='boiler'){
+          markup+=field(L.boilerState,'burner_mode',obj.burner_mode,'text',[['auto',L.flowAuto],['on',L.flowOn],['off',L.flowOff]]);
+          markup+=field(L.burnerEntity,'burner_entity',obj.burner_entity,'search',null,'list="ss-entity-list"');
+        }
+        if(obj.type==='solar')markup+=field(L.solarPump,'pump_entity',obj.pump_entity,'search',null,'list="ss-entity-list"');
         markup+='</section><section><h4>'+esc(L.entities)+'</h4>'+
           obj.entities.map((en,index)=>'<div class="ss-row">'+
             entityField(en.entity,'multiEntity',index)+
             '<button type="button" data-delete-entity="'+index+'">×</button></div>'+
             field(L.label,'multiLabel',en.label,'text',null,'data-index="'+index+'"')).join('')+
           '<button type="button" data-action="entity">'+esc(L.addEntity)+'</button></section>';
-        if(obj.type==='tank'){
-          markup+='<section><h4>'+esc(L.sensors)+'</h4>'+
+        if(obj.type==='tank'||obj.type==='solar'){
+          markup+='<section><h4>'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'</h4'+
           obj.parts.map((item,index)=>'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+'</strong>'+
             '<button type="button" data-delete-part="'+index+'">×</button></div>'+
-            field(L.graphic,'partKind',item.kind,'text',
-              [['sensor',L.sensor],['heater',L.heater],['coil',L.coil]],'data-index="'+index+'"')+
+            (obj.type==='solar'?'':field(L.graphic,'partKind',item.kind,'text',
+              [['sensor',L.sensor],['heater',L.heater],['coil',L.coil]],'data-index="'+index+'"'))+
             field(L.visual,'partVariant',item.variant,'text',
               [['warmwasser','Warmwasser'],['compact',L.compact||'Compact'],['extended',L.extended||'Extended']],
               'data-index="'+index+'"')+
@@ -416,7 +420,7 @@
               'min="0" max="100" data-index="'+index+'"')+
             '<label>'+esc(L.entity)+entityField(item.entity,'partEntity',index)+'</label>'
           ).join('')+
-          '<div class="ss-row">'+[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]].map(v=>
+          '<div class="ss-row">'+(obj.type==='solar'?[['sensor',L.sensor]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]]).map(v=>
             '<button type="button" data-add-part="'+v[0]+'">+ '+esc(v[1])+'</button>').join('')+'</div></section>';
         }
       }else{
@@ -518,7 +522,7 @@
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,scale_x:1,scale_y:1,visual:'warmwasser',variant:graphics[kind][0],label:'',entity:'',entities:[],parts:[]};
+          scale:1,scale_x:1,scale_y:1,visual:'warmwasser',variant:graphics[kind][0],label:'',entity:'',burner_entity:'',burner_mode:'auto',pump_entity:'',entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -564,8 +568,9 @@
       if(['x','y','scale','scale_x','scale_y','width','flow_speed'].includes(key)){
         obj[key]=clamp(val,key==='scale'?0.5:key==='scale_x'||key==='scale_y'?0.4:key==='width'?3:key==='flow_speed'?0.35:0,
           key==='scale'?2.4:key==='scale_x'?3.5:key==='scale_y'?4.5:key==='width'?14:key==='flow_speed'?5:key==='x'?W:H,obj[key]);
-      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity'].includes(key)){
-        if(key==='entity'||key==='flow_entity')obj[key]=validEntity(val)?val:'';
+      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity','burner_entity','burner_mode','pump_entity'].includes(key)){
+        if(['entity','flow_entity','burner_entity','pump_entity'].includes(key))obj[key]=validEntity(val)?val:'';
+        else if(key==='burner_mode')obj.burner_mode=['auto','on','off'].includes(val)?val:'auto';
         else if(key==='visual')obj.visual=val==='studio'?'studio':'warmwasser';
         else if(key==='flow_mode')obj.flow_mode=['on','off','auto'].includes(val)?val:'auto';
         else if(key==='flow_direction')obj.flow_direction=val==='reverse'?'reverse':'forward';
@@ -597,8 +602,8 @@
       else if(button.hasAttribute('data-delete-entity'))obj.entities.splice(index,1);
       else if(button.dataset.addPart){
         if(obj.parts.length>=20)return;
-        obj.parts.push({id:freshId('i'),kind:button.dataset.addPart,label:'',
-          side:'left',height:50,variant:'warmwasser',entity:''});
+        obj.parts.push({id:freshId('i'),kind:obj.type==='solar'?'sensor':button.dataset.addPart,label:obj.type==='solar'?'Kolektor':'',
+          side:obj.type==='solar'?'right':'left',height:obj.type==='solar'?80:50,variant:'warmwasser',entity:''});
       }else if(button.dataset.addAccessory){
         if(obj.accessories.length>=20)return;
         obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,position:50,entity:''});
