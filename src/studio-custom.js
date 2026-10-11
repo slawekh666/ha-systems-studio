@@ -24,7 +24,7 @@
       temperature:'Temperature',pressure:'Pressure'}
   };
   const words={
-    pl:{boilerState:'Praca palnika / grzania',burnerEntity:'Encja palnika (opcjonalna; inaczej temperatura)',burnerOnTemp:'Kocioł aktywny powyżej (°C)',burnerOffTemp:'Kocioł nieaktywny poniżej (°C)',solarTank:'Temperatura zbiornika (do porównania)',solarOnDelta:'Kolektor aktywny – różnica (°C)',solarOffDelta:'Kolektor nieaktywny – różnica (°C)',solarSensors:'Czujniki kolektora',solarPump:'Encja pompy solarnej',pipeStart:'Króciec na początku',pipeEnd:'Króciec na końcu',yes:'Tak',no:'Nie',compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
+    pl:{sensorScale:'Skala odczytu',accessoryLabel:'Podpis przy ikonie',boilerState:'Praca palnika / grzania',burnerEntity:'Encja palnika (opcjonalna; inaczej temperatura)',burnerOnTemp:'Kocioł aktywny powyżej (°C)',burnerOffTemp:'Kocioł nieaktywny poniżej (°C)',solarTank:'Temperatura zbiornika (do porównania)',solarOnDelta:'Kolektor aktywny – różnica (°C)',solarOffDelta:'Kolektor nieaktywny – różnica (°C)',solarSensors:'Czujniki kolektora',solarPump:'Encja pompy solarnej',pipeStart:'Króciec na początku',pipeEnd:'Króciec na końcu',yes:'Tak',no:'Nie',compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
       flowOn:'Włączona (podgląd)',flowAuto:'Według encji',flowDirection:'Kierunek przepływu',
       flowSpeed:'Czas animacji (s)',flowEntity:'Encja sterująca przepływem',
       forward:'Początek → koniec',reverse:'Koniec → początek',mode:'Tryb układu',auto:'Automatyczny (Warmwasser)',custom:'Własny układ',language:'Język',
@@ -42,7 +42,7 @@
       boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',pipes:'Rury',
       link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
       zoom:'Powiększenie',noValues:'Bez pomiaru',editor:'Projektant instalacji'},
-    en:{boilerState:'Burner / heating state',burnerEntity:'Burner entity (optional; otherwise temperature)',burnerOnTemp:'Boiler on above (°C)',burnerOffTemp:'Boiler off below (°C)',solarTank:'Tank temperature (reference)',solarOnDelta:'Collector active – delta (°C)',solarOffDelta:'Collector inactive – delta (°C)',solarSensors:'Collector sensors',solarPump:'Solar pump entity',pipeStart:'Start connector',pipeEnd:'End connector',yes:'Yes',no:'No',compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
+    en:{sensorScale:'Reading scale',accessoryLabel:'Icon caption',boilerState:'Burner / heating state',burnerEntity:'Burner entity (optional; otherwise temperature)',burnerOnTemp:'Boiler on above (°C)',burnerOffTemp:'Boiler off below (°C)',solarTank:'Tank temperature (reference)',solarOnDelta:'Collector active – delta (°C)',solarOffDelta:'Collector inactive – delta (°C)',solarSensors:'Collector sensors',solarPump:'Solar pump entity',pipeStart:'Start connector',pipeEnd:'End connector',yes:'Yes',no:'No',compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
       flowOn:'On (preview)',flowAuto:'Controlled by entity',flowDirection:'Flow direction',
       flowSpeed:'Animation duration (s)',flowEntity:'Flow control entity',
       forward:'Start → end',reverse:'End → start',mode:'Layout mode',auto:'Automatic (Warmwasser)',custom:'Custom layout',language:'Language',
@@ -78,11 +78,13 @@
     label:String(item.label||'').slice(0,64),
     side:['left','right','inside'].includes(item.side)?item.side:'left',
     height:clamp(item.height,0,100,50),
+    display_scale:clamp(item.display_scale,0.5,2,1),
     entity:validEntity(item.entity)?item.entity:''
   });
   const normalizeAccessory=(item)=>({
     id:String(item.id||freshId('a')).slice(0,32),
     type:item.type==='valve'?'valve':'pump',
+    label:String(item.label||'').slice(0,64),
     position:clamp(item.position,0,100,50),
     entity:validEntity(item.entity)?item.entity:''
   });
@@ -202,15 +204,17 @@
     return '<circle cx="60" cy="64" r="28" fill="#47647a" stroke="#c0d2de" stroke-width="2"/>'+
       '<path d="M60 38V70" stroke="#ecf2f5" stroke-width="5"/><circle cx="60" cy="79" r="9" fill="#f2bb74"/>';
   };
-  const symbolOnPipe=(item,pipe,hass)=>{
+  const symbolOnPipe=(item,pipe,hass,language)=>{
     const at=onPipe(pipe,item.position),isPump=item.type==='pump';
     const enabled=HASSStudioGraphics.on(hass,item.entity);
+    const caption=esc(item.label||words[language][item.type]||item.type);
     return '<g transform="translate('+at.x+' '+at.y+')" class="ss-accessory" data-pipe="'+esc(pipe.id)+'"'+
       (item.entity?' data-more="'+esc(item.entity)+'"':'')+'>'+
       '<circle r="17" fill="#405669" stroke="'+(enabled?'#68c69b':'#d7e5ee')+'" stroke-width="2"/>'+ 
       (isPump&&enabled?'<circle class="ss-pump-pulse" r="17" fill="none" stroke="#68c69b"/>':'')+
       (isPump?'<path d="M-7 -10L10 0L-7 10Z" fill="#dceaf3"/>':
         '<path d="M-11 -8L0 0L-11 8ZM11 -8L0 0L11 8Z" fill="#e2c78d"/>')+
+      '<text x="0" y="-25" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--primary-text-color,#e5edf5)" stroke="#252525" stroke-width="2" paint-order="stroke">'+caption+'</text>'+
       '</g>';
   };
   const canvasSvg=(config,hass,editable=false,selected=null)=>{
@@ -232,7 +236,7 @@
         (enabled?'<path class="ss-line ss-flow" d="'+d+'" style="--ss-speed:'+pipe.flow_speed+'s;animation-direction:'+pipe.flow_direction+'"/>':'')+
         endcap(true)+endcap(false)+'</g>';
     }).join('');
-    const accessories=data.pipes.map(pipe=>pipe.accessories.map(item=>symbolOnPipe(item,pipe,hass)).join('')).join('');
+    const accessories=data.pipes.map(pipe=>pipe.accessories.map(item=>symbolOnPipe(item,pipe,hass,language)).join('')).join('');
     const handles=editable&&selected?.type==='pipe'?data.pipes.filter(p=>p.id===selected.id).map(pipe=>pipe.points.map((pt,index)=>
       '<circle class="ss-handle" data-id="'+esc(pipe.id)+'" data-point="'+index+'" cx="'+pt.x+'" cy="'+pt.y+
       '" r="8" fill="#fff" stroke="#2196f3" stroke-width="2"/>').join('')).join(''):'';
@@ -241,11 +245,14 @@
       const reading=valueOf(hass,node.entity);
       const name=esc(node.label||L[node.type]||node.type);
       const ent=node.entity?' data-more="'+esc(node.entity)+'"':'';
+      const tallBoiler=node.type==='boiler'&&node.visual==='warmwasser';
+      const outline=tallBoiler?{x:12,y:-105,width:110,height:318,labelY:230,readingY:245}:
+        {x:4,y:3,width:112,height:113,labelY:130,readingY:145};
       return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale+')">'+
         (node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
-        (editable&&active?'<rect class="ss-selection" x="4" y="3" width="112" height="113" rx="8" fill="none" stroke="#52bfff" stroke-dasharray="5 4" stroke-width="1.6" pointer-events="none"/>':'')+
-        '<text x="60" y="130" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
-        (reading&&!(node.type==='boiler'&&node.visual==='warmwasser')?'<text x="60" y="145" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
+        (editable&&active?'<rect class="ss-selection" x="'+outline.x+'" y="'+outline.y+'" width="'+outline.width+'" height="'+outline.height+'" rx="8" fill="none" stroke="#52bfff" stroke-dasharray="5 4" stroke-width="1.6" pointer-events="none"/>':'')+
+        '<text x="60" y="'+outline.labelY+'" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
+        (reading&&!tallBoiler?'<text x="60" y="'+outline.readingY+'" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
         '</g>';
     }).join('');
     return '<svg class="ss-svg'+(editable?' ss-svg-editor':'')+'" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
@@ -399,7 +406,8 @@
       if(selection.type==='node'){
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
-        markup+='<div class="ss-preview"><svg viewBox="0 0 120 120" width="120" height="120">'+
+        const previewBox=obj.visual==='warmwasser'&&obj.type==='boiler'?'0 -110 130 350':'0 0 120 120';
+        markup+='<div class="ss-preview"><svg viewBox="'+previewBox+'" width="120" height="120">'+
           HASSStudioGraphics.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
           (obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,this._hass):variantShape(obj))+'</svg></div>';
         markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
@@ -435,6 +443,9 @@
             field(L.side,'partSide',item.side,'text',sides,'data-index="'+index+'"')+
             field(L.height,'partHeight',item.height,'number',null,
               'min="0" max="100" data-index="'+index+'"')+
+            field(L.label,'partLabel',item.label,'text',null,'data-index="'+index+'"')+
+            (item.kind==='sensor'?field(L.sensorScale,'partDisplayScale',item.display_scale,'range',null,
+              'min="0.5" max="2" step="0.1" data-index="'+index+'"'):'')+
             '<label>'+esc(L.entity)+entityField(item.entity,'partEntity',index)+'</label>'
           ).join('')+
           '<div class="ss-row">'+(obj.type==='solar'?[['sensor',L.sensor]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]]).map(v=>
@@ -460,6 +471,7 @@
             '<button type="button" data-delete-accessory="'+index+'">×</button></div>'+
             field(L.accessoryPos,'accessoryPos',a.position,'range',null,
               'min="0" max="100" step="1" data-index="'+index+'"')+
+            field(L.accessoryLabel,'accessoryLabel',a.label,'text',null,'data-index="'+index+'"')+
             '<label>'+esc(L.entity)+entityField(a.entity,'accessoryEntity',index)+'</label>').join('')+
           '<div class="ss-row"><button type="button" data-add-accessory="pump">+ '+esc(L.pump)+'</button>'+
           '<button type="button" data-add-accessory="valve">+ '+esc(L.valve)+'</button></div></section>';
@@ -612,11 +624,15 @@
         if(key==='partVariant')part.variant=['warmwasser','compact','extended'].includes(val)?val:part.variant;
         if(key==='partSide')part.side=['left','right','inside'].includes(val)?val:part.side;
         if(key==='partHeight')part.height=clamp(val,0,100,part.height);
+        if(key==='partLabel')part.label=val.slice(0,64);
+        if(key==='partDisplayScale')part.display_scale=clamp(val,0.5,2,part.display_scale);
         if(key==='partEntity')part.entity=validEntity(val)?val:'';
       }else if(key==='accessoryPos'&&obj.accessories[index])
         obj.accessories[index].position=clamp(val,0,100,50);
       else if(key==='accessoryEntity'&&obj.accessories[index])
         obj.accessories[index].entity=validEntity(val)?val:'';
+      else if(key==='accessoryLabel'&&obj.accessories[index])
+        obj.accessories[index].label=val.slice(0,64);
       commit(model);render();
     });
     properties.addEventListener('click',event=>{
@@ -629,11 +645,14 @@
       else if(button.hasAttribute('data-delete-entity'))obj.entities.splice(index,1);
       else if(button.dataset.addPart){
         if(obj.parts.length>=20)return;
-        obj.parts.push({id:freshId('i'),kind:obj.type==='solar'?'sensor':button.dataset.addPart,label:obj.type==='solar'?'Kolektor':'',
-          side:obj.type==='solar'?'right':'left',height:obj.type==='solar'?80:50,variant:'warmwasser',entity:''});
+        const kind=obj.type==='solar'?'sensor':button.dataset.addPart;
+        const sensorCount=obj.parts.filter(part=>part.kind==='sensor').length+1;
+        obj.parts.push({id:freshId('i'),kind,label:obj.type==='solar'?'Kolektor':kind==='sensor'?'T'+sensorCount:'',
+          side:obj.type==='solar'?'right':'left',height:obj.type==='solar'?80:50,
+          display_scale:1,variant:'warmwasser',entity:''});
       }else if(button.dataset.addAccessory){
         if(obj.accessories.length>=20)return;
-        obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,position:50,entity:''});
+        obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,label:'',position:50,entity:''});
       }else if(button.dataset.action==='entity'){
         if(obj.entities.length>=20)return;
         obj.entities.push({label:'',entity:''});
