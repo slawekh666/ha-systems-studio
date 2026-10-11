@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "HSS: build + validate",
+      "type": "shell",
+      "command": "python3 scripts/build.py && python3 scripts/check.py",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    }
+  ]
+}

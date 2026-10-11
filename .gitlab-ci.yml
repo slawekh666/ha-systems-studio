@@ -1,0 +1,12 @@
+stages:
+  - test
+
+validate_card:
+  stage: test
+  image: python:3.12-alpine
+  before_script:
+    - apk add --no-cache nodejs
+  script:
+    - python3 scripts/build.py
+    - python3 scripts/check.py
+    - git diff --exit-code -- dist/ha-systems-studio.js

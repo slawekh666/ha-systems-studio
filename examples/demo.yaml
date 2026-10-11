@@ -1,0 +1,7 @@
+# Separate Home Assistant dashboard / DEV card. Uses no real actuators.
+type: custom:ha-systems-studio
+titel: Kotłownia — TEST
+studio_readonly: true
+speicher:
+  typ: schicht
+fuehler: []
