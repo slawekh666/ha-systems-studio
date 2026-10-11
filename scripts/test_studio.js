@@ -33,7 +33,7 @@ const partRender=api.render({
     {kind:'heater',side:'right',height:40,label:'Grzałka',entity:'switch.heater'},
     {kind:'coil',side:'inside',height:20,entity:'binary_sensor.coil'}]
 },state({'sensor.tank_top':63.5,'switch.heater':'on','binary_sensor.coil':'off'}));
-assert.match(partRender,/<g class="ss-temperature-badge" data-more="sensor.tank_top">/);
+assert.match(partRender,/<g class="ss-temperature-badge" transform="[^"]+" data-more="sensor.tank_top">/);
 assert.match(partRender,/<g class="ss-heater" data-more="switch.heater">/);
 assert.match(partRender,/<g class="ss-coil" data-more="binary_sensor.coil">/);
 assert(src.includes('class="ss-accessory" data-pipe=') && src.includes("item.entity?' data-more="), 'accessory history binding missing');
@@ -41,3 +41,27 @@ assert.match(src,/\.ss-svg:not\(\.ss-svg-editor\) \.ss-pipe\{pointer-events:none
 assert.match(src,/\(editable\?' ss-svg-editor':''\)/);
 assert.match(src,/const ent=node.entity\?' data-more="/);
 console.log('OK: history click targets for individual sensors, heaters, coils and pipe accessories.');
+
+/* Sensor labels remain readable at any device scale. */
+const scaledTemp={kind:'sensor',side:'left',height:50,label:'CWU góra',display_scale:0.7,entity:'sensor.temp'};
+const scaledTank=(scale,id)=>api.render({id,type:'tank',variant:'buffer',scale,
+  parts:[scaledTemp]},state({'sensor.temp':63.1}));
+const tSmall=scaledTank(1,'tempBadgeNormal');
+const tLarge=scaledTank(2,'tempBadgeBig');
+const getBadgeScale=svg=>Number(svg.split('class="ss-temperature-badge" transform="')[1]?.split(' scale(')[1]?.split(')')[0]);
+assert.equal(getBadgeScale(tSmall),0.7);
+assert.equal(getBadgeScale(tLarge),0.35);
+assert(tSmall.includes('>CWU góra</text>'));
+const bareTank=api.render({id:'tankUnlabeled',type:'tank',variant:'buffer',scale:2,
+  parts:[{kind:'sensor',side:'left',height:80,entity:'sensor.temp'}]},state({'sensor.temp':63.1}));
+assert(bareTank.includes('>T1</text>'));
+assert(src.includes('data-field=') && src.includes("key"),'missing dynamic field template');
+assert(src.includes("'partDisplayScale'")&&src.includes("'partLabel'"),'sensor editor fields missing');
+assert(src.includes("'accessoryLabel'"),'accessory label editor missing');
+assert(src.includes('symbolOnPipe(item,pipe,hass,language)'), 'pipe caption renderer missing');
+const tallBoiler=api.render(wood,state({'sensor.boiler':65}));
+assert.match(tallBoiler,/y="-104" width="18" height="150"/);
+assert.match(tallBoiler,/y="30" width="91" height="169"/);
+assert(tallBoiler.includes('clip-path="url(#wwboilerwoodFireClip)"'));
+assert.match(tallBoiler,/<g data-more="sensor.boiler">/);
+console.log('OK: independent sensor scaling, sensor labels, accessory captions, tall boiler geometry.');

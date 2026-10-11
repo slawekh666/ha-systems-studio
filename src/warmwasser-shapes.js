@@ -23,7 +23,8 @@ const HASSStudioGraphics = (() => {
     const stops=temps.length?
       [{y:0,t:temps[0].t},...temps,{y:100,t:temps[temps.length-1].t}]:
       [{y:0,t:null},{y:100,t:null}];
-    return '<linearGradient id="'+id(n)+'Temp" x1="0" y1="0" x2="0" y2="1">'+
+    return (n.type==='boiler'?'<clipPath id="'+id(n)+'FireClip"><rect x="35" y="99" width="64" height="56" rx="4"/></clipPath>':'')+
+      '<linearGradient id="'+id(n)+'Temp" x1="0" y1="0" x2="0" y2="1">'+
       stops.map(p=>'<stop offset="'+p.y+'%" stop-color="'+color(p.t)+'"/>').join('')+
       '</linearGradient><linearGradient id="'+id(n)+'Cyl" x1="0" x2="1" y1="0" y2="0">'+
       '<stop stop-color="#fff" stop-opacity=".3"/><stop offset=".18" stop-color="#fff" stop-opacity=".12"/>'+
@@ -37,7 +38,9 @@ const HASSStudioGraphics = (() => {
     const fraction=/[ilI1.,:!'|]/.test(ch)?0.34:/[MW@%]/.test(ch)?0.88:/[0-9]/.test(ch)?0.60:0.58;
     return total+size*fraction;
   },0);
-  const temperatureBadge=(part,h,x,y,side='left')=>{
+  const clampBadge=(v,lo=0.5,hi=2)=>Number.isFinite(Number(v))&&Number(v)>0?
+    Math.max(lo,Math.min(hi,Number(v))):1;
+  const temperatureBadge=(part,h,x,y,side='left',parentScale=1)=>{
     const v=sensorState(h,part.entity),c=color(v);
     const rawLabel=String(part.label||'').slice(0,24),label=esc(rawLabel);
     const reading=numeric(v)?Number(v).toFixed(1)+'°':'—';
@@ -47,7 +50,8 @@ const HASSStudioGraphics = (() => {
     const height=hasLabel?32:25;
     const left=side==='left',inside=side==='inside';
     const bx=inside?x-width/2:(left?x-width-8:x+8),by=y-height/2;
-    return '<g class="ss-temperature-badge"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>'+
+    const badgeScale=clampBadge(part.display_scale)/clampBadge(parentScale,0.5,2.4);
+    return '<g class="ss-temperature-badge" transform="translate('+x+' '+y+') scale('+badgeScale+') translate('+(-x)+' '+(-y)+')"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>'+
       (!inside?'<path d="M'+x+' '+y+'H'+(left?x-8:x+8)+'" stroke="'+c+'" stroke-width="1.6"/>':'')+
       '<rect x="'+bx+'" y="'+by+'" width="'+width+'" height="'+height+'" rx="10" fill="#22272d" fill-opacity=".97" stroke="'+c+'" stroke-width="1.5"/>'+
       (hasLabel?'<text x="'+(bx+width/2)+'" y="'+(y-4)+'" font-size="8.5" text-anchor="middle" font-weight="600" letter-spacing=".45" fill="#c5cbd2">'+label+'</text>':'')+
@@ -73,10 +77,11 @@ const HASSStudioGraphics = (() => {
       out+='<path d="'+p+'L164 32V18" fill="none" stroke="#d8e0e7" stroke-width="3.5" opacity=".7"/>';
     }
     out+='</g>';
+    let sensorIndex=0;
     for(const part of n.parts||[]){
       const y=107-Number(part.height)*.95,x=part.side==='left'?32:part.side==='right'?91:61;
       if(part.kind==='sensor'){
-        out+=temperatureBadge(part,h,x,y,part.side);
+        out+=temperatureBadge({...part,label:part.label||'T'+(++sensorIndex)},h,x,y,part.side,n.scale);
       }else if(part.kind==='heater'){
         const active=on(h,part.entity)||(numeric(sensorState(h,part.entity))&&Number(sensorState(h,part.entity))>5);
         out+='<g class="ss-heater"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>';
@@ -101,6 +106,7 @@ const HASSStudioGraphics = (() => {
     }
     return out;
   };
+  // Warmwasser-inspired tall boiler with full chimney and an enclosed firebox.
   const boiler=(n,h)=>{
     const v=n.variant,temp=sensorState(h,n.entity);
     const fallbackTemp=thresholdActive(burningStates,n.id,temp,
@@ -108,7 +114,7 @@ const HASSStudioGraphics = (() => {
     const burning=n.burner_mode==='on'||(n.burner_mode!=='off'&&
       (n.burner_entity?on(h,n.burner_entity):fallbackTemp));
     const isWood=['wood','pellet'].includes(v),isGas=['gas','oil'].includes(v),electric=v==='electric',heatpump=v==='heatpump';
-    const pale=isGas||electric,steel=id(n)+'Steel';
+    const pale=isGas||electric,steel=id(n)+'Steel',clip=id(n)+'FireClip';
     const flame=(x,y,w,height,duration)=>{
       const path=(width,hh)=>'M'+(-width)+' 0C'+(-width-2)+' '+(-hh*.45)+' '+(-width*.15)+' '+(-hh*.6)+' '+(width*.1)+' '+(-hh)+
         'C'+(width*.5)+' '+(-hh*.6)+' '+(width+2)+' '+(-hh*.4)+' '+width+' 0Z';
@@ -118,40 +124,48 @@ const HASSStudioGraphics = (() => {
         '<path d="'+path(w*.35,height*.42)+'" fill="'+(isGas?'#cfe3ff':'#ffe27a')+'"/></g></g>';
     };
     let out='<g class="ss-boiler">'+
-      '<rect x="19" y="-28" width="15" height="73" rx="2" fill="url(#'+steel+')"/>'+
-      '<rect x="16" y="-19" width="21" height="5" rx="1" fill="#252a31"/>'+
-      '<rect x="26" y="102" width="12" height="9" rx="1" fill="#414750"/>'+
-      '<rect x="94" y="102" width="12" height="9" rx="1" fill="#414750"/>'+
-      '<rect x="21" y="5" width="91" height="99" rx="10" fill="url(#'+steel+')" stroke="#9098a1" stroke-width="1.2"/>'+
-      (pale?'<rect x="21" y="5" width="91" height="99" rx="10" fill="#c7d0d8" opacity=".18"/>':'')+
-      '<rect x="25" y="5" width="84" height="7" rx="2" fill="#31363e"/>'+
-      '<text x="30" y="19" fill="#d5dce5" font-size="9" font-weight="600" letter-spacing=".7">'+
+      // Original tall flue was mostly hidden by the old squat cabinet.
+      '<rect x="53" y="-104" width="18" height="150" rx="2" fill="url(#'+steel+')"/>'+
+      '<rect x="50" y="-97" width="24" height="8" rx="2" fill="#252a31"/>'+
+      '<rect x="51" y="22" width="22" height="6" rx="2" fill="#252a31"/>'+
+      '<rect x="30" y="193" width="12" height="20" rx="2" fill="#414750"/>'+
+      '<rect x="91" y="193" width="12" height="20" rx="2" fill="#414750"/>'+
+      // Tall cabinet, not an independently stretched part.
+      '<rect x="21" y="30" width="91" height="169" rx="10" fill="url(#'+steel+')" stroke="#9098a1" stroke-width="1.2"/>'+
+      (pale?'<rect x="21" y="30" width="91" height="169" rx="10" fill="#c7d0d8" opacity=".18"/>':'')+
+      '<path d="M28 43V183" stroke="#fff" stroke-opacity=".09" stroke-width="3"/>'+
+      '<rect x="18" y="27" width="97" height="9" rx="3" fill="#31363e" stroke="#7f8790" stroke-width=".7"/>'+
+      '<text x="30" y="51" fill="#d5dce5" font-size="9" font-weight="600" letter-spacing=".7">'+
       esc(({wood:'DREWNO',pellet:'PELLET',gas:'GAZ',oil:'OLEJ',electric:'ELEKTR.',heatpump:'POMPA C.'})[v]||'KOCIOŁ')+'</text>';
     if(numeric(temp)){
-      out+='<rect x="30" y="22" width="72" height="19" rx="5" fill="#0b1117"/>'+
-        '<text x="66" y="36" font-size="14" font-weight="700" text-anchor="middle" fill="#ffca36">'+Number(temp).toFixed(1)+'°</text>';
+      out+='<g'+(n.entity?' data-more="'+esc(n.entity)+'"':'')+'>'+
+        '<rect x="30" y="60" width="73" height="26" rx="5" fill="#0b1117"/>'+
+        '<text x="66" y="79" font-size="14" font-weight="700" text-anchor="middle" fill="#ffca36">'+Number(temp).toFixed(1)+'°</text></g>';
     }
-    out+='<rect x="29" y="44" width="76" height="50" rx="7" fill="#0d1014" stroke="#59616d" stroke-width="1.5"/>'+
-      '<rect x="35" y="49" width="64" height="40" rx="4" fill="#0a0b0e"/>';
+    out+='<rect x="29" y="92" width="76" height="73" rx="7" fill="#0d1014" stroke="#59616d" stroke-width="1.5"/>'+
+      '<rect x="35" y="99" width="64" height="56" rx="4" fill="#0a0b0e"/>'+
+      '<g clip-path="url(#'+clip+')">';
     if(isWood||isGas){
       if(burning){
-        out+='<rect x="35" y="49" width="64" height="40" fill="'+(isGas?'#193159':'#522016')+'" opacity=".35" class="ss-embers"/>';
-        out+=flame(54,87,9,isGas?20:26,.9)+flame(70,87,11,isGas?31:38,1.15)+flame(87,87,8,isGas?23:29,.8);
-        if(isWood)out+='<ellipse cx="68" cy="86" rx="28" ry="5" fill="#ff7625" opacity=".55" class="ss-embers"/>';
+        out+='<rect x="35" y="99" width="64" height="56" fill="'+(isGas?'#193159':'#522016')+'" opacity=".35" class="ss-embers"/>';
+        out+=flame(53,147,9,isGas?29:38,.9)+flame(69,147,11,isGas?38:49,1.15)+flame(87,147,8,isGas?32:42,.8);
+        if(isWood)out+='<ellipse cx="68" cy="149" rx="28" ry="6" fill="#ff7625" opacity=".55" class="ss-embers"/>';
       }
-      if(v==='wood')out+='<rect x="47" y="84" width="45" height="7" rx="3" fill="#55331e" stroke="'+(burning?'#ff842d':'#785238')+'" transform="rotate(-8 65 86)"/>';
-      if(v==='pellet')out+=Array.from({length:9},(_,k)=>'<rect x="'+(42+(k%5)*10)+'" y="'+(83+Math.floor(k/5)*4)+'" width="7" height="3" rx="1" fill="#92623d"/>').join('');
-      if(isGas)out+='<path d="M43 87H93" stroke="#536173" stroke-width="3"/>';
+      if(v==='wood'){
+        out+='<rect x="45" y="146" width="47" height="7" rx="3" fill="#55331e" stroke="'+(burning?'#ff842d':'#785238')+'" transform="rotate(-7 66 149)"/>';
+      }
+      if(v==='pellet')out+=Array.from({length:12},(_,k)=>'<rect x="'+(42+(k%6)*9)+'" y="'+(147+Math.floor(k/6)*3)+'" width="6" height="3" rx="1" fill="#92623d"/>').join('');
+      if(isGas)out+='<path d="M43 149H93" stroke="#536173" stroke-width="3"/>';
     }else if(electric){
-      out+='<path d="M41 64H92M41 77H92" stroke="'+(burning?'#ffca38':'#79828b')+'" stroke-width="3" stroke-dasharray="7 4"'+(burning?' class="ss-embers"':'')+'/>';
-      out+='<path d="M69 52L55 69H66L58 85L83 63H69Z" fill="'+(burning?'#ffd24b':'#7f8790')+'"/>';
+      out+='<path d="M41 122H92M41 140H92" stroke="'+(burning?'#ffca38':'#79828b')+'" stroke-width="3" stroke-dasharray="7 4"'+(burning?' class="ss-embers"':'')+'/>';
+      out+='<path d="M69 108L55 130H66L58 151L83 123H69Z" fill="'+(burning?'#ffd24b':'#7f8790')+'"/>';
     }else if(heatpump){
-      out+='<g'+(burning?' class="ss-fan"':'')+'><circle cx="67" cy="68" r="16" stroke="#77b7d9" stroke-width="2" fill="none"/>'+
-        '<path d="M64 53Q83 57 69 68Q83 84 67 71Q50 82 64 67Q52 55 64 53Z" fill="#91c6df"/></g>';
+      out+='<g'+(burning?' class="ss-fan"':'')+'><circle cx="67" cy="126" r="18" stroke="#77b7d9" stroke-width="2" fill="none"/>'+
+        '<path d="M64 109Q83 115 69 126Q83 144 67 129Q50 141 64 125Q52 111 64 109Z" fill="#91c6df"/></g>';
     }
-    out+='<path d="M37 94H96" stroke="#79818c" stroke-opacity=".55" stroke-width="1.6"/>'+
-      '<rect x="30" y="96" width="73" height="16" rx="4" fill="#313941" stroke="#79818c"/>'+
-      '<text x="66" y="107" text-anchor="middle" font-size="9" font-weight="700" fill="'+(burning?'#ffbf35':'#9da7b2')+'">'+
+    out+='</g><path d="M37 161H97" stroke="#79818c" stroke-opacity=".55" stroke-width="1.6"/>'+
+      '<rect x="30" y="175" width="73" height="20" rx="4" fill="#313941" stroke="#79818c"/>'+
+      '<text x="66" y="188.5" text-anchor="middle" font-size="9" font-weight="700" fill="'+(burning?'#ffbf35':'#9da7b2')+'">'+
       (burning?(isWood?'Burning':isGas?'Burner on':electric?'Heating':'Running'):'Off')+'</text></g>';
     return out;
   };
@@ -179,7 +193,7 @@ const HASSStudioGraphics = (() => {
     for(const part of (n.parts||[]).filter(p=>p.kind==='sensor')){
       const yy=93-(Number(part.height)/100)*60;
       const side=part.side==='left'?'left':'right';
-      out+=temperatureBadge({...part,label:part.label||'Kolektor'},h,side==='left'?17:85,yy,side);
+      out+=temperatureBadge({...part,label:part.label||'Kolektor'},h,side==='left'?17:85,yy,side,n.scale);
     }
     return out;
   };
