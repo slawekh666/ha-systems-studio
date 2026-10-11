@@ -113,7 +113,7 @@
       flow_mode:['auto','on','off'].includes(v.flow_mode)?v.flow_mode:'auto',
       flow_entity:validEntity(v.flow_entity)?v.flow_entity:'',
       flow_direction:v.flow_direction==='reverse'?'reverse':'forward',
-      flow_speed:clamp(v.flow_speed,.35,5,1),
+      flow_speed:clamp(v.flow_speed,.35,5,1),cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
       cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
       points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
         x:clamp(q.x,0,W,100),y:clamp(q.y,0,H,100)})),
@@ -213,21 +213,24 @@
     const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser')
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
     const pipes=data.pipes.map(pipe=>{
-      const active=selected?.type==='pipe' && selected.id===pipe.id;
-      const d=pipePath(pipe.points);
-      const flowing=pipe.flow_mode==='on'||(pipe.flow_mode==='auto' &&
-        HASSStudioGraphics.on(hass,pipe.flow_entity));
-      const flow=flowing?'<path class="ss-line ss-flow" d="'+d+'" style="--ss-speed:'+pipe.flow_speed+
-        's;animation-direction:'+pipe.flow_direction+'"/>':'';
-      const handles=editable&&active?pipe.points.map((pt,index)=>
-        '<circle class="ss-handle" data-id="'+esc(pipe.id)+'" data-point="'+index+
-        '" cx="'+pt.x+'" cy="'+pt.y+'" r="8" fill="#fff" stroke="#2196f3" stroke-width="2"/>').join(''):'';
-      return '<g class="ss-pipe" data-id="'+esc(pipe.id)+'">'+
-        '<path class="ss-pipe-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
+      const d=pipePath(pipe.points),enabled=pipe.flow_mode==='on'||(pipe.flow_mode==='auto'&&HASSStudioGraphics.on(hass,pipe.flow_entity));
+      const endcap=(first)=>{
+        if(first&&pipe.cap_start===false||!first&&pipe.cap_end===false)return '';
+        const pts=pipe.points,at=first?pts[0]:pts[pts.length-1],near=first?pts[1]:pts[pts.length-2];
+        const angle=Math.atan2(at.y-near.y,at.x-near.x)*180/Math.PI;
+        return '<g class="ss-cap" data-cap="'+(first?'start':'end')+'" transform="translate('+at.x+' '+at.y+') rotate('+angle+')">'+
+          '<rect x="-6" y="-7" width="12" height="14" rx="2" fill="#7c8793" stroke="#b6c1cc"/></g>';
+      };
+      return '<g class="ss-pipe" data-id="'+esc(pipe.id)+'"><path class="ss-pipe-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="#142332" stroke-width="'+(pipe.width+3)+'" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="'+colors[pipe.color]+'" stroke-width="'+pipe.width+'" fill="none"/>'+
-        flow+pipe.accessories.map(item=>symbolOnPipe(item,pipe,hass)).join('')+handles+'</g>';
+        (enabled?'<path class="ss-line ss-flow" d="'+d+'" style="--ss-speed:'+pipe.flow_speed+'s;animation-direction:'+pipe.flow_direction+'"/>':'')+
+        endcap(true)+endcap(false)+'</g>';
     }).join('');
+    const accessories=data.pipes.map(pipe=>pipe.accessories.map(item=>symbolOnPipe(item,pipe,hass)).join('')).join('');
+    const handles=editable&&selected?.type==='pipe'?data.pipes.filter(p=>p.id===selected.id).map(pipe=>pipe.points.map((pt,index)=>
+      '<circle class="ss-handle" data-id="'+esc(pipe.id)+'" data-point="'+index+'" cx="'+pt.x+'" cy="'+pt.y+
+      '" r="8" fill="#fff" stroke="#2196f3" stroke-width="2"/>').join('')).join(''):'';
     const nodes=data.nodes.map(node=>{
       const active=selected?.type==='node'&&selected.id===node.id;
       const reading=valueOf(hass,node.entity);
@@ -237,13 +240,13 @@
         (node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
         (editable&&active?'<rect class="ss-selection" x="4" y="3" width="112" height="113" rx="8" fill="none" stroke="#52bfff" stroke-dasharray="5 4" stroke-width="1.6" pointer-events="none"/>':'')+
         '<text x="60" y="130" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
-        (reading?'<text x="60" y="145" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
+        (reading&&!(node.type==='boiler'&&node.visual==='warmwasser')?'<text x="60" y="145" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
         '</g>';
     }).join('');
     return '<svg class="ss-svg" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
       HASSStudioGraphics.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
       '<rect width="'+W+'" height="'+H+'" rx="10" fill="var(--secondary-background-color,#17222d)"/>'+
-      '<g stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g>'+nodes+'</svg>';
+      '<g class="ss-devices">'+nodes+'</g><g class="ss-pipe-layer" stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-pipe-handles">'+handles+'</g></svg>';
   };
   const nativeRender=WarmwasserSchemaCard.prototype._render;
   WarmwasserSchemaCard.prototype._render=function(){
@@ -426,6 +429,8 @@
       }else{
         markup+=field(L.pipeColor,'color',obj.color,'text',colorsList);
         markup+=field(L.pipeWidth,'width',obj.width,'range',null,'min="3" max="14" step="1"');
+        markup+=field(L.pipeStart,'cap_start',obj.cap_start?'true':'false','text',[['true',L.yes],['false',L.no]]);
+        markup+=field(L.pipeEnd,'cap_end',obj.cap_end?'true':'false','text',[['true',L.yes],['false',L.no]]);
         markup+=field(L.flowMode||'Flow animation','flow_mode',obj.flow_mode,'text',
           [['off',L.flowOff||'Off'],['auto',L.flowAuto||'Entity-controlled'],['on',L.flowOn||'On (preview)']]);
         markup+=field(L.flowDirection||'Flow direction','flow_direction',obj.flow_direction,'text',
@@ -497,12 +502,18 @@
         const group=[...svg.querySelectorAll('.ss-pipe')].find(el=>el.dataset.id===pipe.id);
         if(!group)continue;
         const d=pipePath(pipe.points);
-        group.querySelectorAll('path').forEach(el=>el.setAttribute('d',d));
-        group.querySelectorAll('.ss-handle').forEach(el=>{
+        group.querySelectorAll('path.ss-line,path.ss-pipe-hit').forEach(el=>el.setAttribute('d',d));
+        group.querySelectorAll('.ss-cap').forEach(el=>{
+          const first=el.dataset.cap==='start',pt=first?pipe.points[0]:pipe.points[pipe.points.length-1],
+          near=first?pipe.points[1]:pipe.points[pipe.points.length-2];
+          el.setAttribute('transform','translate('+pt.x+' '+pt.y+') rotate('+(Math.atan2(pt.y-near.y,pt.x-near.x)*180/Math.PI)+')');
+        });
+        svg.querySelectorAll('.ss-handle').forEach(el=>{
+          if(el.dataset.id!==pipe.id)return;
           const p=pipe.points[Number(el.dataset.point)];
           if(p){el.setAttribute('cx',p.x);el.setAttribute('cy',p.y);}
         });
-        group.querySelectorAll('.ss-accessory').forEach((el,i)=>{
+        svg.querySelectorAll('.ss-accessory[data-pipe="'+pipe.id+'"]').forEach((el,i)=>{
           const accessory=pipe.accessories[i];
           if(accessory){const p=onPipe(pipe,accessory.position);
             el.setAttribute('transform','translate('+p.x+' '+p.y+')');}
@@ -568,9 +579,10 @@
       if(['x','y','scale','scale_x','scale_y','width','flow_speed'].includes(key)){
         obj[key]=clamp(val,key==='scale'?0.5:key==='scale_x'||key==='scale_y'?0.4:key==='width'?3:key==='flow_speed'?0.35:0,
           key==='scale'?2.4:key==='scale_x'?3.5:key==='scale_y'?4.5:key==='width'?14:key==='flow_speed'?5:key==='x'?W:H,obj[key]);
-      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity','burner_entity','burner_mode','pump_entity'].includes(key)){
+      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity','burner_entity','burner_mode','pump_entity','cap_start','cap_end'].includes(key)){
         if(['entity','flow_entity','burner_entity','pump_entity'].includes(key))obj[key]=validEntity(val)?val:'';
         else if(key==='burner_mode')obj.burner_mode=['auto','on','off'].includes(val)?val:'auto';
+        else if(key==='cap_start'||key==='cap_end')obj[key]=val==='true';
         else if(key==='visual')obj.visual=val==='studio'?'studio':'warmwasser';
         else if(key==='flow_mode')obj.flow_mode=['on','off','auto'].includes(val)?val:'auto';
         else if(key==='flow_direction')obj.flow_direction=val==='reverse'?'reverse':'forward';
