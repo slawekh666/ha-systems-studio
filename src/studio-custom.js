@@ -87,15 +87,21 @@
   };
   const oldSet=WarmwasserSchemaCardEditor.prototype.setConfig;
   WarmwasserSchemaCardEditor.prototype.setConfig=function(cfg){
-    const old=this._config?.layout_mode||'automatic';
     oldSet.call(this,cfg);
-    if(old!==(this._config?.layout_mode||'automatic')&&this._forms)this._build();
+    if(this._forms && this._studioShownMode !== (this._config?.layout_mode||'automatic'))
+      this._build();
+  };
+  const oldFire=WarmwasserSchemaCardEditor.prototype._fire;
+  WarmwasserSchemaCardEditor.prototype._fire=function(){
+    const changed=this._studioShownMode !== (this._config?.layout_mode||'automatic');
+    oldFire.call(this);
+    if(changed) this._build();
   };
   const oldBuild=WarmwasserSchemaCardEditor.prototype._build;
   WarmwasserSchemaCardEditor.prototype._build=function(){
     oldBuild.call(this);
-    if(this._config?.layout_mode!=='custom')return;
-    this._studioPanel();
+    this._studioShownMode=this._config?.layout_mode||'automatic';
+    if(this._studioShownMode==='custom')this._studioPanel();
   };
   WarmwasserSchemaCardEditor.prototype._studioPanel=function(){
     const L=tr(this._hass), host=this.shadowRoot.getElementById('w');
