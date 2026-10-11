@@ -59,7 +59,7 @@ def build() -> None:
 
     transformed, n = re.subn(
         r"const VERSION = '[^']+';",
-        "const VERSION = '0.1.0-dev';",
+        "const VERSION = '0.2.0-dev';",
         transformed,
         count=1,
     )
@@ -75,7 +75,10 @@ def build() -> None:
         ' */\n'
     )
     DEST.parent.mkdir(parents=True, exist_ok=True)
-    DEST.write_text(header + transformed, encoding='utf-8')
+    extra = ROOT / 'src' / 'studio-custom.js'
+    if not extra.is_file():
+        raise SystemExit('Missing src/studio-custom.js')
+    DEST.write_text(header + transformed + '\n\n' + extra.read_text(encoding='utf-8'), encoding='utf-8')
     print(f'Generated {DEST.relative_to(ROOT)} ({DEST.stat().st_size} bytes)')
 
 
