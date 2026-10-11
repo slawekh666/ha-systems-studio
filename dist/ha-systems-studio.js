@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.2-dev';
+const VERSION = '0.4.3-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -986,6 +986,13 @@ const HASSStudioGraphics = (() => {
   const sensorState=(h,e)=>e&&h?.states?.[e]?h.states[e].state:'unknown';
   const numeric=v=>v!==''&&v!==null&&v!==undefined&&Number.isFinite(Number(v));
   const on=(h,e)=>['on','open','active','running','heating'].includes(String(sensorState(h,e)).toLowerCase());
+  const burningStates=new Map(),collectorStates=new Map();
+  const thresholdActive=(states,id,value,onAt,offAt)=>{
+    if(!numeric(value)){states.delete(id);return false;}
+    const active=states.get(id)===true;
+    const next=active?Number(value)>offAt:Number(value)>=onAt;
+    states.set(id,next);return next;
+  };
   const color=value=>{
     if(!numeric(value))return 'rgb(138,144,153)';
     const x=Math.max(0,Math.min(1,Number(value)/90));
@@ -1007,19 +1014,26 @@ const HASSStudioGraphics = (() => {
       '<linearGradient id="'+id(n)+'Steel" x1="0" y1="0" x2="1" y2="0">'+
       '<stop stop-color="#69717d"/><stop offset=".5" stop-color="#39414a"/><stop offset="1" stop-color="#222a32"/></linearGradient>';
   };
-  // Compact Warmwasser-style temperature capsules with color derived from the HA reading.
+  // Fit badges to measured string lengths rather than stretching all to 94px.
+  const approxTextWidth=(text,size)=>Array.from(String(text)).reduce((total,ch)=>{
+    const fraction=/[ilI1.,:!'|]/.test(ch)?0.34:/[MW@%]/.test(ch)?0.88:/[0-9]/.test(ch)?0.60:0.58;
+    return total+size*fraction;
+  },0);
   const temperatureBadge=(part,h,x,y,side='left')=>{
     const v=sensorState(h,part.entity),c=color(v);
-    const label=esc(String(part.label||'').slice(0,24));
-    const reading=numeric(v)?Number(v).toFixed(1)+'°':(part.entity?'—':'—');
-    const left=side==='left', inside=side==='inside';
-    const bx=inside?x-37:(left?x-102:x+8),by=y-16;
-    const width=inside?74:94;
+    const rawLabel=String(part.label||'').slice(0,24),label=esc(rawLabel);
+    const reading=numeric(v)?Number(v).toFixed(1)+'°':'—';
+    const hasLabel=rawLabel.trim().length>0;
+    const width=Math.ceil(Math.max(30,approxTextWidth(reading,13)+18,
+      hasLabel?approxTextWidth(rawLabel,8.5)+18:0));
+    const height=hasLabel?32:25;
+    const left=side==='left',inside=side==='inside';
+    const bx=inside?x-width/2:(left?x-width-8:x+8),by=y-height/2;
     return '<g class="ss-temperature-badge">'+
       (!inside?'<path d="M'+x+' '+y+'H'+(left?x-8:x+8)+'" stroke="'+c+'" stroke-width="1.6"/>':'')+
-      '<rect x="'+bx+'" y="'+by+'" width="'+width+'" height="32" rx="10" fill="#22272d" fill-opacity=".97" stroke="'+c+'" stroke-width="1.5"/>'+
-      '<text x="'+(bx+width/2)+'" y="'+(y-4)+'" font-size="8.5" text-anchor="middle" font-weight="600" letter-spacing=".45" fill="#c5cbd2">'+label+'</text>'+
-      '<text x="'+(bx+width/2)+'" y="'+(y+10)+'" font-size="13" font-weight="700" text-anchor="middle" fill="#f0f3f6">'+reading+'</text>'+
+      '<rect x="'+bx+'" y="'+by+'" width="'+width+'" height="'+height+'" rx="10" fill="#22272d" fill-opacity=".97" stroke="'+c+'" stroke-width="1.5"/>'+
+      (hasLabel?'<text x="'+(bx+width/2)+'" y="'+(y-4)+'" font-size="8.5" text-anchor="middle" font-weight="600" letter-spacing=".45" fill="#c5cbd2">'+label+'</text>':'')+
+      '<text x="'+(bx+width/2)+'" y="'+(hasLabel?y+10:y+4.5)+'" font-size="13" font-weight="700" text-anchor="middle" fill="#f0f3f6">'+reading+'</text>'+
       '<circle cx="'+x+'" cy="'+y+'" r="4" fill="'+c+'" stroke="#fff" stroke-width="1.4"/></g>';
   };
   const tank=(n,h)=>{
@@ -1069,7 +1083,10 @@ const HASSStudioGraphics = (() => {
   };
   const boiler=(n,h)=>{
     const v=n.variant,temp=sensorState(h,n.entity);
-    const burning=n.burner_mode==='on'||(n.burner_mode!=='off'&&on(h,n.burner_entity));
+    const fallbackTemp=thresholdActive(burningStates,n.id,temp,
+      Number(n.burner_on_temp??35),Math.min(Number(n.burner_off_temp??32),Number(n.burner_on_temp??35)-0.5));
+    const burning=n.burner_mode==='on'||(n.burner_mode!=='off'&&
+      (n.burner_entity?on(h,n.burner_entity):fallbackTemp));
     const isWood=['wood','pellet'].includes(v),isGas=['gas','oil'].includes(v),electric=v==='electric',heatpump=v==='heatpump';
     const pale=isGas||electric,steel=id(n)+'Steel';
     const flame=(x,y,w,height,duration)=>{
@@ -1119,7 +1136,14 @@ const HASSStudioGraphics = (() => {
     return out;
   };
   const solar=(n,h)=>{
-    const lit=on(h,n.pump_entity||n.entity),cx=101,cy=27;
+    const collectorPart=(n.parts||[]).find(p=>p.kind==='sensor'&&p.entity&&/kolektor|collector/i.test(p.label||''))||
+      (n.parts||[]).find(p=>p.kind==='sensor'&&p.entity);
+    const collectorTemp=sensorState(h,collectorPart?.entity||n.entity);
+    const tankTemp=sensorState(h,n.tank_entity);
+    const delta=numeric(collectorTemp)&&numeric(tankTemp)?Number(collectorTemp)-Number(tankTemp):null;
+    const lit=thresholdActive(collectorStates,n.id,delta,Number(n.solar_on_delta??6),
+      Math.min(Number(n.solar_off_delta??3),Number(n.solar_on_delta??6)-0.5));
+    const cx=101,cy=27;
     const rays=Array.from({length:8},(_,i)=>{
       const a=i*Math.PI/4,x1=cx+11*Math.cos(a),y1=cy+11*Math.sin(a);
       const x2=cx+16*Math.cos(a),y2=cy+16*Math.sin(a);
@@ -1197,7 +1221,7 @@ const HASSStudioGraphics = (() => {
       temperature:'Temperature',pressure:'Pressure'}
   };
   const words={
-    pl:{boilerState:'Praca palnika / grzania',burnerEntity:'Encja pracy palnika',solarSensors:'Czujniki kolektora',solarPump:'Encja pompy solarnej',pipeStart:'Króciec na początku',pipeEnd:'Króciec na końcu',yes:'Tak',no:'Nie',compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
+    pl:{boilerState:'Praca palnika / grzania',burnerEntity:'Encja palnika (opcjonalna; inaczej temperatura)',burnerOnTemp:'Kocioł aktywny powyżej (°C)',burnerOffTemp:'Kocioł nieaktywny poniżej (°C)',solarTank:'Temperatura zbiornika (do porównania)',solarOnDelta:'Kolektor aktywny – różnica (°C)',solarOffDelta:'Kolektor nieaktywny – różnica (°C)',solarSensors:'Czujniki kolektora',solarPump:'Encja pompy solarnej',pipeStart:'Króciec na początku',pipeEnd:'Króciec na końcu',yes:'Tak',no:'Nie',compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
       flowOn:'Włączona (podgląd)',flowAuto:'Według encji',flowDirection:'Kierunek przepływu',
       flowSpeed:'Czas animacji (s)',flowEntity:'Encja sterująca przepływem',
       forward:'Początek → koniec',reverse:'Koniec → początek',mode:'Tryb układu',auto:'Automatyczny (Warmwasser)',custom:'Własny układ',language:'Język',
@@ -1215,7 +1239,7 @@ const HASSStudioGraphics = (() => {
       boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',pipes:'Rury',
       link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
       zoom:'Powiększenie',noValues:'Bez pomiaru',editor:'Projektant instalacji'},
-    en:{boilerState:'Burner / heating state',burnerEntity:'Burner status entity',solarSensors:'Collector sensors',solarPump:'Solar pump entity',pipeStart:'Start connector',pipeEnd:'End connector',yes:'Yes',no:'No',compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
+    en:{boilerState:'Burner / heating state',burnerEntity:'Burner entity (optional; otherwise temperature)',burnerOnTemp:'Boiler on above (°C)',burnerOffTemp:'Boiler off below (°C)',solarTank:'Tank temperature (reference)',solarOnDelta:'Collector active – delta (°C)',solarOffDelta:'Collector inactive – delta (°C)',solarSensors:'Collector sensors',solarPump:'Solar pump entity',pipeStart:'Start connector',pipeEnd:'End connector',yes:'Yes',no:'No',compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
       flowOn:'On (preview)',flowAuto:'Controlled by entity',flowDirection:'Flow direction',
       flowSpeed:'Animation duration (s)',flowEntity:'Flow control entity',
       forward:'Start → end',reverse:'End → start',mode:'Layout mode',auto:'Automatic (Warmwasser)',custom:'Custom layout',language:'Language',
@@ -1266,11 +1290,15 @@ const HASSStudioGraphics = (() => {
       id:v.id.slice(0,32),type:v.type,
       x:clamp(v.x,0,W-120,40),y:clamp(v.y,0,H-140,40),
       scale:clamp(v.scale,0.5,2.4,1),
-      // Old manual scaling is preserved for later parametric resizing.
-      scale_x:clamp(v.scale_x ?? v.scale,0.4,3.5,1),scale_y:clamp(v.scale_y ?? v.scale,0.4,4.5,1),
+      // Use uniform scale for both full render and interactive drag.
       burner_entity:validEntity(v.burner_entity)?v.burner_entity:'',
       burner_mode:['auto','on','off'].includes(v.burner_mode)?v.burner_mode:'auto',
+      burner_on_temp:clamp(v.burner_on_temp,20,90,35),
+      burner_off_temp:clamp(v.burner_off_temp,10,89,32),
       pump_entity:validEntity(v.pump_entity)?v.pump_entity:'',
+      tank_entity:validEntity(v.tank_entity)?v.tank_entity:'',
+      solar_on_delta:clamp(v.solar_on_delta,1,40,6),
+      solar_off_delta:clamp(v.solar_off_delta,0,39,3),
       visual:v.visual==='studio'?'studio':'warmwasser',
       variant:graphics[v.type].includes(v.variant)?v.variant:graphics[v.type][0],
       label:String(v.label||'').slice(0,64),
@@ -1574,8 +1602,15 @@ const HASSStudioGraphics = (() => {
         if(obj.type==='boiler'){
           markup+=field(L.boilerState,'burner_mode',obj.burner_mode,'text',[['auto',L.flowAuto],['on',L.flowOn],['off',L.flowOff]]);
           markup+=field(L.burnerEntity,'burner_entity',obj.burner_entity,'search',null,'list="ss-entity-list"');
+          markup+=field(L.burnerOnTemp,'burner_on_temp',obj.burner_on_temp,'number',null,'min="20" max="90" step="1"');
+          markup+=field(L.burnerOffTemp,'burner_off_temp',obj.burner_off_temp,'number',null,'min="10" max="89" step="1"');
         }
-        if(obj.type==='solar')markup+=field(L.solarPump,'pump_entity',obj.pump_entity,'search',null,'list="ss-entity-list"');
+        if(obj.type==='solar'){
+          markup+=field(L.solarPump,'pump_entity',obj.pump_entity,'search',null,'list="ss-entity-list"');
+          markup+=field(L.solarTank,'tank_entity',obj.tank_entity,'search',null,'list="ss-entity-list"');
+          markup+=field(L.solarOnDelta,'solar_on_delta',obj.solar_on_delta,'number',null,'min="1" max="40" step="0.5"');
+          markup+=field(L.solarOffDelta,'solar_off_delta',obj.solar_off_delta,'number',null,'min="0" max="39" step="0.5"');
+        }
         markup+='</section><section><h4>'+esc(L.entities)+'</h4>'+
           obj.entities.map((en,index)=>'<div class="ss-row">'+
             entityField(en.entity,'multiEntity',index)+
@@ -1669,7 +1704,7 @@ const HASSStudioGraphics = (() => {
       const svg=stage.querySelector('svg');if(!svg)return;
       for(const node of model.nodes){
         const g=[...svg.querySelectorAll('.ss-node')].find(el=>el.dataset.id===node.id);
-        if(g)g.setAttribute('transform','translate('+node.x+' '+node.y+') scale('+node.scale_x+' '+node.scale_y+')');
+        if(g)g.setAttribute('transform','translate('+node.x+' '+node.y+') scale('+node.scale+')');
       }
       for(const pipe of model.pipes){
         const group=[...svg.querySelectorAll('.ss-pipe')].find(el=>el.dataset.id===pipe.id);
@@ -1706,7 +1741,7 @@ const HASSStudioGraphics = (() => {
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,scale_x:1,scale_y:1,visual:'warmwasser',variant:graphics[kind][0],label:'',entity:'',burner_entity:'',burner_mode:'auto',pump_entity:'',entities:[],parts:[]};
+          scale:1,visual:'warmwasser',variant:graphics[kind][0],label:'',entity:'',burner_entity:'',burner_mode:'auto',pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -1749,11 +1784,12 @@ const HASSStudioGraphics = (() => {
       const model=get(),obj=selectedObject(model);if(!obj)return;
       const index=Number(el.dataset.index);
       const val=el.value;
-      if(['x','y','scale','scale_x','scale_y','width','flow_speed'].includes(key)){
-        obj[key]=clamp(val,key==='scale'?0.5:key==='scale_x'||key==='scale_y'?0.4:key==='width'?3:key==='flow_speed'?0.35:0,
-          key==='scale'?2.4:key==='scale_x'?3.5:key==='scale_y'?4.5:key==='width'?14:key==='flow_speed'?5:key==='x'?W:H,obj[key]);
-      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity','burner_entity','burner_mode','pump_entity','cap_start','cap_end'].includes(key)){
-        if(['entity','flow_entity','burner_entity','pump_entity'].includes(key))obj[key]=validEntity(val)?val:'';
+      if(['x','y','scale','width','flow_speed','burner_on_temp','burner_off_temp','solar_on_delta','solar_off_delta'].includes(key)){
+        const min={scale:0.5,width:3,flow_speed:0.35,burner_on_temp:20,burner_off_temp:10,solar_on_delta:1,solar_off_delta:0};
+        const max={scale:2.4,width:14,flow_speed:5,burner_on_temp:90,burner_off_temp:89,solar_on_delta:40,solar_off_delta:39,x:W,y:H};
+        obj[key]=clamp(val,min[key]??0,max[key],obj[key]);
+      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity','burner_entity','burner_mode','pump_entity','tank_entity','cap_start','cap_end'].includes(key)){
+        if(['entity','flow_entity','burner_entity','pump_entity','tank_entity'].includes(key))obj[key]=validEntity(val)?val:'';
         else if(key==='burner_mode')obj.burner_mode=['auto','on','off'].includes(val)?val:'auto';
         else if(key==='cap_start'||key==='cap_end')obj[key]=val==='true';
         else if(key==='visual')obj.visual=val==='studio'?'studio':'warmwasser';
