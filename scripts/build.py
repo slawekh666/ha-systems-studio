@@ -59,7 +59,7 @@ def build() -> None:
 
     transformed, n = re.subn(
         r"const VERSION = '[^']+';",
-        "const VERSION = '0.2.0-dev';",
+        "const VERSION = '0.3.0-dev';",
         transformed,
         count=1,
     )
