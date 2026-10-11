@@ -62,16 +62,28 @@ const HASSStudioGraphics = (() => {
       '<rect x="27" y="16" width="78" height="96" rx="9" fill="url(#'+id(n)+'Steel)" stroke="#89919b" stroke-width="1.2"/>'+
       (bright?'<rect x="27" y="16" width="78" height="96" rx="9" fill="#d5dae1" opacity=".29"/>':'')+
       '<rect x="33" y="43" width="66" height="52" rx="5" fill="#101419" stroke="#8a949e" stroke-width="1.2"/>'+
+      (numeric(sensorState(h,n.entity))?'<rect x="35" y="24" width="61" height="17" rx="4" fill="#080c10"/>'+
+      '<text x="65" y="36" font-size="13" font-weight="700" text-anchor="middle" fill="#ffc43d">'+
+      Number(sensorState(h,n.entity)).toFixed(1)+'°</text>':'')+
       (n.variant==='electric'?'<path d="M69 49L53 71H65L58 89L82 62H69Z" fill="#f5cb67"/>':
       n.variant==='heatpump'?'<circle cx="66" cy="69" r="20" stroke="#74bddd" stroke-width="3" fill="none"/><path d="M57 56L80 69L57 82Z" fill="#a5cee7"/>':
-      running?'<path class="ss-fire" d="M65 87Q39 72 66 50Q58 70 78 69Q93 84 65 87Z" fill="'+(gas?'#70baff':'#ff922a')+'"/>':
+      running?'<g class="ss-fire"><path d="M65 88Q39 70 66 49Q58 70 78 66Q93 84 65 88Z" fill="'+(gas?'#70baff':'#ff7a22')+'"/><path d="M66 88Q51 77 67 62Q64 74 75 73Q81 83 66 88Z" fill="'+(gas?'#d5e8ff':'#ffd444')+'"/></g>':
       '<path d="M47 90H85" stroke="#596069" stroke-width="2"/>')+
       '<path d="M38 101H93" stroke="#bfc4ce" stroke-width="2" stroke-opacity=".4"/>';
   };
-  const solar=(n,h)=>'<path d="M23 85L43 20H104L84 85Z" fill="#233f70" stroke="#a4b1c4" stroke-width="1.7"/>'+
-    [1,2,3].map(i=>'<path d="M'+(23+i*15)+' 85L'+(43+i*15)+' 20" stroke="#93a4c2" stroke-width="1.3"/>').join('')+
-    '<path d="M33 52H94" stroke="#93a4c2" stroke-opacity=".6"/>'+
-    '<circle cx="105" cy="24" r="7" fill="'+(on(h,n.entity)?'#ffd23f':'#858e98')+'"'+(on(h,n.entity)?' class="ss-fire"':'')+'/>';
+  const solar=(n,h)=>{
+    const lit=on(h,n.entity),cx=101,cy=27;
+    const rays=Array.from({length:8},(_,i)=>{
+      const a=i*Math.PI/4,x1=cx+11*Math.cos(a),y1=cy+11*Math.sin(a);
+      const x2=cx+16*Math.cos(a),y2=cy+16*Math.sin(a);
+      return '<path d="M'+x1.toFixed(1)+' '+y1.toFixed(1)+'L'+x2.toFixed(1)+' '+y2.toFixed(1)+'" stroke="'+(lit?'#ffd23f':'#858e98')+'" stroke-width="1.7" stroke-linecap="round"/>';
+    }).join('');
+    return '<path d="M17 93L39 33H84L63 93Z" fill="#233f70" stroke="#a4b1c4" stroke-width="1.7"/>'+
+      [1,2,3].map(i=>'<path d="M'+(17+i*12)+' 93L'+(39+i*12)+' 33" stroke="#93a4c2" stroke-width="1.3"/>').join('')+
+      '<path d="M27 59H75" stroke="#93a4c2" stroke-opacity=".6"/>'+
+      '<g'+(lit?' class="ss-solar-sun"':'')+'>'+rays+
+      '<circle cx="'+cx+'" cy="'+cy+'" r="7" fill="'+(lit?'#ffd23f':'#858e98')+'"/></g>';
+  };
   const pump=(n,h)=>'<circle cx="60" cy="62" r="30" fill="#2b2f35" stroke="'+(on(h,n.entity)?'#66c998':'#8a9099')+'" stroke-width="2"/>'+
     (on(h,n.entity)?'<circle cx="60" cy="62" r="30" fill="none" stroke="#66c998" stroke-width="1.5" class="ss-pump-pulse"/>':'')+
     '<path d="M77 62L47 79L47 45Z" fill="'+(on(h,n.entity)?'#66c998':'#7c8894')+'"/>';
@@ -92,6 +104,7 @@ const HASSStudioGraphics = (() => {
     '@keyframes ssWWFlow{to{stroke-dashoffset:-28}}'+
     '.ss-pump-pulse{animation:ssWWPulse 1.6s infinite;transform-box:fill-box;transform-origin:center}'+
     '.ss-fire{animation:ssWWFire .9s infinite;transform-box:fill-box;transform-origin:center}'+
+    '.ss-solar-sun{animation:ssWWFire 3s infinite;transform-box:fill-box;transform-origin:center}'+
     '.ss-flow{stroke:#fff;stroke-width:2.5;stroke-dasharray:1 13;animation:ssWWFlow var(--ss-speed,1s) linear infinite;fill:none;stroke-linecap:round}'+
     '</style>';
   return {defs,render,styles,on};
