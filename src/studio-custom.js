@@ -24,7 +24,7 @@
       temperature:'Temperature',pressure:'Pressure'}
   };
   const words={
-    pl:{compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
+    pl:{boilerState:'Praca palnika / grzania',burnerEntity:'Encja pracy palnika',solarSensors:'Czujniki kolektora',solarPump:'Encja pompy solarnej',pipeStart:'Króciec na początku',pipeEnd:'Króciec na końcu',yes:'Tak',no:'Nie',compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
       flowOn:'Włączona (podgląd)',flowAuto:'Według encji',flowDirection:'Kierunek przepływu',
       flowSpeed:'Czas animacji (s)',flowEntity:'Encja sterująca przepływem',
       forward:'Początek → koniec',reverse:'Koniec → początek',mode:'Tryb układu',auto:'Automatyczny (Warmwasser)',custom:'Własny układ',language:'Język',
@@ -42,7 +42,7 @@
       boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',pipes:'Rury',
       link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
       zoom:'Powiększenie',noValues:'Bez pomiaru',editor:'Projektant instalacji'},
-    en:{compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
+    en:{boilerState:'Burner / heating state',burnerEntity:'Burner status entity',solarSensors:'Collector sensors',solarPump:'Solar pump entity',pipeStart:'Start connector',pipeEnd:'End connector',yes:'Yes',no:'No',compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
       flowOn:'On (preview)',flowAuto:'Controlled by entity',flowDirection:'Flow direction',
       flowSpeed:'Animation duration (s)',flowEntity:'Flow control entity',
       forward:'Start → end',reverse:'End → start',mode:'Layout mode',auto:'Automatic (Warmwasser)',custom:'Custom layout',language:'Language',
@@ -93,7 +93,11 @@
       id:v.id.slice(0,32),type:v.type,
       x:clamp(v.x,0,W-120,40),y:clamp(v.y,0,H-140,40),
       scale:clamp(v.scale,0.5,2.4,1),
+      // Old manual scaling is preserved for later parametric resizing.
       scale_x:clamp(v.scale_x ?? v.scale,0.4,3.5,1),scale_y:clamp(v.scale_y ?? v.scale,0.4,4.5,1),
+      burner_entity:validEntity(v.burner_entity)?v.burner_entity:'',
+      burner_mode:['auto','on','off'].includes(v.burner_mode)?v.burner_mode:'auto',
+      pump_entity:validEntity(v.pump_entity)?v.pump_entity:'',
       visual:v.visual==='studio'?'studio':'warmwasser',
       variant:graphics[v.type].includes(v.variant)?v.variant:graphics[v.type][0],
       label:String(v.label||'').slice(0,64),
@@ -110,6 +114,7 @@
       flow_entity:validEntity(v.flow_entity)?v.flow_entity:'',
       flow_direction:v.flow_direction==='reverse'?'reverse':'forward',
       flow_speed:clamp(v.flow_speed,.35,5,1),
+      cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
       points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
         x:clamp(q.x,0,W,100),y:clamp(q.y,0,H,100)})),
       accessories:(Array.isArray(v.accessories)?v.accessories:[]).slice(0,20).map(normalizeAccessory)
@@ -126,7 +131,7 @@
         const bx=to.x+b[0]*to.scale,by=to.y+b[1]*to.scale;
         const mx=(ax+bx)/2;
         pipes.push({id:'migrated-'+index,label:'',color:colors[edge.color]?edge.color:'hot',
-          width:7,flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,
+          width:7,flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,cap_start:true,cap_end:true,
           points:[{x:ax,y:ay},{x:mx,y:ay},{x:mx,y:by},{x:bx,y:by}],accessories:[]});
       });
     }
@@ -506,7 +511,7 @@
         if(model.pipes.length>=MAX_PIPES)return;
         const n=model.pipes.length;
         const pipe={id:freshId('p'),label:'',color:'hot',width:7,
-          flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,
+          flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,cap_start:true,cap_end:true,
           points:[{x:180+n*10,y:120+n*12},{x:470+n*10,y:120+n*12}],accessories:[]};
         model.pipes.push(pipe);selection={type:'pipe',id:pipe.id};
       }else{
