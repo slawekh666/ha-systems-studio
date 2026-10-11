@@ -1365,9 +1365,11 @@ const HASSStudioGraphics = (() => {
       '.ss-launch button,.ss-bar button,.ss-library button,.ss-props button{color:var(--primary-text-color);background:var(--card-background-color,#29323c);border:1px solid var(--divider-color,#555);border-radius:8px;padding:9px;cursor:pointer;font:inherit}'+
       '.ss-launch button{background:var(--primary-color,#168bce);color:var(--text-primary-color,#fff)}'+
       '.ss-modal{position:fixed;inset:0;z-index:100000;background:var(--primary-background-color,#11191f);display:flex;flex-direction:column;padding:0;color:var(--primary-text-color)}'+
-      '.ss-modal[hidden]{display:none} .ss-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--divider-color,#555);flex-wrap:wrap}'+
+      '.ss-modal[hidden]{display:none}.ss-modal.ss-fullscreen{position:fixed;inset:0;width:100vw;height:100vh;max-width:none;max-height:none;border:0;margin:0;padding:0;box-sizing:border-box}'+
+      '.ss-modal.ss-fullscreen::backdrop{background:#071018dd}.ss-modal.ss-fullscreen[open]{display:flex} .ss-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--divider-color,#555);flex-wrap:wrap}'+
       '.ss-bar strong{margin-right:auto}.ss-bar button{white-space:nowrap}'+
-      '.ss-grid{display:grid;grid-template-columns:162px minmax(300px,1fr) 285px;flex:1;min-height:0}'+
+      '.ss-grid{display:grid;grid-template-columns:var(--ss-left,180px) minmax(0,1fr) var(--ss-right,310px);flex:1;min-height:0;height:100%}'+
+      '.ss-splitter{width:7px;cursor:col-resize;background:var(--divider-color,#44505b);opacity:.6;flex-shrink:0}'+
       '.ss-library,.ss-props{padding:12px;overflow-y:auto;border-right:1px solid var(--divider-color,#555)}'+
       '.ss-props{border-right:none;border-left:1px solid var(--divider-color,#555)}'+
       '.ss-library h3,.ss-props h3{font-size:12px;letter-spacing:.06em;color:var(--secondary-text-color);margin:0 0 12px}'+
@@ -1382,13 +1384,17 @@ const HASSStudioGraphics = (() => {
       '.ss-props .ss-row{display:flex;align-items:center;gap:6px}.ss-props .ss-row>*{flex:1;min-width:0}'+
       '.ss-props .ss-row button{flex:0 0 auto}.ss-props input[type=range]{padding:0}'+
       '.ss-selected{outline:1px solid var(--primary-color)}'+
+      '.ss-preview{border:1px solid var(--divider-color,#555);border-radius:8px;display:grid;place-items:center;padding:8px}'+
+      '.ss-entities{max-height:210px;overflow-y:auto;border:1px solid var(--divider-color,#555);border-radius:8px}'+
+      '.ss-entity-choice{width:100%;text-align:left;border:0;background:transparent;padding:8px;cursor:pointer;display:block;font-size:12px}'+
+      '.ss-entity-choice:hover{background:var(--secondary-background-color)}'+
       '@media(max-width:900px){.ss-grid{grid-template-columns:110px minmax(230px,1fr) 220px}.ss-library button{font-size:11px;gap:4px}.ss-library button span{font-size:15px}}'+
       '</style>';
     root.innerHTML=style+
       '<div class="ss-launch"><label>'+esc(L.mode)+'<select id="ss-mode">'+opts([['automatic',L.auto],['custom',L.custom]],'custom')+'</select></label>'+
       '<label>'+esc(L.language)+'<select id="ss-lang">'+opts(langs,this._config.studio_language||'auto')+'</select></label>'+
       '<button type="button" id="ss-open">'+esc(L.open)+'</button></div>'+
-      '<div class="ss-modal" id="ss-modal" hidden><div class="ss-bar"><strong>'+esc(L.editor)+'</strong>'+
+      '<dialog class="ss-modal ss-fullscreen" id="ss-modal"><div class="ss-bar"><strong>'+esc(L.editor)+'</strong>'+
       '<label>'+esc(L.zoom)+' <select id="ss-zoom">'+opts([['0.65','65%'],['0.8','80%'],['1','100%'],['1.25','125%'],['1.5','150%']],'1')+'</select></label>'+
       '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
       '<button id="ss-close" type="button">'+esc(L.close)+'</button></div>'+
@@ -1397,7 +1403,7 @@ const HASSStudioGraphics = (() => {
         esc(L[type==='pump'?'pumps':type==='valve'?'valves':type==='sensor'?'sensorsMenu':type==='pipe'?'pipes':type])+'</button>').join('')+
       '</aside><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
       '<p class="ss-note">'+esc(L.editHelp)+'</p></main>'+
-      '<aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></div>';
+      '<aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
     const modal=root.getElementById('ss-modal'),stage=root.getElementById('ss-stage'),properties=root.getElementById('ss-props');
     let selection=null,drag=null,zoom=1;
     const get=()=>normalized(this._config);
@@ -1488,6 +1494,32 @@ const HASSStudioGraphics = (() => {
           '<button type="button" data-add-accessory="valve">+ '+esc(L.valve)+'</button></div></section>';
       }
       properties.innerHTML=markup+'<datalist id="ss-entity-list">'+entityList()+'</datalist>';
+      // Every entity field gets an HA-like search list from the first typed character.
+      const popup=document.createElement('div');
+      popup.className='ss-entities';popup.hidden=true;
+      properties.appendChild(popup);
+      const inputs=[...properties.querySelectorAll('input[list="ss-entity-list"]')];
+      for(const input of inputs){
+        const update=()=>{
+          const search=input.value.trim().toLocaleLowerCase();
+          if(!search){popup.hidden=true;return;}
+          const matches=Object.entries(this._hass?.states||{}).filter(([entity,state])=>
+            entity.toLocaleLowerCase().includes(search)||
+            String(state?.attributes?.friendly_name||'').toLocaleLowerCase().includes(search)).slice(0,25);
+          popup.replaceChildren();
+          for(const [entity,state] of matches){
+            const button=document.createElement('button');
+            button.type='button';button.className='ss-entity-choice';
+            button.textContent=(state.attributes?.friendly_name||entity)+' — '+entity;
+            button.addEventListener('click',()=>{input.value=entity;input.dispatchEvent(new Event('change',{bubbles:true}));popup.hidden=true;});
+            popup.appendChild(button);
+          }
+          popup.hidden=!matches.length;
+        };
+        input.addEventListener('input',update);
+        input.addEventListener('focus',update);
+      }
+
     };
     const render=()=>{
       stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
@@ -1543,13 +1575,24 @@ const HASSStudioGraphics = (() => {
       }
       commit(model);render();
     };
-    root.getElementById('ss-open').addEventListener('click',()=>{modal.hidden=false;render();});
-    root.getElementById('ss-close').addEventListener('click',()=>{modal.hidden=true;drag=null;});
+    root.getElementById('ss-open').addEventListener('click',()=>{
+      if(typeof modal.showModal==='function')modal.showModal();
+      else modal.setAttribute('open','');
+      render();
+    });
+    const closeDesigner=()=>{
+      if(typeof modal.close==='function'&&modal.open)modal.close();
+      else modal.removeAttribute('open');
+      drag=null;
+    };
+    root.getElementById('ss-close').addEventListener('click',closeDesigner);
+    modal.addEventListener('cancel',()=>{drag=null;});
+
     root.getElementById('ss-mode').addEventListener('change',event=>{
       this._config={...this._config,layout_mode:event.target.value};this._fire();
     });
     root.getElementById('ss-lang').addEventListener('change',event=>{
-      const open=!modal.hidden;
+      const open=modal.open;
       this._config={...this._config,studio_language:event.target.value};this._fire();this._build();
       if(open)this.shadowRoot.getElementById('ss-open')?.click();
     });
