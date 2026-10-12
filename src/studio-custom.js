@@ -65,6 +65,7 @@
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankScaleMode:'Skalowanie zbiornika',tankScaleProportional:'Proporcjonalne',tankScaleFree:'Osobna szerokość i wysokość',tankWidthScale:'Szerokość zbiornika',tankHeightScale:'Wysokość zbiornika'}:{tankScaleMode:'Tank scaling',tankScaleProportional:'Proportional',tankScaleFree:'Independent width and height',tankWidthScale:'Tank width',tankHeightScale:'Tank height'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{partLayer:'Warstwa',partLayerUp:'Przenieś wyżej',partLayerDown:'Przenieś niżej'}:{partLayer:'Layer',partLayerUp:'Move up',partLayerDown:'Move down'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidModel:'Piec węgiel / drewno',solidFuel:'Rodzaj opału',solidWood:'Drewno',solidCoal:'Węgiel',solidState:'Stan paleniska (wizualizacja)',solidAuto:'Automatycznie wg encji / temperatury',solidBurning:'Palenie',solidEmbers:'Żarzenie',solidOff:'Wygaszenie',solidGlow:'Intensywność efektu (%)',solidHelp:'Animacja jest wizualna, bez sterowania urządzeniem. Encja stanu spalania ma pierwszeństwo nad progami temperatury.'}:{solidModel:'Wood / coal boiler',solidFuel:'Fuel type',solidWood:'Wood',solidCoal:'Coal',solidState:'Combustion state (visual only)',solidAuto:'Auto from entity / temperature',solidBurning:'Burning',solidEmbers:'Embers',solidOff:'Extinguished',solidGlow:'Effect intensity (%)',solidHelp:'Animation only, no device control. Combustion entity takes precedence over temperature thresholds.'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidWidth:'Szerokość pieca',solidHeight:'Wysokość pieca'}:{solidWidth:'Boiler width',solidHeight:'Boiler height'});
   const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
   const icons={boiler:'♨',tank:'▤',solar:'☼',pump:'◉',valve:'◇',sensor:'♧',pipe:'〰'};
   const pickLang=(config,hass)=>{
@@ -263,10 +264,15 @@
       const reading=valueOf(hass,node.entity);
       const name=esc(node.label||L[node.type]||node.type);
       const ent=node.entity?' data-more="'+esc(node.entity)+'"':'';
-      const tallBoiler=node.type==='boiler'&&(node.visual==='warmwasser'||node.variant==='solid_fuel');
+      const solidBoiler=node.type==='boiler'&&node.variant==='solid_fuel';
+      const tallBoiler=node.type==='boiler'&&(node.visual==='warmwasser'||solidBoiler);
       const freeTank=node.type==='tank'&&node.variant==='modular'&&node.scale_mode==='free';
-      const sx=freeTank?node.width_scale:1,sy=freeTank?node.height_scale:1;
-      const outline=tallBoiler?{x:12,y:-105,width:110,height:318,labelY:230,readingY:245}:
+      const sx=freeTank||solidBoiler?node.width_scale:1,sy=freeTank||solidBoiler?node.height_scale:1;
+      // The solid boiler is stretched about (66,53) in its renderer. Keep
+      // selection bounds and external label aligned with that transform.
+      const outline=solidBoiler?{x:66+(12-66)*sx,y:53+(-105-53)*sy,width:110*sx,height:318*sy,
+          labelY:53+(230-53)*sy,readingY:53+(245-53)*sy}:
+        tallBoiler?{x:12,y:-105,width:110,height:318,labelY:230,readingY:245}:
         freeTank?{x:60+(4-60)*sx,y:61+(3-61)*sy,width:112*sx,height:113*sy,
           labelY:61+(130-61)*sy,readingY:61+(145-61)*sy}:
         {x:4,y:3,width:112,height:113,labelY:130,readingY:145};
@@ -433,9 +439,13 @@
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         if(!(obj.type==='boiler'&&obj.variant==='solid_fuel'))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
         const previewFree=obj.type==='tank'&&obj.variant==='modular'&&obj.scale_mode==='free';
+        const previewSolid=obj.type==='boiler'&&obj.variant==='solid_fuel';
         const previewWidth=previewFree?Math.max(170,145*obj.width_scale):120;
         const previewHeight=previewFree?Math.max(160,155*obj.height_scale):140;
-        const previewBox=obj.visual==='warmwasser'&&obj.type==='boiler'?'0 -110 130 350':
+        const previewBox=previewSolid?
+          ((66+(12-66)*obj.width_scale-8)+' '+(53+(-105-53)*obj.height_scale-8)+' '+
+            (110*obj.width_scale+16)+' '+(318*obj.height_scale+16)):
+          obj.visual==='warmwasser'&&obj.type==='boiler'?'0 -110 130 350':
           previewFree?((60-previewWidth/2)+' '+(70-previewHeight/2)+' '+previewWidth+' '+previewHeight):'0 0 120 140';
         markup+='<div class="ss-preview"><svg viewBox="'+previewBox+'" width="120" height="120">'+
           HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
@@ -451,7 +461,15 @@
             'range',null,'min="0.5" max="2.4" step="0.05"')+
             field(L.tankHeightScale,'height_scale',freeScale?obj.height_scale:obj.scale,
             'range',null,'min="0.5" max="2.4" step="0.05"');
-        }else markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
+        }else{
+          markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
+          if(obj.type==='boiler'&&obj.variant==='solid_fuel'){
+            markup+=field(L.solidWidth+' ('+Math.round(obj.width_scale*100)+'%)','width_scale',obj.width_scale,
+              'range',null,'min="0.5" max="2.4" step="0.05"')+
+              field(L.solidHeight+' ('+Math.round(obj.height_scale*100)+'%)','height_scale',obj.height_scale,
+              'range',null,'min="0.5" max="2.4" step="0.05"');
+          }
+        }
         markup+='<div class="ss-row">'+field('X','x',obj.x,'number')+field('Y','y',obj.y,'number')+'</div>';
         markup+=field(L.entity,'entity',obj.entity,'search',null,'list="ss-entity-list"');
         if(obj.type==='boiler'){
@@ -676,6 +694,9 @@
           obj.scale=1;
           obj.scale_mode='free';
         }
+        obj[key]=clamp(val,.5,2.4,obj[key]);
+      }else if(['width_scale','height_scale'].includes(key)&&obj.type==='boiler'&&obj.variant==='solid_fuel'){
+        // Independent from the proportional whole-node scale.
         obj[key]=clamp(val,.5,2.4,obj[key]);
       }else if(['x','y','scale','width','solid_glow','flow_speed','burner_on_temp','burner_off_temp','solar_on_delta','solar_off_delta'].includes(key)){
         const min={scale:0.5,width_scale:0.5,height_scale:0.5,width:3,solid_glow:0,flow_speed:0.35,burner_on_temp:20,burner_off_temp:10,solar_on_delta:1,solar_off_delta:0};

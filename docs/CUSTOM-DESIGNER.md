@@ -1,4 +1,4 @@
-# Custom Designer — development status (0.4.8-dev)
+# Custom Designer — development status (0.4.9-dev)
 
 The custom designer is on `main` and remains experimental. It is built on the original Warmwasser Schema Card; automatic Warmwasser rendering remains available.
 
@@ -22,6 +22,8 @@ Use **Tank → Modular**. Add independent sensors, heaters, coils, horizontal/ve
 ## Modern solid-fuel boiler
 
 In the Custom designer choose **Wood / coal boiler** directly from the equipment library (or `solid_fuel` as a boiler variant). The shell, display, grate and furnace are adapted from the uploaded `piec_czysty_svg_js_v3` SVG. Distinct wood logs and coal pieces have three states: burning, embers and extinguished, with animation reusing the Warmwasser `ss-fire` / `ss-embers` keyframes. Fuel, mode and visual intensity are independent per boiler. In automatic mode an explicit combustion-state entity takes precedence; otherwise configurable temperature thresholds provide an approximate illustration, **not a measured fire state**. Invalid HA readings never fabricate temperature or fire. There are no HA service calls. Reduced-motion clients disable animations. Existing Warmwasser boiler variants are untouched.
+
+The modern solid-fuel boiler offers three independent controls: **Scale** (uniform whole-node size), **Boiler width** and **Boiler height** (50–240%, independent of Scale). Values default to 100% each for saved configurations. Width and height are local shape transforms, and the selection rectangle, outside caption and properties preview use matching geometry. This affects neither Warmwasser's other boiler variants nor the modular tank.
 
 ## Limitations and test requirements
 
