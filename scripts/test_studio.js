@@ -193,10 +193,10 @@ assert.match(solid.render({...modern,width_scale:100,height_scale:-10},haModern)
 assert.match(src,/field\(L\.scale,'scale',obj\.scale/);
 assert.match(src,/field\(L\.solidWidth\+'\s*\('\+Math\.round\(obj\.width_scale\*100\)/);
 assert.match(src,/field\(L\.solidHeight\+'\s*\('\+Math\.round\(obj\.height_scale\*100\)/);
-assert.match(src,/obj\.type==='boiler'&&\['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern'\]\.includes\(obj\.variant\)\)\{\n\s*\/\/ Independent from/);
-assert.match(src,/const outline=modernElectric\?HASSStudioElectricBoiler\.geometry\(node\):modernGas\?HASSStudioGasBoiler\.geometry\(node\):/);
+assert.match(src,/obj\.type==='boiler'&&\['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'\]\.includes\(obj\.variant\)\)\{\n\s*\/\/ Independent from/);
+assert.match(src,/const outline=modernFireplace\?HASSStudioFireplace\.geometry\(node\):modernElectric\?HASSStudioElectricBoiler\.geometry\(node\):/);
 assert.match(src,/solidBoiler\?\{x:66/);
-assert.match(src,/const previewBox=previewElectric\?/);
+assert.match(src,/const previewBox=previewFireplace\?/);
 assert.match(src,/previewSolid\?\(\(66/);
 console.log('OK: independent solid-fuel dimensions, proportional scale retained, responsive outline and preview.');
 
@@ -315,3 +315,24 @@ assert.match(electric.render({...electricNode,width_scale:1.7,height_scale:.8},e
 assert.match(src,/HASSStudioElectricBoiler\.render\(node,hass\)/);
 assert.match(src,/data-add-preset="electric_modern"/);
 console.log('OK: modern electric boiler, HA power/load/temp, ring and resizing.');
+
+// Modern fireplace: uploaded SVG with Warmwasser flames.
+const fireplaceSrc=fs.readFileSync('src/fireplace.js','utf8');
+const fireplace=vm.runInNewContext(solidSrc+'\n'+fireplaceSrc+'\nHASSStudioFireplace;',{});
+const hearth={id:'hearth1',type:'boiler',variant:'fireplace_modern',entity:'sensor.boiler',solid_state:'burning',solid_glow:65,width_scale:1,height_scale:1};
+const flameSvg=fireplace.render(hearth,haModern);
+assert.match(flameSvg,/class="ss-modern-fireplace" data-combustion="burning"/);
+assert.match(flameSvg,/class="ss-fire"/);
+assert.match(flameSvg,/class="ss-fireplace-wood"/);
+assert.match(flameSvg,/65\.0°C/);
+assert.match(flameSvg,/id="ssfireplacehearth1fireClip"/);
+assert.match(flameSvg,/clip-path="url\(#ssfireplacehearth1fireClip\)"/);
+const emberSvg=fireplace.render({...hearth,solid_state:'embers'},haModern);
+assert.match(emberSvg,/class="ss-embers"/);
+assert.doesNotMatch(emberSvg,/class="ss-fire"/);
+assert.doesNotMatch(fireplace.render({...hearth,solid_state:'off'},haModern),/class="ss-fire"|class="ss-embers"/);
+assert.match(fireplace.render({...hearth,entity:'sensor.missing'},haModern),/>—<\/text>/);
+assert.match(fireplace.render({...hearth,width_scale:1.4,height_scale:.75},haModern),/scale\(1\.4 0\.75\)/);
+assert.match(src,/HASSStudioFireplace\.render\(node,hass\)/);
+assert.match(src,/data-add-preset="fireplace_modern"/);
+console.log('OK: modern fireplace flames, embers, temperature and sizing.');
