@@ -94,3 +94,23 @@ assert.match(tankApi.render({...tankNode,parts:tankNode.parts.filter(p=>p.kind!=
 assert(!tankApi.render({...tankNode,parts:tankNode.parts.filter(p=>p.kind!=='heater')},tankState).includes('ss-tank-heater'));
 assert.match(src,/HASSStudioTank.render\(node,hass\)/);
 console.log('OK: modular tank, hybrid visual effects, independent accessories.');
+
+// Modular tank editor regression: wrapping, valid headings and independent scale.
+assert.match(src,/\.ss-add-parts\{display:flex;flex-wrap:wrap;/);
+assert.match(src,/\.ss-props\{[^}]*overflow-x:hidden/);
+assert.match(src,/<\/h4>'\+/); // The title must close before rendering part fields.
+assert.match(src,/scale_mode:v\.type==='tank'/);
+assert.match(src,/width_scale:clamp\(v\.width_scale/);
+assert.match(src,/key==='scale_mode'/);
+assert.match(src,/field\(L\.tankWidthScale,'width_scale'/);
+const stretchNode={...tankNode,scale_mode:'free',width_scale:1.7,height_scale:.75};
+const stretched=tankApi.render(stretchNode,tankState);
+assert.match(stretched,/class="ss-tank-body" transform="translate\(60 61\) scale\(1\.7 0\.75\)/);
+assert.match(stretched,/class="ss-tank-badge ss-temperature-badge"/);
+assert(!stretched.includes('scale(1.7 0.75) translate(-60 -61)"><g class="ss-tank-badge'), 'labels must be outside nonuniform body group');
+const shape=tankApi.coilPath({length:70,width:60,turns:12},{x:60,y:61});
+assert.equal(shape.turns,12);
+assert.equal((shape.d.match(/C/g)||[]).length,24);
+assert(shape.d.startsWith('M')&&shape.d.includes('L')&&!shape.d.includes('NaN'));
+assert.match(tankApi.render(tankNode,tankState),/<path d="M[^"]+L[^"]+C[^"]+C[^"]+"/);
+console.log('OK: wrapped accessory UI, independent modular tank scaling and connected elliptical coil.');

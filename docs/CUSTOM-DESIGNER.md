@@ -1,4 +1,4 @@
-# Custom Designer — development status (0.4.5-dev)
+# Custom Designer — development status (0.4.6-dev)
 
 The custom designer is on `main` and remains experimental. It is built on the original Warmwasser Schema Card; automatic Warmwasser rendering remains available.
 
@@ -17,7 +17,7 @@ The custom designer is on `main` and remains experimental. It is built on the or
 
 ## Modular tank (Custom only)
 
-Use **Tank → Modular**. Add independent sensors, heaters, coils, horizontal/vertical baffles and one inner tank from the properties panel. Sensor heights use 0–100% from the bottom; additional horizontal position and an optional inner-tank compartment are configurable. Sensor readings determine gradient color. Heaters only create visual halos when on; no temperature values are fabricated. Full baffles create separately interpolated temperature areas; perforated baffles attenuate decorative halos. Coil gradients have no blur and optional dashed flow. The original Warmwasser tank variations remain for existing layouts.
+Use **Tank → Modular**. Add independent sensors, heaters, coils, horizontal/vertical baffles and one inner tank from the properties panel. Sensor heights use 0–100% from the bottom; additional horizontal position and an optional inner-tank compartment are configurable. Sensor readings determine gradient color. Heaters only create visual halos when on; no temperature values are fabricated. Full baffles create separately interpolated temperature areas; perforated baffles attenuate decorative halos. Coil gradients have no blur and optional dashed flow. The original Warmwasser tank variations remain for existing layouts. Accessory add buttons wrap within the properties panel. Modular tank scaling has proportional and independent width/height modes; the panel keeps badge text unwarped while scaling the tank body. The hygiene coil path combines a straight vertical inlet and rounded helical turns without blur.
 
 ## Limitations and test requirements
 
