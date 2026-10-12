@@ -1,4 +1,4 @@
-# Custom Designer — development status (0.4.13-dev)
+# Custom Designer — development status (0.4.14-dev)
 
 The custom designer is on `main` and remains experimental. It is built on the original Warmwasser Schema Card; automatic Warmwasser rendering remains available.
 
@@ -40,6 +40,10 @@ The `heatpump_modern` variant uses the uploaded heat pump SVG. Power supports W 
 ## Modern electric boiler
 
 `electric_modern` is a separate variant from Warmwasser `electric`. The attached SVG is rendered with live HA power (W / kW), boiler water temperature, and a 260° circular load gauge around the knob. Percentage is optional from an HA `%` entity or computed from real power / configurable rated power (default 8 kW). Invalid and unavailable readings remain unknown. No control actions occur. Global Scale, independent Width and Height are available. Browser validation is required.
+
+## Modern fireplace
+
+`fireplace_modern` uses the supplied `kominek_svg_js.html` shell, glazing, chimney and display. Warmwasser-style flame/ember animations appear inside the firebox with separate burning, embers and off stages. Auto mode uses combustion entity or boiler temperature thresholds; unknown temperatures display a dash. Independent width/height and overall scale are supported. No HA control actions. Browser visual acceptance is pending.
 
 ## Limitations and test requirements
 
