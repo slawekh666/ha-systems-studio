@@ -4,7 +4,7 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 ## Current status
 
-**0.4.12-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
+**0.4.13-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
 
 **Important:** the card is still under Home Assistant browser acceptance testing. CI checks packaging, JavaScript syntax and selected logic, but cannot verify final SVG appearance and pointer behavior in HA.
 
@@ -22,6 +22,8 @@ The modern solid-fuel boiler has independent **Width** and **Height** multiplier
 **Modern heat pump:** new SVG from the uploaded heat-pump HTML, HA power entity (W/kW), fan speed entity (%/RPM), configurable maximum RPM, and Scale/Width/Height. Missing data is shown as unavailable; an unknown or stopped fan does not rotate. Browser validation required.
 
 **Modern gas boiler:** SVG imported from piec_gazowy_svg_js(1).html, live HA boiler temperature and 0–100% gas burner modulation. Four display bars and scaled blue flame follow modulation; missing modulation or disabled burner switches the decorative flame off. Scale/Width/Height are supported. Read-only display; actual gas consumption is not inferred.
+
+**Modern electric boiler:** imported from `piec_elektryczny_svg_js.html`. HA electrical power (W/kW), water temperature and optional load (%) are shown on the device. Without a load entity, percentage derives from real power divided by configurable rated kW. The 260° yellow-to-red gauge follows the ring independently from the knob. Proportional scale and independent width/height remain. No HA controls or synthetic readings.
 
 ## Local build in VS Code + WSL
 
