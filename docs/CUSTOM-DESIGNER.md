@@ -1,4 +1,4 @@
-# Custom Designer — development status (0.4.10-dev)
+# Custom Designer — development status (0.4.11-dev)
 
 The custom designer is on `main` and remains experimental. It is built on the original Warmwasser Schema Card; automatic Warmwasser rendering remains available.
 
@@ -28,6 +28,10 @@ The modern solid-fuel boiler offers three independent controls: **Scale** (unifo
 ## Modern pellet boiler
 
 Choose **Piec na pellet (nowoczesny)** from the Custom designer library or the `pellet_modern` boiler variant. The graphic uses the uploaded `piec_pellet_svg_js_v1` body, burner, right-hand pellet hopper and feeder. Warmwasser animated flame / ember classes and the shared solid-fuel state resolver supply the three combustion stages. The firebox contains pellets, not wood or coal. Modes: auto (explicit burner state first, otherwise temperature thresholds), burning, embers, off. Temperature comes from an HA sensor; invalid readings show a dash. Global proportional Scale and independent Width/Height remain available (50–240%). Geometry is isolated per node with scoped SVG IDs, including shared gradient definitions. The original `pellet` graphics and all other boiler/tank models remain unchanged. This is a visualization only, never HA control. Browser validation is required.
+
+## Modern heat pump
+
+The `heatpump_modern` variant uses the uploaded heat pump SVG. Power supports W or kW; fan speed supports % or RPM with configured maximum RPM. Missing data shows a dash, and the fan stops when value is zero or unavailable. CSS rotation respects reduced-motion preference. Same scale / width / height controls as modern boilers; read-only visualization.
 
 ## Limitations and test requirements
 
