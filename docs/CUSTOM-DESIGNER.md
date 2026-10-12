@@ -1,4 +1,4 @@
-# Custom Designer — development status (0.4.11-dev)
+# Custom Designer — development status (0.4.12-dev)
 
 The custom designer is on `main` and remains experimental. It is built on the original Warmwasser Schema Card; automatic Warmwasser rendering remains available.
 
@@ -32,6 +32,10 @@ Choose **Piec na pellet (nowoczesny)** from the Custom designer library or the `
 ## Modern heat pump
 
 The `heatpump_modern` variant uses the uploaded heat pump SVG. Power supports W or kW; fan speed supports % or RPM with configured maximum RPM. Missing data shows a dash, and the fan stops when value is zero or unavailable. CSS rotation respects reduced-motion preference. Same scale / width / height controls as modern boilers; read-only visualization.
+
+## Modern gas boiler
+
+`gas_modern` variant uses the uploaded gas boiler SVG, including the decorative blue flame and four modulation bars. HA temperature is from the main entity; the optional modulation entity accepts % or numeric percentages and drives the blue display flame height and indicator bars. An optional burner state entity disables the flame when off. Missing/unavailable modulation is not fabricated. `gas_draw_entity` is **burner modulation, not measured gas volume flow**. The shared Scale and independent Width/Height controls remain available; no HA services are called. Browser visual acceptance remains required.
 
 ## Limitations and test requirements
 
