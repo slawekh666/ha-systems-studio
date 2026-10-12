@@ -111,38 +111,88 @@ const HASSStudioTank = (() => {
       (enabled?'<path d="'+d+'" fill="none" stroke="#fff1b1" opacity="'+(.25+level*.7)+'" stroke-width=".8" stroke-linecap="round"/>':'')+
       '</g><ellipse cx="'+edge+'" cy="'+y+'" rx="2.2" ry="7.5" fill="url(#'+base+'Steel)" stroke="#e6f1ff" stroke-width=".6"/></g>';
   };
-  // One continuous hydraulic route: straight vertical inlet and rising elliptical spiral.
-  // Repeated SVG strokes share EXACTLY the same d path; there are no glow/blur filters.
+  // One continuous tube: cool straight inlet at left, elliptical turns rising to the
+  // top, and a final curved return loop. Both geometry and gradient use travel distance.
   const coilPath = (p,at) => {
     const height=clamp(p.length,15,95,58)*IH/100,turns=Math.round(clamp(p.turns,3,22,12));
     const radius=clamp(p.width,10,95,65)*IW/200;
     const top=Math.max(Y+2,Math.min(Y+IH-height-2,at.y-height/2));
     const bottom=top+height,pitch=height/(turns+.4);
-    const left=at.x-radius,right=at.x+radius;
-    const fmt=v=>v.toFixed(3);
-    let d='M'+fmt(left)+' '+fmt(top)+'L'+fmt(left)+' '+fmt(bottom);
+    const left=at.x-radius,right=at.x+radius,fmt=v=>v.toFixed(3);
+    const samples=[{x:left,y:top}],commands=[];
+    const line=(x,y)=>{
+      commands.push('L'+fmt(x)+' '+fmt(y));
+      const from=samples[samples.length-1];
+      for(let k=1;k<=14;k++)samples.push({x:from.x+(x-from.x)*k/14,y:from.y+(y-from.y)*k/14});
+    };
+    const cubic=(x1,y1,x2,y2,x3,y3)=>{
+      const start=samples[samples.length-1];
+      commands.push('C'+[x1,y1,x2,y2,x3,y3].map(fmt).join(' '));
+      for(let k=1;k<=14;k++){
+        const t=k/14,u=1-t;
+        samples.push({x:u*u*u*start.x+3*u*u*t*x1+3*u*t*t*x2+t*t*t*x3,
+          y:u*u*u*start.y+3*u*u*t*y1+3*u*t*t*y2+t*t*t*y3});
+      }
+    };
+    line(left,bottom);
     for(let i=0;i<turns;i++){
       const y=bottom-i*pitch,next=y-pitch;
-      // Front and rear half-curves produce an oval loop, not a sinusoidal zigzag.
-      d+='C'+fmt(left+radius*.35)+' '+fmt(y+pitch*.58)+' '+fmt(right)+' '+fmt(y+pitch*.58)+
-        ' '+fmt(right)+' '+fmt(y+pitch*.03);
-      d+='C'+fmt(right)+' '+fmt(y-pitch*.58)+' '+fmt(left+radius*.28)+' '+fmt(next-pitch*.25)+
-        ' '+fmt(left)+' '+fmt(next);
+      cubic(left+radius*.35,y+pitch*.58,right,y+pitch*.58,right,y+pitch*.03);
+      cubic(right,y-pitch*.58,left+radius*.28,next-pitch*.25,left,next);
     }
-    d+='L'+fmt(left)+' '+fmt(top);
-    return {d,top,bottom,turns,stemX:left};
+    // The upper elliptical return is a real continuation, not a detached arc.
+    // It fills the missing arc indicated in the user's annotated reference.
+    const shoulder=bottom-turns*pitch;
+    cubic(left+radius*.12,shoulder-pitch*.8,right+radius*.1,shoulder-pitch*.8,right,shoulder-pitch*.25);
+    cubic(right,shoulder+pitch*.45,left+radius*.75,top+pitch*.4,left+radius*.3,top+pitch*.08);
+    const d='M'+fmt(left)+' '+fmt(top)+commands.join('');
+    const distances=[0];let total=0;
+    for(let i=1;i<samples.length;i++){
+      total+=Math.hypot(samples[i].x-samples[i-1].x,samples[i].y-samples[i-1].y);
+      distances.push(total);
+    }
+    const count=Math.max(100,Math.min(190,turns*10));
+    const route=[];
+    let ix=1;
+    for(let step=0;step<=count;step++){
+      const target=total*step/count;
+      while(ix<distances.length-1&&distances[ix]<target)ix++;
+      const a=samples[ix-1],b=samples[ix];
+      const span=distances[ix]-distances[ix-1];
+      const k=span?(target-distances[ix-1])/span:0;
+      route.push({x:a.x+(b.x-a.x)*k,y:a.y+(b.y-a.y)*k});
+    }
+    return {d,route,total,top,bottom,turns,stemX:left,upperReturn:true};
   };
-  const coil = (p,h,at,base,defs) => {
-    const geometry=coilPath(p,at),d=geometry.d;
-    const grad=base+'Coil'+ident(p.id);
-    defs.push('<linearGradient id="'+grad+'" x1="0" y1="'+geometry.top+'" x2="0" y2="'+geometry.bottom+'" gradientUnits="userSpaceOnUse">'+
-      '<stop stop-color="#ff5c27"/><stop offset=".27" stop-color="#f45aa0"/><stop offset=".58" stop-color="#9557e4"/><stop offset="1" stop-color="#25baff"/></linearGradient>');
+  const blendColor=(a,b,t)=>{
+    const value=k=>parseInt(k,16);
+    const ch=i=>Math.round(value(a.slice(i,i+2))*(1-t)+value(b.slice(i,i+2))*t).toString(16).padStart(2,'0');
+    return '#'+ch(1)+ch(3)+ch(5);
+  };
+  const coilColor=(progress,endColor)=>{
+    const stops=[[0,'#1a9df9'],[.26,'#2d89fd'],[.55,'#7858e4'],[.77,'#d15ca7'],[1,endColor]];
+    const t=clamp(progress,0,1,0);
+    for(let i=1;i<stops.length;i++)if(t<=stops[i][0]){
+      const a=stops[i-1],b=stops[i],k=(t-a[0])/(b[0]-a[0]);
+      return blendColor(a[1],b[1],k);
+    }
+    return endColor;
+  };
+  const coil = (p,h,at,base,defs,topTemp=null) => {
+    const geometry=coilPath(p,at),d=geometry.d,route=geometry.route;
+    const endColor=topTemp===null?'#ef4b4a':color(topTemp);
+    // Per-distance sections make colour follow the hydraulic route, not the SVG y coordinate.
+    const colorful=route.slice(1).map((pt,i)=>{
+      const a=route[i],c=coilColor((i+.5)/(route.length-1),endColor);
+      return '<path d="M'+a.x.toFixed(3)+' '+a.y.toFixed(3)+'L'+pt.x.toFixed(3)+' '+pt.y.toFixed(3)+
+        '" stroke="'+c+'" stroke-width="3" stroke-linecap="round" fill="none"/>';
+    }).join('');
     const running=p.flow_mode==='on'||(p.flow_mode!=='off'&&active(h,p.entity));
     return '<g class="ss-tank-coil"'+(p.entity?' data-more="'+safe(p.entity)+'"':'')+' clip-path="url(#'+base+'WaterClip)">'+
       '<path d="'+d+'" fill="none" stroke="#17243c" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>'+
-      '<path d="'+d+'" fill="none" stroke="url(#'+grad+')" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+
-      '<path d="'+d+'" fill="none" stroke="#f3f5ff" opacity=".35" stroke-width=".75" stroke-linejoin="round" stroke-linecap="round"/>'+
-      (running?'<path class="ss-tank-coil-flow" d="'+d+'" fill="none" stroke="#fff" stroke-width="1.3" stroke-dasharray="2 7" style="--ss-coil-speed:'+clamp(p.flow_speed,.35,5,1)+'s;animation-direction:'+(p.flow_direction==='reverse'?'reverse':'normal')+'"/>':'')+'</g>';
+      '<g class="ss-tank-coil-gradient" data-start="#1a9df9" data-end="'+endColor+'">'+colorful+'</g>'+
+      '<path d="'+d+'" fill="none" stroke="#f3f5ff" opacity=".25" stroke-width=".55" stroke-linejoin="round" stroke-linecap="round"/>'+
+      (running?'<path class="ss-tank-coil-flow" d="'+d+'" fill="none" stroke="#fff" stroke-width="1.1" stroke-dasharray="2 7" style="--ss-coil-speed:'+clamp(p.flow_speed,.35,5,1)+'s;animation-direction:'+(p.flow_direction==='reverse'?'reverse':'normal')+'"/>':'')+'</g>';
   };
   const plate = (p,at,base) => {
     if(p.kind==='baffle_horizontal'){
@@ -194,40 +244,50 @@ const HASSStudioTank = (() => {
           '<stop stop-color="#506780"/><stop offset="1" stop-color="#506780"/>')+'</linearGradient>');
       if(x1>x0 && y1>y0)water+='<rect x="'+x0+'" y="'+y0+'" width="'+(x1-x0)+'" height="'+(y1-y0)+'" fill="url(#'+id+')"/>';
     }
-    const inside=[];
-    // Perforated baffles transmit a configurable fraction of decorative heat halos.
-    const heaters=parts.filter(p=>p.kind==='heater');
-    for(const part of heaters)inside.push(heater(part,h,point(part),n,base,zones,barriers,defs));
-    for(const p of parts.filter(p=>p.kind==='coil'))inside.push(coil(p,h,point(p),base,defs));
-    const inner=parts.find(p=>p.kind==='inner_tank');
-    if(inner)inside.push(innerTank(inner,n,h,base,defs));
-    for(const part of parts.filter(p=>p.kind==='baffle_horizontal'||p.kind==='baffle_vertical'))inside.push(plate(part,point(part),base));
     const nonUniform=n.scale_mode==='free';
     const sx=nonUniform?clamp(n.width_scale,.5,2.4,1):1;
     const sy=nonUniform?clamp(n.height_scale,.5,2.4,1):1;
     const remap=at=>({x:60+(at.x-60)*sx,y:61+(at.y-61)*sy});
     const edges={left:60+(19-60)*sx,right:60+(101-60)*sx,
       markerLeft:60+(30-60)*sx,markerRight:60+(90-60)*sx};
-    // Draw annotations outside the non-uniform transform so text and icons remain undistorted.
-    const badges=parts.filter(p=>p.kind==='sensor'||p.kind==='heater')
-      .map(p=>badge(p,h,remap(point(p)),p.kind,n.scale,edges)).join('');
-    return '<g class="ss-modular-tank"><defs>'+defs.join('')+'</defs>'+ 
-      '<g class="ss-tank-body" transform="translate(60 61) scale('+sx+' '+sy+') translate(-60 -61)">'+
+    const transform='translate(60 61) scale('+sx+' '+sy+') translate(-60 -61)';
+    // Only actual HA measurements can set a temperature colour; the coil keeps
+    // a decorative warm end when the tank has no valid upper sensor.
+    const topMeasurements=sensors.map(p=>({height:clamp(p.height,0,100,50),
+      t:temperature(h,p.entity)})).filter(p=>p.t!==null).sort((a,b)=>b.height-a.height);
+    const topTemp=topMeasurements.length?topMeasurements[0].t:null;
+    // Array order is the painter's order: first added part is layer 0 (back),
+    // later additions are drawn above earlier ones. Includes badges and heaters.
+    const accessoryLayers=parts.map((p,index)=>{
+      const at=point(p);
+      let geometry='';
+      if(p.kind==='heater')geometry=heater(p,h,at,n,base,zones,barriers,defs);
+      else if(p.kind==='coil')geometry=coil(p,h,at,base,defs,topTemp);
+      else if(p.kind==='inner_tank')geometry=innerTank(p,n,h,base,defs);
+      else if(p.kind==='baffle_horizontal'||p.kind==='baffle_vertical')geometry=plate(p,at,base);
+      const overlay=(p.kind==='sensor'||p.kind==='heater')?
+        badge(p,h,remap(at),p.kind,n.scale,edges):'';
+      return '<g class="ss-tank-part-layer" data-layer="'+index+'" data-part-id="'+safe(p.id||'')+'">'+
+        (geometry?'<g class="ss-tank-part-geometry" transform="'+transform+'">'+geometry+'</g>':'')+
+        overlay+'</g>';
+    }).join('');
+    return '<g class="ss-modular-tank"><defs>'+defs.join('')+'</defs>'+
+      '<g class="ss-tank-body" transform="'+transform+'">'+
       '<rect x="32" y="111" width="5" height="7" rx="1.3" fill="#839bb9"/>'+
       '<rect x="83" y="111" width="5" height="7" rx="1.3" fill="#839bb9"/>'+
       '<rect x="26" y="4" width="68" height="110" rx="12" fill="url(#'+base+'Steel)" stroke="#e6f2ff" stroke-width=".65"/>'+
       '<rect x="31.5" y="10" width="57" height="100" rx="10" fill="#2b405c" stroke="#b2c8df" stroke-width=".45"/>'+
       '<rect x="34" y="13.5" width="52" height="94" rx="9" fill="#091e38"/>'+
       '<g clip-path="url(#'+base+'WaterClip)">'+water+
-      '<rect x="'+X+'" y="'+Y+'" width="'+IW+'" height="'+IH+'" fill="url(#'+base+'Gloss)" opacity=".52"/></g>'+
-      inside.join('')+
-      '<rect x="34" y="13.5" width="52" height="94" rx="9" fill="none" stroke="#d0eaff" stroke-width=".9" stroke-opacity=".57"/>'+
-      '<path d="M29 15Q26 40 29 100" stroke="#fff" opacity=".3" stroke-width="2.5" fill="none"/>'+
-      '<path d="M91 15Q94 40 91 100" stroke="#fff" opacity=".15" stroke-width="2.5" fill="none"/>'+
-      '</g>'+badges+'</g>';
+      '<rect x="'+X+'" y="'+Y+'" width="'+IW+'" height="'+IH+'" fill="url(#'+base+'Gloss)" opacity=".52"/></g></g>'+
+      accessoryLayers+
+      '<g class="ss-tank-foreground" transform="'+transform+'">'+
+      '<rect x="34" y="13.5" width="52" height="94" rx="9" fill="none" stroke="#d0eaff" stroke-width=".9" stroke-opacity=".57" pointer-events="none"/>'+
+      '<path d="M29 15Q26 40 29 100" stroke="#fff" opacity=".3" stroke-width="2.5" fill="none" pointer-events="none"/>'+
+      '<path d="M91 15Q94 40 91 100" stroke="#fff" opacity=".15" stroke-width="2.5" fill="none" pointer-events="none"/></g></g>';
   };
   const styles='<style>@keyframes ssTankFlow{to{stroke-dashoffset:-36}}'+
     '.ss-tank-coil-flow{animation:ssTankFlow var(--ss-coil-speed,1s) linear infinite}'+
     '.ss-modular-tank [data-more]{cursor:pointer}</style>';
-  return {render,styles,temperature,color,regions,boundaries,permeability,coilPath};
+  return {render,styles,temperature,color,regions,boundaries,permeability,coilPath,coilColor};
 })();

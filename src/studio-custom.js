@@ -63,6 +63,7 @@
   };
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankGlow:'Efekt cieplny grzałek (%)',heaterMode:'Stan grzałki',heaterPower:'Intensywność (%)',heaterWatts:'Encja mocy (W/kW)',partX:'Pozycja pozioma (%)',partLength:'Wysokość / długość (%)',partWidth:'Szerokość (%)',partTurns:'Liczba zwojów',permeability:'Przepuszczalność 0–1',partContainer:'Strefa czujnika',partFlowMode:'Przepływ wężownicy',baffle_horizontal:'Przegroda pozioma',baffle_vertical:'Przegroda pionowa',inner_tank:'Zbiornik wewnętrzny'}:{tankGlow:'Heater visual glow (%)',heaterMode:'Heater status',heaterPower:'Glow intensity (%)',heaterWatts:'Power entity (W/kW)',partX:'Horizontal position (%)',partLength:'Height / length (%)',partWidth:'Width (%)',partTurns:'Coil turns',permeability:'Permeability 0–1',partContainer:'Sensor compartment',partFlowMode:'Coil flow',baffle_horizontal:'Horizontal baffle',baffle_vertical:'Vertical baffle',inner_tank:'Inner tank'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankScaleMode:'Skalowanie zbiornika',tankScaleProportional:'Proporcjonalne',tankScaleFree:'Osobna szerokość i wysokość',tankWidthScale:'Szerokość zbiornika',tankHeightScale:'Wysokość zbiornika'}:{tankScaleMode:'Tank scaling',tankScaleProportional:'Proportional',tankScaleFree:'Independent width and height',tankWidthScale:'Tank width',tankHeightScale:'Tank height'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{partLayer:'Warstwa',partLayerUp:'Przenieś wyżej',partLayerDown:'Przenieś niżej'}:{partLayer:'Layer',partLayerUp:'Move up',partLayerDown:'Move down'});
   const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
   const icons={boiler:'♨',tank:'▤',solar:'☼',pump:'◉',valve:'◇',sensor:'♧',pipe:'〰'};
   const pickLang=(config,hass)=>{
@@ -438,10 +439,14 @@
         if(obj.type==='tank'&&obj.variant==='modular')
           markup+=field(L.tankScaleMode,'scale_mode',obj.scale_mode,'text',
             [['proportional',L.tankScaleProportional],['free',L.tankScaleFree]]);
-        markup+=freeScale?
-          field(L.tankWidthScale,'width_scale',obj.width_scale,'range',null,'min="0.5" max="2.4" step="0.05"')+
-          field(L.tankHeightScale,'height_scale',obj.height_scale,'range',null,'min="0.5" max="2.4" step="0.05"'):
-          field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
+        if(obj.type==='tank'&&obj.variant==='modular'){
+          // Axis sliders are never hidden. Editing either one automatically unlocks proportions.
+          if(!freeScale)markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
+          markup+=field(L.tankWidthScale,'width_scale',freeScale?obj.width_scale:obj.scale,
+            'range',null,'min="0.5" max="2.4" step="0.05"')+
+            field(L.tankHeightScale,'height_scale',freeScale?obj.height_scale:obj.scale,
+            'range',null,'min="0.5" max="2.4" step="0.05"');
+        }else markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
         markup+='<div class="ss-row">'+field('X','x',obj.x,'number')+field('Y','y',obj.y,'number')+'</div>';
         markup+=field(L.entity,'entity',obj.entity,'search',null,'list="ss-entity-list"');
         if(obj.type==='boiler'){
@@ -465,7 +470,9 @@
         if(obj.type==='tank'||obj.type==='solar'){
           const isModular=obj.type==='tank'&&obj.variant==='modular';
           markup+='<section><h4>'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'</h4>'+
-          obj.parts.map((item,index)=>'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+'</strong>'+
+          obj.parts.map((item,index)=>'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+(isModular?' · '+esc(L.partLayer)+' '+index:'')+'</strong>'+
+            (isModular?'<button type="button" title="'+esc(L.partLayerDown)+'" aria-label="'+esc(L.partLayerDown)+'" data-layer-down="'+index+'"'+(index===0?' disabled':'')+'>↓</button>'+
+              '<button type="button" title="'+esc(L.partLayerUp)+'" aria-label="'+esc(L.partLayerUp)+'" data-layer-up="'+index+'"'+(index===obj.parts.length-1?' disabled':'')+'>↑</button>':'')+
             '<button type="button" data-delete-part="'+index+'">×</button></div>'+
             (obj.type==='solar'?'':field(L.graphic,'partKind',item.kind,'text',
               (isModular?[['sensor',L.sensor],['heater',L.heater],['coil',L.coil],['baffle_horizontal',L.baffle_horizontal],['baffle_vertical',L.baffle_vertical],['inner_tank',L.inner_tank]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]]),'data-index="'+index+'"'))+
@@ -651,7 +658,15 @@
           obj.width_scale=1;obj.height_scale=1;
         }
         obj.scale_mode=val==='free'?'free':'proportional';
-      }else if(['x','y','scale','width','width_scale','height_scale','flow_speed','burner_on_temp','burner_off_temp','solar_on_delta','solar_off_delta'].includes(key)){
+      }else if(['width_scale','height_scale'].includes(key)&&obj.type==='tank'&&obj.variant==='modular'){
+        if(obj.scale_mode!=='free'){
+          obj.width_scale=obj.scale;
+          obj.height_scale=obj.scale;
+          obj.scale=1;
+          obj.scale_mode='free';
+        }
+        obj[key]=clamp(val,.5,2.4,obj[key]);
+      }else if(['x','y','scale','width','flow_speed','burner_on_temp','burner_off_temp','solar_on_delta','solar_off_delta'].includes(key)){
         const min={scale:0.5,width_scale:0.5,height_scale:0.5,width:3,flow_speed:0.35,burner_on_temp:20,burner_off_temp:10,solar_on_delta:1,solar_off_delta:0};
         const max={scale:2.4,width_scale:2.4,height_scale:2.4,width:14,flow_speed:5,burner_on_temp:90,burner_off_temp:89,solar_on_delta:40,solar_off_delta:39,x:W,y:H};
         obj[key]=clamp(val,min[key]??0,max[key],obj[key]);
@@ -695,7 +710,15 @@
       if(!button||!selection)return;
       const model=get(),obj=selectedObject(model);if(!obj)return;
       const index=Number(button.dataset.deletePart||button.dataset.deleteAccessory||button.dataset.deleteEntity);
-      if(button.hasAttribute('data-delete-part'))obj.parts.splice(index,1);
+      if(button.hasAttribute('data-layer-up')&&obj.parts){
+        const i=Number(button.dataset.layerUp);
+        if(i>=0&&i<obj.parts.length-1)[obj.parts[i],obj.parts[i+1]]=[obj.parts[i+1],obj.parts[i]];
+        else return;
+      }else if(button.hasAttribute('data-layer-down')&&obj.parts){
+        const i=Number(button.dataset.layerDown);
+        if(i>0&&i<obj.parts.length)[obj.parts[i],obj.parts[i-1]]=[obj.parts[i-1],obj.parts[i]];
+        else return;
+      }else if(button.hasAttribute('data-delete-part'))obj.parts.splice(index,1);
       else if(button.hasAttribute('data-delete-accessory'))obj.accessories.splice(index,1);
       else if(button.hasAttribute('data-delete-entity'))obj.entities.splice(index,1);
       else if(button.dataset.addPart){

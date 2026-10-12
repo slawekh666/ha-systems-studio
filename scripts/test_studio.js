@@ -114,3 +114,32 @@ assert.equal((shape.d.match(/C/g)||[]).length,24);
 assert(shape.d.startsWith('M')&&shape.d.includes('L')&&!shape.d.includes('NaN'));
 assert.match(tankApi.render(tankNode,tankState),/<path d="M[^"]+L[^"]+C[^"]+C[^"]+"/);
 console.log('OK: wrapped accessory UI, independent modular tank scaling and connected elliptical coil.');
+
+// Three bugfixes reported from live HA screenshots: direct nonuniform scaling,
+// missing upper return, along-path thermal colouring, and insertion-order layers.
+assert.match(src,/field\(L\.tankWidthScale,'width_scale',freeScale\?/);
+assert.match(src,/field\(L\.tankHeightScale,'height_scale',freeScale\?/);
+assert.match(src,/obj\.scale_mode='free';/);
+assert.match(src,/data-layer-up=/);
+assert.match(src,/data-layer-down=/);
+const pathData=tankApi.coilPath({length:75,width:65,turns:12},{x:60,y:60});
+assert.equal(pathData.upperReturn,true);
+assert.equal((pathData.d.match(/C/g)||[]).length,26); // 24 turns + 2 upper return arcs
+assert(pathData.route.length>90 && pathData.total>0);
+assert.equal(tankApi.coilColor(0,'#e14b45'),'#1a9df9');
+assert.equal(tankApi.coilColor(1,'#e14b45'),'#e14b45');
+const coldTop={...tankState,states:{...tankState.states,'sensor.top':{state:'12',attributes:{unit_of_measurement:'°C'}}}};
+const hotRender=tankApi.render(tankNode,tankState);
+const coldRender=tankApi.render(tankNode,coldTop);
+assert.match(hotRender,/class="ss-tank-coil-gradient" data-start="#1a9df9" data-end="#[0-9a-f]{6}"/);
+assert.notEqual(hotRender.match(/ss-tank-coil-gradient" data-start="#1a9df9" data-end="([^"]+)"/)[1],
+  coldRender.match(/ss-tank-coil-gradient" data-start="#1a9df9" data-end="([^"]+)"/)[1]);
+assert(!hotRender.includes('id="ssttank_uniqueCoilcoil1"'), 'coil no longer uses a vertical SVG gradient');
+const noTemp={...tankNode,parts:tankNode.parts.filter(p=>p.kind!=='sensor')};
+assert.match(tankApi.render(noTemp,tankState),/class="ss-tank-coil-gradient" data-start="#1a9df9" data-end="#ef4b4a"/);
+const orderNode={...tankNode,parts:[tankNode.parts[2],tankNode.parts[0],tankNode.parts[3],tankNode.parts[1],tankNode.parts[4]]};
+const orderRender=tankApi.render(orderNode,tankState);
+const ordered=[...orderRender.matchAll(/class="ss-tank-part-layer" data-layer="(\d+)" data-part-id="([^"]+)"/g)]
+  .map(m=>[Number(m[1]),m[2]]);
+assert.deepEqual(ordered,[[0,'heater1'],[1,'t1'],[2,'coil1'],[3,'t2'],[4,'plate1']]);
+console.log('OK: independent visible scaling, complete spiral, arc-length gradient and layering.');
