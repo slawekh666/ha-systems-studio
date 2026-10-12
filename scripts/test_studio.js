@@ -143,3 +143,42 @@ const ordered=[...orderRender.matchAll(/class="ss-tank-part-layer" data-layer="(
   .map(m=>[Number(m[1]),m[2]]);
 assert.deepEqual(ordered,[[0,'heater1'],[1,'t1'],[2,'coil1'],[3,'t2'],[4,'plate1']]);
 console.log('OK: independent visible scaling, complete spiral, arc-length gradient and layering.');
+
+
+// Modern solid-fuel boiler: uploaded stove body + Warmwasser fire classes.
+const solidSrc=fs.readFileSync('src/solid-fuel-stove.js','utf8');
+const solid=vm.runInNewContext(solidSrc+'\nHASSStudioSolidFuel;', {});
+const modern={id:'smodern1',type:'boiler',variant:'solid_fuel',entity:'sensor.boiler',
+  solid_fuel:'wood',solid_state:'auto',solid_glow:78,burner_on_temp:50,burner_off_temp:35};
+const haModern={states:{'sensor.boiler':{state:'65',attributes:{unit_of_measurement:'°C'}},
+  'sensor.low':{state:'38',attributes:{unit_of_measurement:'°C'}},
+  'binary_sensor.fuel':{state:'off'}}};
+assert.equal(solid.resolveState(modern,haModern),'burning');
+assert.equal(solid.resolveState({...modern,entity:'sensor.low'},haModern),'embers');
+assert.equal(solid.resolveState({...modern,solid_state:'off'},haModern),'off');
+assert.equal(solid.resolveState({...modern,burner_entity:'binary_sensor.fuel'},haModern),'off');
+assert.equal(solid.resolveState({...modern,burner_entity:'binary_sensor.fuel',solid_state:'burning'},haModern),'burning');
+const burningWood=solid.render(modern,haModern);
+assert.match(burningWood,/class="ss-solid-boiler" data-combustion="burning"/);
+assert.match(burningWood,/class="ss-wood-fuel"/);
+assert.match(burningWood,/class="ss-fire"/);
+assert.match(burningWood,/65\.0°/);
+assert.match(burningWood,/clip-path="url\(#sssolidsmodern1solidFireClip\)"/);
+assert.doesNotMatch(burningWood,/<script\b|onload=|onclick=|<foreignObject/i);
+const burningCoal=solid.render({...modern,solid_fuel:'coal'},haModern);
+assert.match(burningCoal,/class="ss-coal-fuel"/);
+assert.doesNotMatch(burningCoal,/class="ss-wood-fuel"/);
+const embers=solid.render({...modern,solid_state:'embers'},haModern);
+assert.match(embers,/class="ss-embers"/);
+assert.doesNotMatch(embers,/class="ss-fire"/);
+const extinguished=solid.render({...modern,solid_state:'off'},haModern);
+assert.doesNotMatch(extinguished,/class="ss-fire"|class="ss-embers"/);
+const other=solid.render({...modern,id:'smodern2'},haModern);
+assert.match(other,/sssolidsmodern2bodyFront/);
+assert.doesNotMatch(burningWood,/sssolidsmodern2bodyFront/);
+assert.match(solid.render({...modern,entity:'sensor.missing'},haModern),/>—<\/text>/);
+assert.match(src,/HASSStudioSolidFuel\.render\(node,hass\)/);
+assert.match(src,/data-add-preset="solid_fuel"/);
+assert.match(src,/field\(L\.solidFuel,'solid_fuel'/);
+assert.match(src,/field\(L\.solidState,'solid_state'/);
+console.log('OK: modern wood/coal boiler, burning/embers/off, original SVG, scoped defs.');

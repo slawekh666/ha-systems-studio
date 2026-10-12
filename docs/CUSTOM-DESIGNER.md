@@ -1,4 +1,4 @@
-# Custom Designer — development status (0.4.7-dev)
+# Custom Designer — development status (0.4.8-dev)
 
 The custom designer is on `main` and remains experimental. It is built on the original Warmwasser Schema Card; automatic Warmwasser rendering remains available.
 
@@ -18,6 +18,10 @@ The custom designer is on `main` and remains experimental. It is built on the or
 ## Modular tank (Custom only)
 
 Use **Tank → Modular**. Add independent sensors, heaters, coils, horizontal/vertical baffles and one inner tank from the properties panel. Sensor heights use 0–100% from the bottom; additional horizontal position and an optional inner-tank compartment are configurable. Sensor readings determine gradient color. Heaters only create visual halos when on; no temperature values are fabricated. Full baffles create separately interpolated temperature areas; perforated baffles attenuate decorative halos. Coil gradients have no blur and optional dashed flow. The original Warmwasser tank variations remain for existing layouts. Accessory add buttons wrap within the properties panel. Modular tank scaling has proportional and independent width/height modes; the panel keeps badge text unwarped while scaling the tank body. The hygiene coil path combines a straight vertical inlet, rounded helical turns and a top return bend without blur. Colour runs blue-to-hot by distance along the tube (top end from the highest valid tank temperature sensor), not vertically across its bounds. The width/height scale sliders are always visible and automatically enable free scaling when changed. All accessories—including sensor badges—render in insertion order, from layer 0 at the back to later additions in front; up/down buttons change the order.
+
+## Modern solid-fuel boiler
+
+In the Custom designer choose **Wood / coal boiler** directly from the equipment library (or `solid_fuel` as a boiler variant). The shell, display, grate and furnace are adapted from the uploaded `piec_czysty_svg_js_v3` SVG. Distinct wood logs and coal pieces have three states: burning, embers and extinguished, with animation reusing the Warmwasser `ss-fire` / `ss-embers` keyframes. Fuel, mode and visual intensity are independent per boiler. In automatic mode an explicit combustion-state entity takes precedence; otherwise configurable temperature thresholds provide an approximate illustration, **not a measured fire state**. Invalid HA readings never fabricate temperature or fire. There are no HA service calls. Reduced-motion clients disable animations. Existing Warmwasser boiler variants are untouched.
 
 ## Limitations and test requirements
 
