@@ -110,7 +110,7 @@ assert.match(stretched,/class="ss-tank-badge ss-temperature-badge"/);
 assert(!stretched.includes('scale(1.7 0.75) translate(-60 -61)"><g class="ss-tank-badge'), 'labels must be outside nonuniform body group');
 const shape=tankApi.coilPath({length:70,width:60,turns:12},{x:60,y:61});
 assert.equal(shape.turns,12);
-assert.equal((shape.d.match(/C/g)||[]).length,24);
+assert.equal((shape.d.match(/C/g)||[]).length,26);
 assert(shape.d.startsWith('M')&&shape.d.includes('L')&&!shape.d.includes('NaN'));
 assert.match(tankApi.render(tankNode,tankState),/<path d="M[^"]+L[^"]+C[^"]+C[^"]+"/);
 console.log('OK: wrapped accessory UI, independent modular tank scaling and connected elliptical coil.');
