@@ -79,5 +79,5 @@ const HASSStudioSolidFuel=(()=>{
       '<g transform="translate(22 -104) scale(.157 .258) translate(-232 -84)">'+svg+'</g></g></g>';
   };
   const styles='<style>@media(prefers-reduced-motion:reduce){.ss-solid-boiler .ss-fire,.ss-solid-boiler .ss-embers{animation:none!important}}</style>';
-  return {render,styles,resolveState,combustion,temperature};
+  return {render,styles,resolveState,combustion,temperature,flame};
 })();

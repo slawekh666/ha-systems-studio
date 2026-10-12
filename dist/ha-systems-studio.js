@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.9-dev';
+const VERSION = '0.4.10-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -1586,7 +1586,67 @@ const HASSStudioSolidFuel=(()=>{
       '<g transform="translate(22 -104) scale(.157 .258) translate(-232 -84)">'+svg+'</g></g></g>';
   };
   const styles='<style>@media(prefers-reduced-motion:reduce){.ss-solid-boiler .ss-fire,.ss-solid-boiler .ss-embers{animation:none!important}}</style>';
-  return {render,styles,resolveState,combustion,temperature};
+  return {render,styles,resolveState,combustion,temperature,flame};
+})();
+
+
+/* Modern pellet stove: equipment artwork from the user's piec_pellet_svg_js_v1.
+ * Combustion states, flames and CSS animations reuse Warmwasser via SolidFuel.
+ * Read-only SVG rendering: no Home Assistant service calls.
+ */
+const HASSStudioPellet = (() => {
+  const BOILER_SVG = "\n      <defs>\n        <linearGradient id=\"steelFront\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#3c5270\"/>\n          <stop offset=\".16\" stop-color=\"#7c96bb\"/>\n          <stop offset=\".5\" stop-color=\"#121a27\"/>\n          <stop offset=\".84\" stop-color=\"#4e678d\"/>\n          <stop offset=\"1\" stop-color=\"#2c3f5b\"/>\n        </linearGradient>\n        <linearGradient id=\"steelPanel\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#364a61\"/>\n          <stop offset=\"1\" stop-color=\"#111925\"/>\n        </linearGradient>\n        <linearGradient id=\"edgeGlowGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#dbe9ff\"/>\n          <stop offset=\"1\" stop-color=\"#8ecfff\"/>\n        </linearGradient>\n        <linearGradient id=\"darkGlass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#202a35\"/>\n          <stop offset=\"1\" stop-color=\"#070c13\"/>\n        </linearGradient>\n        <linearGradient id=\"screenGlass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#0a233a\"/>\n          <stop offset=\"1\" stop-color=\"#02070f\"/>\n        </linearGradient>\n        <linearGradient id=\"screenHighlight\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#ffffff\" stop-opacity=\".18\"/>\n          <stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n        </linearGradient>\n        <linearGradient id=\"hopperGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#425878\"/>\n          <stop offset=\"1\" stop-color=\"#111926\"/>\n        </linearGradient>\n        <linearGradient id=\"motorGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#25384f\"/>\n          <stop offset=\".5\" stop-color=\"#59739b\"/>\n          <stop offset=\"1\" stop-color=\"#22354a\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softBlueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"6\"/></filter>\n      <clipPath id=\"pelletBurnerClip\"><rect x=\"242\" y=\"560\" width=\"188\" height=\"240\" rx=\"12\"/></clipPath></defs>\n\n      <g id=\"aura\">\n        <path d=\"M120 210 L560 210 L596 246 L596 1106 L560 1140 L120 1140 L84 1106 L84 246 Z\" fill=\"none\" stroke=\"#2aa5ff\" stroke-opacity=\".22\" stroke-width=\"16\" filter=\"url(#blueGlow)\"/>\n        <path d=\"M672 242 L1084 242 L1120 276 L1120 688 L988 834 L988 1060 L920 1098 L794 1098 L794 864 L672 726 Z\" fill=\"none\" stroke=\"#2aa5ff\" stroke-opacity=\".18\" stroke-width=\"14\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"chimney\">\n        <rect x=\"280\" y=\"82\" width=\"126\" height=\"132\" rx=\"16\" fill=\"url(#steelFront)\" stroke=\"#dcecff\" stroke-opacity=\".85\" stroke-width=\"4\"/>\n        <line x1=\"280\" y1=\"150\" x2=\"406\" y2=\"150\" stroke=\"#edf5ff\" stroke-opacity=\".66\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"stoveBody\">\n        <path d=\"M120 210 L560 210 L596 246 L596 1106 L560 1140 L120 1140 L84 1106 L84 246 Z\" fill=\"url(#steelFront)\" stroke=\"#dcecff\" stroke-opacity=\".88\" stroke-width=\"4\"/>\n        <path d=\"M84 246 L120 210 V1140 L84 1106 Z\" fill=\"#40699f\" opacity=\".48\"/>\n        <path d=\"M560 210 L596 246 V1106 L560 1140 Z\" fill=\"#2a4263\" opacity=\".56\"/>\n        <rect x=\"114\" y=\"220\" width=\"446\" height=\"16\" rx=\"3\" fill=\"#eef6ff\" opacity=\".82\"/>\n        <line x1=\"180\" y1=\"220\" x2=\"180\" y2=\"520\" stroke=\"#0a121b\" stroke-opacity=\".42\" stroke-width=\"3\"/>\n        <line x1=\"534\" y1=\"220\" x2=\"534\" y2=\"1140\" stroke=\"#0a121b\" stroke-opacity=\".28\" stroke-width=\"3\"/>\n        <line x1=\"114\" y1=\"392\" x2=\"560\" y2=\"392\" stroke=\"#d6e8ff\" stroke-opacity=\".18\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"displayPanel\">\n        <rect x=\"164\" y=\"262\" width=\"316\" height=\"106\" rx=\"12\" fill=\"#061018\" stroke=\"#8fd1ff\" stroke-width=\"3\"/>\n        <rect x=\"174\" y=\"272\" width=\"296\" height=\"86\" rx=\"10\" fill=\"url(#screenGlass)\"/>\n        <path d=\"M180 278 H318 L286 354 H180 Z\" fill=\"url(#screenHighlight)\"/>\n        <text x=\"200\" y=\"305\" font-size=\"14\" fill=\"#7cc8ff\" font-family=\"monospace\">TEMP</text>\n        <text id=\"tempValue\" x=\"200\" y=\"345\" font-size=\"42\" fill=\"#e3f8ff\" font-family=\"monospace\" font-weight=\"700\">__PELLET_TEMP__</text>\n        <text x=\"298\" y=\"343\" font-size=\"18\" fill=\"#72c8ff\" font-family=\"monospace\">C</text>\n        <g opacity=\".84\" fill=\"#5fb9ff\">\n          <rect x=\"354\" y=\"290\" width=\"26\" height=\"6\" rx=\"3\"/>\n          <rect x=\"354\" y=\"306\" width=\"26\" height=\"6\" rx=\"3\"/>\n          <rect x=\"354\" y=\"322\" width=\"26\" height=\"6\" rx=\"3\"/>\n          <rect x=\"354\" y=\"338\" width=\"26\" height=\"6\" rx=\"3\"/>\n        </g>\n        <circle cx=\"422\" cy=\"314\" r=\"28\" fill=\"#07111a\" stroke=\"#88d0ff\" stroke-width=\"4\"/>\n        <circle id=\"statusRingGlow\" cx=\"422\" cy=\"314\" r=\"34\" fill=\"none\" stroke=\"#2ab2ff\" stroke-opacity=\".26\" stroke-width=\"6\" filter=\"url(#softBlueGlow)\"/>\n        <path d=\"M422 286 A 28 28 0 1 1 421.9 286\" fill=\"none\" stroke=\"#263449\" stroke-width=\"9\" stroke-linecap=\"round\"/>\n        <path id=\"statusArc\" d=\"M422 286 A 28 28 0 1 1 421.9 286\" fill=\"none\" stroke=\"__PELLET_RING_COLOR__\" stroke-width=\"9\" stroke-linecap=\"round\" stroke-dasharray=\"__PELLET_RING_DASH__\"/>\n      </g>\n\n      <g id=\"doorSection\">\n        <rect x=\"150\" y=\"446\" width=\"366\" height=\"438\" rx=\"20\" fill=\"#0b121b\" opacity=\".46\"/>\n        <rect x=\"186\" y=\"488\" width=\"300\" height=\"382\" rx=\"16\" fill=\"url(#steelPanel)\" stroke=\"#9eb4d6\" stroke-opacity=\".56\" stroke-width=\"2.4\"/>\n        <rect x=\"224\" y=\"542\" width=\"224\" height=\"274\" rx=\"16\" fill=\"url(#darkGlass)\" stroke=\"#92d1ff\" stroke-width=\"3\"/>\n        <rect id=\"doorGlowFrame\" x=\"224\" y=\"542\" width=\"224\" height=\"274\" rx=\"16\" fill=\"none\" stroke=\"#2aa5ff\" stroke-opacity=\".18\" stroke-width=\"10\" filter=\"url(#softBlueGlow)\"/>\n        <path d=\"M240 564 h46 v178 l-32 0 z\" fill=\"#ffffff\" opacity=\".10\"/>\n        <path d=\"M436 556 h-40 l-30 258 h28 z\" fill=\"#a4d8ff\" opacity=\".05\"/>\n        <g id=\"emptyBurner\">\n          <rect x=\"242\" y=\"560\" width=\"188\" height=\"240\" rx=\"12\" fill=\"#0a0f16\"/>\n          <rect x=\"242\" y=\"560\" width=\"188\" height=\"240\" rx=\"12\" fill=\"none\" stroke=\"#8ecfff\" stroke-opacity=\".08\" stroke-width=\"2\"/>\n          <g opacity=\".10\" stroke=\"#ddeaff\" stroke-width=\"1.4\">\n            <line x1=\"290\" y1=\"566\" x2=\"290\" y2=\"798\"/>\n            <line x1=\"336\" y1=\"566\" x2=\"336\" y2=\"798\"/>\n            <line x1=\"382\" y1=\"566\" x2=\"382\" y2=\"798\"/>\n          </g>\n          <rect x=\"260\" y=\"760\" width=\"150\" height=\"12\" rx=\"4\" fill=\"#1e2631\"/>\n          <g fill=\"#202933\">\n            <rect x=\"268\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"288\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"308\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"328\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"348\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"368\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"388\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n          </g>\n          __PELLET_FIRE__\n        </g>\n        <g fill=\"url(#steelFront)\" stroke=\"#90d1ff\" stroke-width=\"2.2\">\n          <rect x=\"170\" y=\"588\" width=\"14\" height=\"96\" rx=\"4\"/>\n          <rect x=\"170\" y=\"786\" width=\"14\" height=\"96\" rx=\"4\"/>\n        </g>\n        <g id=\"mainHandle\">\n          <rect x=\"478\" y=\"670\" width=\"30\" height=\"118\" rx=\"10\" fill=\"url(#steelFront)\" stroke=\"#91d0ff\" stroke-width=\"2.5\"/>\n          <rect x=\"468\" y=\"660\" width=\"14\" height=\"46\" rx=\"6\" fill=\"#9bd2ff\" opacity=\".74\"/>\n        </g>\n      </g>\n\n      <g id=\"drawerSection\">\n        <rect x=\"168\" y=\"922\" width=\"318\" height=\"150\" rx=\"12\" fill=\"url(#steelPanel)\" stroke=\"#a4b7d7\" stroke-opacity=\".56\" stroke-width=\"2.2\"/>\n        <rect x=\"250\" y=\"978\" width=\"154\" height=\"42\" rx=\"8\" fill=\"#081018\" stroke=\"#8fcfff\" stroke-opacity=\".55\" stroke-width=\"2.2\"/>\n        <g fill=\"url(#steelFront)\" stroke=\"#90d1ff\" stroke-width=\"2\">\n          <rect x=\"170\" y=\"976\" width=\"12\" height=\"94\" rx=\"4\"/>\n          <rect x=\"448\" y=\"962\" width=\"22\" height=\"70\" rx=\"7\"/>\n        </g>\n      </g>\n\n      <g id=\"stoveBase\">\n        <path d=\"M82 1088 H598 L598 1156 L566 1184 H114 L82 1156 Z\" fill=\"url(#steelFront)\" stroke=\"#8fd1ff\" stroke-opacity=\".82\" stroke-width=\"4\"/>\n        <rect x=\"130\" y=\"1180\" width=\"26\" height=\"18\" rx=\"4\" fill=\"#223248\"/>\n        <rect x=\"522\" y=\"1180\" width=\"26\" height=\"18\" rx=\"4\" fill=\"#223248\"/>\n      </g>\n\n      <g id=\"hopperGroup\">\n        <path d=\"M672 242 L1084 242 L1120 276 L1120 688 L988 834 L988 1060 L920 1098 L794 1098 L794 864 L672 726 Z\" fill=\"url(#hopperGrad)\" stroke=\"#dcecff\" stroke-opacity=\".84\" stroke-width=\"4\"/>\n        <path d=\"M672 242 L714 212 H1046 L1084 242 Z\" fill=\"url(#steelFront)\" stroke=\"#dcecff\" stroke-opacity=\".76\" stroke-width=\"4\"/>\n        <path d=\"M714 212 H1046 L1088 252 H756 Z\" fill=\"#495f7f\" opacity=\".74\"/>\n        <rect x=\"810\" y=\"202\" width=\"132\" height=\"20\" rx=\"8\" fill=\"#1d2836\" stroke=\"#b8d6ff\" stroke-width=\"2.4\"/>\n        <rect x=\"864\" y=\"244\" width=\"36\" height=\"38\" rx=\"4\" fill=\"#34485f\" stroke=\"#aacfff\" stroke-width=\"2\"/>\n        <rect x=\"894\" y=\"338\" width=\"58\" height=\"286\" rx=\"18\" fill=\"#070d13\" stroke=\"#8ecfff\" stroke-opacity=\".46\" stroke-width=\"2.2\"/>\n        <rect x=\"905\" y=\"352\" width=\"36\" height=\"258\" rx=\"14\" fill=\"#0f1620\"/>\n        <rect x=\"905\" y=\"352\" width=\"36\" height=\"258\" rx=\"14\" fill=\"none\" stroke=\"#9fd7ff\" stroke-opacity=\".10\" stroke-width=\"2\"/>\n        <path d=\"M766 706 H1098 L988 834 H794 Z\" fill=\"#162234\" opacity=\".84\"/>\n        <path d=\"M794 864 L988 864 L988 1060 L920 1098 L794 1098 Z\" fill=\"#122030\" opacity=\".86\"/>\n      </g>\n\n\n      <g id=\"connectionPipe\">\n        <rect x=\"596\" y=\"974\" width=\"164\" height=\"64\" rx=\"24\" fill=\"url(#motorGrad)\" stroke=\"#d7ebff\" stroke-opacity=\".62\" stroke-width=\"3\"/>\n        <rect x=\"612\" y=\"986\" width=\"132\" height=\"40\" rx=\"18\" fill=\"#12202e\" opacity=\".62\"/>\n        <rect x=\"580\" y=\"986\" width=\"20\" height=\"40\" rx=\"6\" fill=\"url(#steelFront)\" stroke=\"#9fd5ff\" stroke-opacity=\".46\" stroke-width=\"2\"/>\n        <rect x=\"744\" y=\"986\" width=\"18\" height=\"40\" rx=\"6\" fill=\"url(#steelFront)\" stroke=\"#9fd5ff\" stroke-opacity=\".46\" stroke-width=\"2\"/>\n        <ellipse cx=\"596\" cy=\"1006\" rx=\"16\" ry=\"26\" fill=\"url(#steelFront)\" stroke=\"#b9dcff\" stroke-opacity=\".72\" stroke-width=\"2.6\"/>\n      </g>\n\n      <g id=\"feedSystem\">\n        <rect x=\"760\" y=\"946\" width=\"140\" height=\"122\" rx=\"16\" fill=\"url(#motorGrad)\" stroke=\"#d7ebff\" stroke-opacity=\".64\" stroke-width=\"3\"/>\n        <rect x=\"900\" y=\"972\" width=\"80\" height=\"72\" rx=\"18\" fill=\"#12202e\" stroke=\"#9fd5ff\" stroke-opacity=\".44\" stroke-width=\"2.4\"/>\n        <rect x=\"978\" y=\"966\" width=\"84\" height=\"84\" rx=\"14\" fill=\"#1c2c40\" stroke=\"#cae6ff\" stroke-opacity=\".66\" stroke-width=\"3\"/>\n        <ellipse cx=\"1062\" cy=\"1008\" rx=\"28\" ry=\"42\" fill=\"url(#steelFront)\" stroke=\"#b9dcff\" stroke-width=\"3\"/>\n        <rect x=\"884\" y=\"1060\" width=\"16\" height=\"78\" rx=\"6\" fill=\"url(#steelFront)\"/>\n        <rect x=\"1020\" y=\"1062\" width=\"16\" height=\"76\" rx=\"6\" fill=\"url(#steelFront)\"/>\n        <rect x=\"834\" y=\"1060\" width=\"20\" height=\"56\" rx=\"6\" fill=\"#162331\" stroke=\"#99d1ff\" stroke-opacity=\".45\" stroke-width=\"2\"/>\n        <rect x=\"826\" y=\"1110\" width=\"36\" height=\"12\" rx=\"4\" fill=\"url(#steelFront)\"/>\n        <circle cx=\"786\" cy=\"970\" r=\"4\" fill=\"#e6f3ff\"/>\n        <circle cx=\"874\" cy=\"970\" r=\"4\" fill=\"#e6f3ff\"/>\n        <circle cx=\"786\" cy=\"1044\" r=\"4\" fill=\"#e6f3ff\"/>\n        <circle cx=\"874\" cy=\"1044\" r=\"4\" fill=\"#e6f3ff\"/>\n      </g>\n    ";
+  const clamp=(v,min,max,def)=>Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):def;
+  const escapeHtml=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const baseBounds={x:4,y:-110,width:186,height:312,labelY:220,centerX:97,centerY:46};
+  const geometry=n=>{
+    const sx=clamp(n?.width_scale,.5,2.4,1),sy=clamp(n?.height_scale,.5,2.4,1);
+    return {x:baseBounds.centerX+(baseBounds.x-baseBounds.centerX)*sx,
+      y:baseBounds.centerY+(baseBounds.y-baseBounds.centerY)*sy,
+      width:baseBounds.width*sx,height:baseBounds.height*sy,
+      labelY:baseBounds.centerY+(baseBounds.labelY-baseBounds.centerY)*sy,
+      centerX:baseBounds.centerX,centerY:baseBounds.centerY,
+      sx,sy};
+  };
+  const pellets=(live,glow)=>'<g class="ss-pellet-fuel">'+
+    Array.from({length:22},(_,i)=>{
+      const x=268+(i%11)*12,y=743+Math.floor(i/11)*8+(i%3)*1.5;
+      return '<rect x="'+x+'" y="'+y+'" width="9" height="5" rx="2.1" transform="rotate('+(i%3===0?-17:i%3===1?12:3)+' '+(x+4)+' '+(y+2)+')" fill="'+
+        (live?(i%4===0?'#ed8e45':'#b67d4e'):'#74614a')+'" stroke="'+(live?'#7f3b20':'#433a31')+'" stroke-width=".7"/>';
+    }).join('')+'</g>';
+  const combustion=(mode,glow)=>{
+    const active=mode!=='off',burning=mode==='burning';
+    const f=HASSStudioSolidFuel.flame;
+    // The original Warmwasser flame layers and flicker are scaled for a pellet burner.
+    const fire=burning?f(294,750,13,67,.9)+f(335,751,16,92,1.13)+f(378,749,13,75,.83):'';
+    const embers=active?'<g class="ss-embers" style="animation-duration:2s">'+
+      '<ellipse cx="336" cy="752" rx="75" ry="14" fill="#e9481f" opacity="'+(.27+.39*glow).toFixed(2)+'"/>'+
+      '<path d="M267 750Q294 746 326 753Q370 747 404 750" fill="none" stroke="#ffaf49" stroke-width="2.8" opacity=".85"/></g>':
+      '<ellipse cx="336" cy="756" rx="69" ry="8" fill="#7d7e82" opacity=".17"/>';
+    return '<g class="ss-pellet-combustion" data-state="'+mode+'" clip-path="url(#pelletBurnerClip)">'+
+      (active?'<rect x="244" y="562" width="184" height="236" fill="#a53a18" opacity="'+(.08+glow*.16).toFixed(2)+'"/>':'')+
+      fire+embers+pellets(active,glow)+'</g>';
+  };
+  const render=(node,hass)=>{
+    const mode=HASSStudioSolidFuel.resolveState(node,hass);
+    const actual=HASSStudioSolidFuel.temperature(hass,node.entity);
+    const t=actual===null?null:clamp(actual,20,90,20),amount=t===null?0:(t-20)/70;
+    const arc=t===null?0:(46+amount*118),hue=118-amount*95;
+    const glow=clamp(node.solid_glow,0,100,76)/100;
+    const prefix='sspellet'+String(node.id||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24);
+    const image=BOILER_SVG.replace('__PELLET_TEMP__',actual===null?'—':escapeHtml(actual.toFixed(1)+'°'))
+      .replace('__PELLET_RING_COLOR__',actual===null?'#586779':'hsl('+hue.toFixed(1)+' 88% 48%)')
+      .replace('__PELLET_RING_DASH__',arc.toFixed(1)+' 176')
+      .replace('__PELLET_FIRE__',combustion(mode,glow))
+      .replace(/(\bid=")([^"]+)(")/g,(_,a,id,c)=>a+prefix+id+c)
+      .replace(/url\(#([^)]+)\)/g,(_,id)=>'url(#'+prefix+id+')');
+    const {sx,sy}=geometry(node);
+    return '<g class="ss-modern-pellet" data-combustion="'+mode+'">'+
+      '<g class="ss-pellet-dimensions" transform="translate(97 46) scale('+sx+' '+sy+') translate(-97 -46)">'+
+      '<g transform="translate(12 -104) scale(.164 .265) translate(-84 -82)">'+image+'</g></g></g>';
+  };
+  const styles='<style>@media(prefers-reduced-motion:reduce){.ss-modern-pellet .ss-fire,.ss-modern-pellet .ss-embers{animation:none!important}}</style>';
+  return {render,styles,geometry,combustion};
 })();
 
 
@@ -1598,18 +1658,18 @@ const HASSStudioSolidFuel=(()=>{
   const W=1200,H=720,MAX_NODES=60,MAX_PIPES=80;
   const types=['boiler','tank','solar','pump','valve','sensor','pipe'];
   const graphics={
-    boiler:['wood','solid_fuel','pellet','gas','oil','electric','heatpump'],
+    boiler:['wood','solid_fuel','pellet','pellet_modern','gas','oil','electric','heatpump'],
     tank:['modular','stratified','buffer','coil','dual_coil','hygiene','combi'],
     solar:['flat','tube'],pump:['circulation','inline'],
     valve:['two_way','three_way'],sensor:['temperature','pressure']
   };
   const variants={
-    pl:{modular:'Modułowy',solid_fuel:'Węgiel / drewno (nowoczesny)',wood:'Drewno',pellet:'Pellet',gas:'Gaz',oil:'Olej',electric:'Elektryczny',heatpump:'Pompa ciepła',
+    pl:{modular:'Modułowy',solid_fuel:'Węgiel / drewno (nowoczesny)',pellet_modern:'Pellet (nowoczesny)',wood:'Drewno',pellet:'Pellet',gas:'Gaz',oil:'Olej',electric:'Elektryczny',heatpump:'Pompa ciepła',
       stratified:'Warstwowy',buffer:'Bufor',coil:'Jedna wężownica',dual_coil:'Dwie wężownice',
       hygiene:'Higieniczny',combi:'Kombi',flat:'Płaskie',tube:'Próżniowe',
       circulation:'Obiegowa',inline:'Przelotowa',two_way:'Dwudrogowy',three_way:'Trójdrogowy',
       temperature:'Temperatura',pressure:'Ciśnienie'},
-    en:{modular:'Modular',solid_fuel:'Modern solid-fuel boiler',wood:'Wood',pellet:'Pellet',gas:'Gas',oil:'Oil',electric:'Electric',heatpump:'Heat pump',
+    en:{modular:'Modular',solid_fuel:'Modern solid-fuel boiler',pellet_modern:'Modern pellet boiler',wood:'Wood',pellet:'Pellet',gas:'Gas',oil:'Oil',electric:'Electric',heatpump:'Heat pump',
       stratified:'Stratified',buffer:'Buffer',coil:'Single coil',dual_coil:'Dual coil',
       hygiene:'Hygienic',combi:'Combi',flat:'Flat plate',tube:'Vacuum tubes',
       circulation:'Circulation',inline:'Inline',two_way:'Two-way',three_way:'Three-way',
@@ -1658,6 +1718,7 @@ const HASSStudioSolidFuel=(()=>{
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{partLayer:'Warstwa',partLayerUp:'Przenieś wyżej',partLayerDown:'Przenieś niżej'}:{partLayer:'Layer',partLayerUp:'Move up',partLayerDown:'Move down'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidModel:'Piec węgiel / drewno',solidFuel:'Rodzaj opału',solidWood:'Drewno',solidCoal:'Węgiel',solidState:'Stan paleniska (wizualizacja)',solidAuto:'Automatycznie wg encji / temperatury',solidBurning:'Palenie',solidEmbers:'Żarzenie',solidOff:'Wygaszenie',solidGlow:'Intensywność efektu (%)',solidHelp:'Animacja jest wizualna, bez sterowania urządzeniem. Encja stanu spalania ma pierwszeństwo nad progami temperatury.'}:{solidModel:'Wood / coal boiler',solidFuel:'Fuel type',solidWood:'Wood',solidCoal:'Coal',solidState:'Combustion state (visual only)',solidAuto:'Auto from entity / temperature',solidBurning:'Burning',solidEmbers:'Embers',solidOff:'Extinguished',solidGlow:'Effect intensity (%)',solidHelp:'Animation only, no device control. Combustion entity takes precedence over temperature thresholds.'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidWidth:'Szerokość pieca',solidHeight:'Wysokość pieca'}:{solidWidth:'Boiler width',solidHeight:'Boiler height'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{pelletModel:'Piec na pellet (nowoczesny)'}:{pelletModel:'Modern pellet boiler'});
   const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
   const icons={boiler:'♨',tank:'▤',solar:'☼',pump:'◉',valve:'◇',sensor:'♧',pipe:'〰'};
   const pickLang=(config,hass)=>{
@@ -1830,7 +1891,7 @@ const HASSStudioSolidFuel=(()=>{
   };
   const canvasSvg=(config,hass,editable=false,selected=null)=>{
     const data=normalized(config),language=pickLang(config,hass),L=words[language];
-    const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&node.variant==='solid_fuel'))
+    const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern'].includes(node.variant)))
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
     const pipes=data.pipes.map(pipe=>{
       const d=pipePath(pipe.points),enabled=pipe.flow_mode==='on'||(pipe.flow_mode==='auto'&&HASSStudioGraphics.on(hass,pipe.flow_entity));
@@ -1857,26 +1918,28 @@ const HASSStudioSolidFuel=(()=>{
       const name=esc(node.label||L[node.type]||node.type);
       const ent=node.entity?' data-more="'+esc(node.entity)+'"':'';
       const solidBoiler=node.type==='boiler'&&node.variant==='solid_fuel';
-      const tallBoiler=node.type==='boiler'&&(node.visual==='warmwasser'||solidBoiler);
+      const modernPellet=node.type==='boiler'&&node.variant==='pellet_modern';
+      const tallBoiler=node.type==='boiler'&&(node.visual==='warmwasser'||solidBoiler||modernPellet);
       const freeTank=node.type==='tank'&&node.variant==='modular'&&node.scale_mode==='free';
       const sx=freeTank||solidBoiler?node.width_scale:1,sy=freeTank||solidBoiler?node.height_scale:1;
       // The solid boiler is stretched about (66,53) in its renderer. Keep
       // selection bounds and external label aligned with that transform.
-      const outline=solidBoiler?{x:66+(12-66)*sx,y:53+(-105-53)*sy,width:110*sx,height:318*sy,
+      const outline=modernPellet?HASSStudioPellet.geometry(node):
+        solidBoiler?{x:66+(12-66)*sx,y:53+(-105-53)*sy,width:110*sx,height:318*sy,
           labelY:53+(230-53)*sy,readingY:53+(245-53)*sy}:
         tallBoiler?{x:12,y:-105,width:110,height:318,labelY:230,readingY:245}:
         freeTank?{x:60+(4-60)*sx,y:61+(3-61)*sy,width:112*sx,height:113*sy,
           labelY:61+(130-61)*sy,readingY:61+(145-61)*sy}:
         {x:4,y:3,width:112,height:113,labelY:130,readingY:145};
       return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale+')">'+
-        (node.type==='tank'&&node.variant==='modular'?HASSStudioTank.render(node,hass):node.type==='boiler'&&node.variant==='solid_fuel'?HASSStudioSolidFuel.render(node,hass):node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
+        (node.type==='tank'&&node.variant==='modular'?HASSStudioTank.render(node,hass):node.type==='boiler'&&node.variant==='solid_fuel'?HASSStudioSolidFuel.render(node,hass):modernPellet?HASSStudioPellet.render(node,hass):node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
         (editable&&active?'<rect class="ss-selection" x="'+outline.x+'" y="'+outline.y+'" width="'+outline.width+'" height="'+outline.height+'" rx="8" fill="none" stroke="#52bfff" stroke-dasharray="5 4" stroke-width="1.6" pointer-events="none"/>':'')+
-        '<text x="60" y="'+outline.labelY+'" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
+        '<text x="'+(modernPellet?outline.centerX:60)+'" y="'+outline.labelY+'" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
         (reading&&!tallBoiler?'<text x="60" y="'+outline.readingY+'" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
         '</g>';
     }).join('');
     return '<svg class="ss-svg'+(editable?' ss-svg-editor':'')+'" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
-      HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
+      HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
       '<rect width="'+W+'" height="'+H+'" rx="10" fill="var(--secondary-background-color,#17222d)"/>'+
       '<g class="ss-devices">'+nodes+'</g><g class="ss-pipe-layer" stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-pipe-handles">'+handles+'</g></svg>';
   };
@@ -1968,6 +2031,7 @@ const HASSStudioSolidFuel=(()=>{
       types.map(type=>'<button type="button" data-add="'+type+'"><span aria-hidden="true">'+icons[type]+'</span>'+
         esc(L[type==='pump'?'pumps':type==='valve'?'valves':type==='sensor'?'sensorsMenu':type==='pipe'?'pipes':type])+'</button>').join('')+
       '<button type="button" data-add-preset="solid_fuel"><span aria-hidden="true">♨</span>'+esc(L.solidModel)+'</button>'+
+      '<button type="button" data-add-preset="pellet_modern"><span aria-hidden="true">♨</span>'+esc(L.pelletModel)+'</button>'+
       '</aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
       '<p class="ss-note">'+esc(L.editHelp)+'</p></main>'+
       '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
@@ -2029,19 +2093,21 @@ const HASSStudioSolidFuel=(()=>{
       markup+='<section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
-        if(!(obj.type==='boiler'&&obj.variant==='solid_fuel'))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
+        if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
         const previewFree=obj.type==='tank'&&obj.variant==='modular'&&obj.scale_mode==='free';
         const previewSolid=obj.type==='boiler'&&obj.variant==='solid_fuel';
+        const previewPellet=obj.type==='boiler'&&obj.variant==='pellet_modern';
         const previewWidth=previewFree?Math.max(170,145*obj.width_scale):120;
         const previewHeight=previewFree?Math.max(160,155*obj.height_scale):140;
-        const previewBox=previewSolid?
-          ((66+(12-66)*obj.width_scale-8)+' '+(53+(-105-53)*obj.height_scale-8)+' '+
+        const previewBox=previewPellet?(()=>{const b=HASSStudioPellet.geometry(obj);
+            return (b.x-8)+' '+(b.y-8)+' '+(b.width+16)+' '+(b.labelY-b.y+26);})():
+          previewSolid?((66+(12-66)*obj.width_scale-8)+' '+(53+(-105-53)*obj.height_scale-8)+' '+
             (110*obj.width_scale+16)+' '+(318*obj.height_scale+16)):
           obj.visual==='warmwasser'&&obj.type==='boiler'?'0 -110 130 350':
           previewFree?((60-previewWidth/2)+' '+(70-previewHeight/2)+' '+previewWidth+' '+previewHeight):'0 0 120 140';
         markup+='<div class="ss-preview"><svg viewBox="'+previewBox+'" width="120" height="120">'+
-          HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
-          (obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,this._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,this._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,this._hass):variantShape(obj))+'</svg></div>';
+          HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
+          (obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,this._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,this._hass):previewPellet?HASSStudioPellet.render(obj,this._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,this._hass):variantShape(obj))+'</svg></div>';
         const freeScale=obj.type==='tank'&&obj.variant==='modular'&&obj.scale_mode==='free';
         if(obj.type==='tank'&&obj.variant==='modular')
           markup+=field(L.tankScaleMode,'scale_mode',obj.scale_mode,'text',
@@ -2055,7 +2121,7 @@ const HASSStudioSolidFuel=(()=>{
             'range',null,'min="0.5" max="2.4" step="0.05"');
         }else{
           markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
-          if(obj.type==='boiler'&&obj.variant==='solid_fuel'){
+          if(obj.type==='boiler'&&['solid_fuel','pellet_modern'].includes(obj.variant)){
             markup+=field(L.solidWidth+' ('+Math.round(obj.width_scale*100)+'%)','width_scale',obj.width_scale,
               'range',null,'min="0.5" max="2.4" step="0.05"')+
               field(L.solidHeight+' ('+Math.round(obj.height_scale*100)+'%)','height_scale',obj.height_scale,
@@ -2065,8 +2131,8 @@ const HASSStudioSolidFuel=(()=>{
         markup+='<div class="ss-row">'+field('X','x',obj.x,'number')+field('Y','y',obj.y,'number')+'</div>';
         markup+=field(L.entity,'entity',obj.entity,'search',null,'list="ss-entity-list"');
         if(obj.type==='boiler'){
-          if(obj.variant==='solid_fuel'){
-            markup+=field(L.solidFuel,'solid_fuel',obj.solid_fuel,'text',[['wood',L.solidWood],['coal',L.solidCoal]])+
+          if(['solid_fuel','pellet_modern'].includes(obj.variant)){
+            markup+=(obj.variant==='solid_fuel'?field(L.solidFuel,'solid_fuel',obj.solid_fuel,'text',[['wood',L.solidWood],['coal',L.solidCoal]]):'')+
               field(L.solidState,'solid_state',obj.solid_state,'text',[['auto',L.solidAuto],['burning',L.solidBurning],['embers',L.solidEmbers],['off',L.solidOff]])+
               field(L.solidGlow,'solid_glow',obj.solid_glow,'range',null,'min="0" max="100" step="5"')+
               '<p class="ss-note">'+esc(L.solidHelp)+'</p>';
@@ -2225,7 +2291,7 @@ const HASSStudioSolidFuel=(()=>{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,visual:'warmwasser',variant:kind==='boiler'&&preset==='solid_fuel'?'solid_fuel':graphics[kind][0],label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
+          scale:1,visual:'warmwasser',variant:kind==='boiler'&&['solid_fuel','pellet_modern'].includes(preset)?preset:graphics[kind][0],label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -2287,7 +2353,7 @@ const HASSStudioSolidFuel=(()=>{
           obj.scale_mode='free';
         }
         obj[key]=clamp(val,.5,2.4,obj[key]);
-      }else if(['width_scale','height_scale'].includes(key)&&obj.type==='boiler'&&obj.variant==='solid_fuel'){
+      }else if(['width_scale','height_scale'].includes(key)&&obj.type==='boiler'&&['solid_fuel','pellet_modern'].includes(obj.variant)){
         // Independent from the proportional whole-node scale.
         obj[key]=clamp(val,.5,2.4,obj[key]);
       }else if(['x','y','scale','width','solid_glow','flow_speed','burner_on_temp','burner_off_temp','solar_on_delta','solar_off_delta'].includes(key)){

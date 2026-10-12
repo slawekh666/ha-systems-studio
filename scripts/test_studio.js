@@ -193,7 +193,55 @@ assert.match(solid.render({...modern,width_scale:100,height_scale:-10},haModern)
 assert.match(src,/field\(L\.scale,'scale',obj\.scale/);
 assert.match(src,/field\(L\.solidWidth\+'\s*\('\+Math\.round\(obj\.width_scale\*100\)/);
 assert.match(src,/field\(L\.solidHeight\+'\s*\('\+Math\.round\(obj\.height_scale\*100\)/);
-assert.match(src,/obj\.type==='boiler'&&obj\.variant==='solid_fuel'\)\{\n\s*\/\/ Independent from/);
-assert.match(src,/const outline=solidBoiler\?/);
-assert.match(src,/const previewBox=previewSolid\?/);
+assert.match(src,/obj\.type==='boiler'&&\['solid_fuel','pellet_modern'\]\.includes\(obj\.variant\)\)\{\n\s*\/\/ Independent from/);
+assert.match(src,/const outline=modernPellet\?HASSStudioPellet\.geometry\(node\):/);
+assert.match(src,/solidBoiler\?\{x:66/);
+assert.match(src,/const previewBox=previewPellet\?/);
+assert.match(src,/previewSolid\?\(\(66/);
 console.log('OK: independent solid-fuel dimensions, proportional scale retained, responsive outline and preview.');
+
+
+// Modern pellet boiler: source SVG, Warmwasser flames, shared combustion state.
+const pelletSource=fs.readFileSync('src/pellet-stove.js','utf8');
+const pellet=vm.runInNewContext(solidSrc+'\n'+pelletSource+'\nHASSStudioPellet;', {});
+const pelletNode={id:'pelletA',type:'boiler',variant:'pellet_modern',entity:'sensor.boiler',
+  solid_state:'auto',solid_glow:76,burner_on_temp:50,burner_off_temp:35,
+  width_scale:1,height_scale:1};
+const pelletBurn=pellet.render(pelletNode,haModern);
+assert.match(pelletBurn,/class="ss-modern-pellet" data-combustion="burning"/);
+assert.match(pelletBurn,/id="sspelletpelletAhopperGroup"/);
+assert.match(pelletBurn,/id="sspelletpelletAfeedSystem"/);
+assert.match(pelletBurn,/class="ss-pellet-fuel"/);
+assert.match(pelletBurn,/class="ss-fire"/);
+assert.match(pelletBurn,/65\.0°/);
+assert.match(pelletBurn,/clip-path="url\(#sspelletpelletApelletBurnerClip\)"/);
+assert.doesNotMatch(pelletBurn,/<script\b|onload=|onclick=|<foreignObject/i);
+const pelletEmbers=pellet.render({...pelletNode,entity:'sensor.low'},haModern);
+assert.match(pelletEmbers,/class="ss-modern-pellet" data-combustion="embers"/);
+assert.match(pelletEmbers,/class="ss-embers"/);
+assert.doesNotMatch(pelletEmbers,/class="ss-fire"/);
+const pelletOff=pellet.render({...pelletNode,solid_state:'off'},haModern);
+assert.match(pelletOff,/data-combustion="off"/);
+assert.doesNotMatch(pelletOff,/class="ss-fire"|class="ss-embers"/);
+const pelletEntityOff=pellet.render({...pelletNode,burner_entity:'binary_sensor.fuel'},haModern);
+assert.match(pelletEntityOff,/data-combustion="off"/);
+const pelletUnknown=pellet.render({...pelletNode,entity:'sensor.missing'},haModern);
+assert.match(pelletUnknown,/>—<\/text>/);
+assert.match(pelletUnknown,/data-combustion="off"/);
+const pelletInstance2=pellet.render({...pelletNode,id:'pelletB'},haModern);
+assert.match(pelletInstance2,/sspelletpelletBsteelFront/);
+assert.doesNotMatch(pelletBurn,/sspelletpelletBsteelFront/);
+const pelletScaled=pellet.render({...pelletNode,width_scale:1.8,height_scale:.65},haModern);
+assert.match(pelletScaled,/class="ss-pellet-dimensions" transform="translate\(97 46\) scale\(1\.8 0\.65\)/);
+const gb=pellet.geometry({...pelletNode,width_scale:1.8,height_scale:.65});
+assert.equal(gb.width,186*1.8);
+assert.equal(gb.height,312*.65);
+assert.equal(pellet.geometry(pelletNode).centerX,97);
+assert.match(src,/pellet_modern:'Pellet \(nowoczesny\)'/);
+assert.match(src,/HASSStudioPellet\.render\(node,hass\)/);
+assert.match(src,/data-add-preset="pellet_modern"/);
+assert.match(src,/const outline=modernPellet\?HASSStudioPellet\.geometry\(node\)/);
+assert.match(src,/const previewBox=previewPellet\?/);
+assert.match(src,/field\(L\.solidState,'solid_state'/);
+assert.match(src,/field\(L\.solidGlow,'solid_glow'/);
+console.log('OK: modern pellet renderer, Warmwasser flames/embers, shared state, HA readings, geometry.');
