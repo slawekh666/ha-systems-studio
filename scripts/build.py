@@ -83,10 +83,11 @@ def build() -> None:
     extra = ROOT / 'src' / 'studio-custom.js'
     tank = ROOT / 'src' / 'studio-tank.js'
     solid = ROOT / 'src' / 'solid-fuel-stove.js'
-    for f in (library, tank, solid, extra):
+    pellet = ROOT / 'src' / 'pellet-stove.js'
+    for f in (library, tank, solid, pellet, extra):
         if not f.is_file():
             raise SystemExit(f'Missing {f.relative_to(ROOT)}')
-    DEST.write_text(header + transformed + '\n\n' + library.read_text(encoding='utf-8') + '\n\n' + tank.read_text(encoding='utf-8') + '\n\n' + solid.read_text(encoding='utf-8') + '\n\n' + extra.read_text(encoding='utf-8'), encoding='utf-8')
+    DEST.write_text(header + transformed + '\n\n' + library.read_text(encoding='utf-8') + '\n\n' + tank.read_text(encoding='utf-8') + '\n\n' + solid.read_text(encoding='utf-8') + '\n\n' + pellet.read_text(encoding='utf-8') + '\n\n' + extra.read_text(encoding='utf-8'), encoding='utf-8')
     print(f'Generated {DEST.relative_to(ROOT)} ({DEST.stat().st_size} bytes)')
 
 
