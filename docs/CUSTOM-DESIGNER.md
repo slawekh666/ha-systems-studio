@@ -1,4 +1,4 @@
-# Custom Designer — development status (0.4.4-dev)
+# Custom Designer — development status (0.4.5-dev)
 
 The custom designer is on `main` and remains experimental. It is built on the original Warmwasser Schema Card; automatic Warmwasser rendering remains available.
 
@@ -14,6 +14,10 @@ The custom designer is on `main` and remains experimental. It is built on the or
 - Warmwasser-style boiler animations: optional burner entity, or configurable temperature thresholds
 - Solar icon: collector-to-tank temperature differential with configurable hysteresis, independent of pump state
 - Clicking a bound device/sensor in the **dashboard view** opens Home Assistant's native entity details and history; in the designer, drag/edit interactions take priority
+
+## Modular tank (Custom only)
+
+Use **Tank → Modular**. Add independent sensors, heaters, coils, horizontal/vertical baffles and one inner tank from the properties panel. Sensor heights use 0–100% from the bottom; additional horizontal position and an optional inner-tank compartment are configurable. Sensor readings determine gradient color. Heaters only create visual halos when on; no temperature values are fabricated. Full baffles create separately interpolated temperature areas; perforated baffles attenuate decorative halos. Coil gradients have no blur and optional dashed flow. The original Warmwasser tank variations remain for existing layouts.
 
 ## Limitations and test requirements
 

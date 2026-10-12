@@ -65,3 +65,32 @@ assert.match(tallBoiler,/y="30" width="91" height="169"/);
 assert(tallBoiler.includes('clip-path="url(#wwboilerwoodFireClip)"'));
 assert.match(tallBoiler,/<g data-more="sensor.boiler">/);
 console.log('OK: independent sensor scaling, sensor labels, accessory captions, tall boiler geometry.');
+
+// Modular tank invariants: data-driven temperatures and decorative heat only.
+const tankSrc=fs.readFileSync('src/studio-tank.js','utf8');
+const tankApi=vm.runInNewContext(tankSrc+'\nHASSStudioTank;',{});
+const tankNode={id:'tank_unique',type:'tank',variant:'modular',scale:1,parts:[
+  {id:'t1',kind:'sensor',height:85,x:20,side:'left',entity:'sensor.top'},
+  {id:'t2',kind:'sensor',height:15,x:20,side:'left',entity:'sensor.bottom'},
+  {id:'heater1',kind:'heater',height:30,x:80,side:'right',entity:'switch.heater',power:80},
+  {id:'coil1',kind:'coil',height:50,x:50,turns:12,length:58,width:60,flow_mode:'on'},
+  {id:'plate1',kind:'baffle_horizontal',height:50,x:50,permeability:.3},
+  {id:'inner1',kind:'inner_tank',height:75,x:50,length:30,width:48}
+]};
+const tankState={states:{'sensor.top':{state:'68',attributes:{unit_of_measurement:'°C'}},
+  'sensor.bottom':{state:'24',attributes:{unit_of_measurement:'°C'}},'switch.heater':{state:'on'}}};
+const tankSvg=tankApi.render(tankNode,tankState);
+assert.match(tankSvg,/ss-modular-tank/);
+assert.match(tankSvg,/ss-tank-heater/);
+assert.match(tankSvg,/ss-tank-baffle/);
+assert.match(tankSvg,/ss-tank-inner/);
+assert.match(tankSvg,/ss-tank-coil-flow/);
+assert.match(tankSvg,/data-more="sensor.top"/);
+assert.match(tankSvg,/data-more="switch.heater"/);
+assert(!tankSvg.includes('GaussianBlur')&&!tankSvg.includes('feGaussianBlur'));
+assert.equal(tankApi.temperature(tankState,'sensor.top'),68);
+assert.equal(tankApi.temperature({states:{'sensor.top':{state:'unknown'}}},'sensor.top'),null);
+assert.match(tankApi.render({...tankNode,parts:tankNode.parts.filter(p=>p.kind!=='sensor')},tankState),/506780/);
+assert(!tankApi.render({...tankNode,parts:tankNode.parts.filter(p=>p.kind!=='heater')},tankState).includes('ss-tank-heater'));
+assert.match(src,/HASSStudioTank.render\(node,hass\)/);
+console.log('OK: modular tank, hybrid visual effects, independent accessories.');
