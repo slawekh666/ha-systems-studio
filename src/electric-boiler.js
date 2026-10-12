@@ -93,6 +93,9 @@ const HASSStudioElectricBoiler=(()=>{
       .replace('__ELECTRIC_TICKS__',TICKS)
       .replace('__ELECTRIC_KNOB__',knob.toFixed(2))
       .replace('__ELECTRIC_GLOW__',active?(.10+glow*.34).toFixed(2):'0.03');
+    // Limit the inactive gauge track to the 260-degree arc.
+    body=body.replace(/(<circle id="ringBg"[^>]*)(\/>)/,
+      (_,a,z)=>a+' stroke-dasharray="281.35 389.56"'+z);
     body=body.replace(/(\bid=")([^"]+)(")/g,(_,a,name,c)=>a+namespace+name+c)
       .replace(/url\(#([^)]+)\)/g,(_,name)=>'url(#'+namespace+name+')');
     return '<g class="ss-modern-electric-boiler" data-load="'+(percent===null?'unknown':percent.toFixed(1))+
