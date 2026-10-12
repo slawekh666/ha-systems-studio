@@ -262,3 +262,28 @@ assert.match(hpSvg,/class="ss-modern-heat-pump"/);assert.match(hpSvg,/sshphp1bod
 assert.match(hp.render({...hpNode,hp_fan_entity:'sensor.absent'},hpState),/class="ss-hp-still"/);
 assert.match(src,/HASSStudioHeatPump\.render\(node,hass\)/);
 console.log('OK: modern heat pump power and fan state.');
+
+// Modern gas boiler: measured modulation %, temperature and no invented values.
+const gasSrc=fs.readFileSync('src/gas-boiler.js','utf8');
+const gas=vm.runInNewContext(gasSrc+'\nHASSStudioGasBoiler;',{});
+const gasNode={id:'gas1',type:'boiler',variant:'gas_modern',entity:'sensor.boiler',gas_draw_entity:'sensor.mod',gas_glow:62,width_scale:1,height_scale:1};
+const gasState={states:{'sensor.boiler':{state:'65',attributes:{unit_of_measurement:'°C'}},'sensor.mod':{state:'42',attributes:{unit_of_measurement:'%'}},'binary_sensor.burner':{state:'off'}}};
+assert.equal(gas.temperature(gasState,'sensor.boiler'),65);
+assert.equal(gas.modulation(gasState,'sensor.mod'),42);
+assert.equal(gas.modulation({states:{'sensor.mod':{state:'101',attributes:{unit_of_measurement:'%'}}}},'sensor.mod'),null);
+assert.equal(gas.modulation({states:{'sensor.mod':{state:'3',attributes:{unit_of_measurement:'m³/h'}}}},'sensor.mod'),null);
+assert.equal(gas.modulation({states:{'sensor.mod':{state:'0'}}},'sensor.mod'),0);
+const gasSvg=gas.render(gasNode,gasState);
+assert.match(gasSvg,/65\.0°/);
+assert.match(gasSvg,/data-modulation="42\.0" data-burning="on"/);
+assert.match(gasSvg,/id="ssgasgas1bodyGrad"/);
+assert.match(gasSvg,/id="ssgasgas1barLevel1"[^>]*opacity="1"/);
+assert.match(gasSvg,/id="ssgasgas1barLevel2"[^>]*opacity="1"/);
+assert.match(gasSvg,/id="ssgasgas1barLevel3"[^>]*opacity="0\.16"/);
+assert.match(gas.render({...gasNode,gas_draw_entity:'sensor.missing'},gasState),/data-modulation="unknown" data-burning="off"/);
+assert.match(gas.render({...gasNode,burner_entity:'binary_sensor.burner'},gasState),/data-burning="off"/);
+assert.match(gas.render({...gasNode,width_scale:1.4,height_scale:.8},gasState),/scale\(1\.4 0\.8\)/);
+assert.doesNotMatch(gasSvg,/<script\b|onload=|onclick=|<foreignObject/i);
+assert.match(src,/HASSStudioGasBoiler\.render\(node,hass\)/);
+assert.match(src,/data-add-preset="gas_modern"/);
+console.log('OK: gas boiler modulation, temperature, SVG isolation and resizing.');
