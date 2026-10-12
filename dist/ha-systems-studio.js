@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.13-dev';
+const VERSION = '0.4.14-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -1919,6 +1919,57 @@ const HASSStudioElectricBoiler=(()=>{
 })();
 
 
+/* Modern fireplace: SVG from uploaded kominek_svg_js.html.
+ * Fire and ember motion use original Warmwasser animation classes.
+ * Read-only HA temperature and combustion-state visualization.
+ */
+const HASSStudioFireplace=(()=>{
+  const TEMPLATE="\n      <defs>\n        <linearGradient id=\"bodyGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#3a424d\"/>\n          <stop offset=\".18\" stop-color=\"#212933\"/>\n          <stop offset=\".48\" stop-color=\"#0b121a\"/>\n          <stop offset=\".76\" stop-color=\"#111923\"/>\n          <stop offset=\"1\" stop-color=\"#2f3742\"/>\n        </linearGradient>\n        <linearGradient id=\"bodySideGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#2b3440\"/>\n          <stop offset=\".22\" stop-color=\"#0f151d\"/>\n          <stop offset=\".5\" stop-color=\"#0a1017\"/>\n          <stop offset=\".78\" stop-color=\"#151d27\"/>\n          <stop offset=\"1\" stop-color=\"#303946\"/>\n        </linearGradient>\n        <linearGradient id=\"metalGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#5e6872\"/>\n          <stop offset=\".18\" stop-color=\"#9ca4ad\"/>\n          <stop offset=\".5\" stop-color=\"#2e3742\"/>\n          <stop offset=\".82\" stop-color=\"#0b1118\"/>\n          <stop offset=\"1\" stop-color=\"#3d4650\"/>\n        </linearGradient>\n        <linearGradient id=\"glassGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#404654\" stop-opacity=\".76\"/>\n          <stop offset=\".3\" stop-color=\"#1a2028\" stop-opacity=\".60\"/>\n          <stop offset=\".72\" stop-color=\"#090d12\" stop-opacity=\".84\"/>\n          <stop offset=\"1\" stop-color=\"#030507\" stop-opacity=\".95\"/>\n        </linearGradient>\n        <linearGradient id=\"displayGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#08131f\"/>\n          <stop offset=\"1\" stop-color=\"#02070d\"/>\n        </linearGradient>\n        <linearGradient id=\"screenShine\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#ffffff\" stop-opacity=\".10\"/>\n          <stop offset=\".6\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n          <stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\".04\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softGlow\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\"><feGaussianBlur stdDeviation=\"6\"/></filter>\n      <clipPath id=\"fireClip\"><rect x=\"400\" y=\"448\" width=\"400\" height=\"420\" rx=\"12\"/></clipPath></defs>\n\n      <g id=\"auraGroup\">\n        <path d=\"M350 162 H850 Q906 162 906 218 V1096 Q906 1154 850 1154 H350 Q294 1154 294 1096 V218 Q294 162 350 162 Z\" fill=\"none\" stroke=\"#2aa6ff\" stroke-opacity=\".28\" stroke-width=\"18\" filter=\"url(#blueGlow)\"/>\n        <ellipse cx=\"600\" cy=\"1172\" rx=\"330\" ry=\"34\" fill=\"#1f6dff\" fill-opacity=\".22\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"chimneyGroup\">\n        <rect x=\"512\" y=\"52\" width=\"176\" height=\"152\" rx=\"18\" fill=\"url(#bodySideGrad)\" stroke=\"#aeb7c1\" stroke-opacity=\".26\" stroke-width=\"3\"/>\n        <path d=\"M522 58 H678\" stroke=\"#45b9ff\" stroke-width=\"5\" stroke-linecap=\"round\" opacity=\".92\" filter=\"url(#softGlow)\"/>\n        <rect x=\"492\" y=\"202\" width=\"216\" height=\"26\" rx=\"10\" fill=\"#060a0f\" opacity=\".95\"/>\n      </g>\n\n      <g id=\"topCapGroup\">\n        <path d=\"M346 184 H854 L908 210 V286 H292 V210 Z\" fill=\"url(#metalGrad)\" stroke=\"#c2cad3\" stroke-opacity=\".28\" stroke-width=\"3\"/>\n        <path d=\"M354 190 H846\" stroke=\"#48b8ff\" stroke-width=\"4\" stroke-linecap=\"round\" opacity=\".92\" filter=\"url(#softGlow)\"/>\n        <path d=\"M344 282 H856\" stroke=\"#070c12\" stroke-width=\"10\" opacity=\".78\"/>\n      </g>\n\n      <g id=\"bodyGroup\">\n        <path d=\"M354 252 H846 Q900 252 900 306 V1092 Q900 1144 846 1144 H354 Q300 1144 300 1092 V306 Q300 252 354 252 Z\" fill=\"url(#bodyGrad)\" stroke=\"#c1c8d0\" stroke-opacity=\".25\" stroke-width=\"3\"/>\n        <path d=\"M326 304 V1080\" stroke=\"#3d4857\" stroke-opacity=\".26\" stroke-width=\"2\"/>\n        <path d=\"M874 304 V1080\" stroke=\"#0d131c\" stroke-opacity=\".44\" stroke-width=\"2\"/>\n        <path d=\"M318 312 C338 280 356 268 380 266 H820 C858 266 882 284 892 308\" fill=\"none\" stroke=\"#0e151d\" stroke-width=\"10\" opacity=\".64\"/>\n      </g>\n\n      <g id=\"displayGroup\">\n        <rect x=\"528\" y=\"298\" width=\"212\" height=\"68\" rx=\"12\" fill=\"#181d24\" stroke=\"#9ca6b3\" stroke-opacity=\".28\" stroke-width=\"3\"/>\n        <rect x=\"536\" y=\"306\" width=\"196\" height=\"52\" rx=\"10\" fill=\"url(#displayGrad)\" stroke=\"#44b8ff\" stroke-opacity=\".56\" stroke-width=\"2\"/>\n        <text x=\"556\" y=\"326\" font-size=\"11\" font-family=\"monospace\" fill=\"#73ddff\">STOVE TEMP</text>\n        <text id=\"stoveTempDisplay\" x=\"556\" y=\"350\" font-size=\"30\" font-family=\"monospace\" font-weight=\"700\" fill=\"#eef8ff\">__TEMP__</text>\n        <g id=\"displayBars\" transform=\"translate(666 316)\">\n          <rect x=\"0\" y=\"18\" width=\"10\" height=\"14\" rx=\"2\" fill=\"#19b8ff\" opacity=\"__BAR_1__\"/>\n          <rect x=\"18\" y=\"10\" width=\"10\" height=\"22\" rx=\"2\" fill=\"#28c0ff\" opacity=\"__BAR_1__\"/>\n          <rect x=\"36\" y=\"2\" width=\"10\" height=\"30\" rx=\"2\" fill=\"#55d4ff\" opacity=\"__BAR_1__\"/>\n          <circle cx=\"70\" cy=\"8\" r=\"3\" fill=\"#44b8ff\"/>\n          <circle cx=\"70\" cy=\"22\" r=\"3\" fill=\"#2875c9\"/>\n        </g>\n      </g>\n\n      <g id=\"windowOuterGroup\">\n        <rect x=\"346\" y=\"394\" width=\"508\" height=\"528\" rx=\"44\" fill=\"#0c1218\" stroke=\"#5d6771\" stroke-width=\"4\"/>\n        <rect x=\"376\" y=\"424\" width=\"448\" height=\"468\" rx=\"30\" fill=\"#060a0d\" stroke=\"#1a222c\" stroke-width=\"4\"/>\n        <rect x=\"400\" y=\"448\" width=\"400\" height=\"420\" rx=\"12\" fill=\"url(#glassGrad)\" stroke=\"#5d1f09\" stroke-opacity=\".20\" stroke-width=\"3\"/>\n        __COMBUSTION__\n        <rect x=\"392\" y=\"440\" width=\"416\" height=\"436\" rx=\"16\" fill=\"none\" stroke=\"#1a2129\" stroke-width=\"12\"/>\n        <path d=\"M430 464 H612 L472 860 H430 Z\" fill=\"#ffffff\" opacity=\".10\"/>\n        <path d=\"M676 458 C730 516 754 580 760 652\" fill=\"none\" stroke=\"#ffffff\" stroke-opacity=\".05\" stroke-width=\"18\" stroke-linecap=\"round\"/>\n        <path d=\"M414 460 H786\" stroke=\"#8a2d0d\" stroke-opacity=\".22\" stroke-width=\"4\" stroke-linecap=\"round\"/>\n      </g>\n\n      <g id=\"doorHandleGroup\">\n        <rect x=\"844\" y=\"596\" width=\"14\" height=\"114\" rx=\"7\" fill=\"#090d12\" opacity=\".88\"/>\n        <rect x=\"858\" y=\"584\" width=\"32\" height=\"174\" rx=\"10\" fill=\"url(#metalGrad)\" stroke=\"#d4dce6\" stroke-opacity=\".26\" stroke-width=\"2\"/>\n      </g>\n\n      <g id=\"baseGroup\">\n        <path d=\"M316 1102 H884 L902 1120 V1224 Q902 1238 888 1238 H312 Q298 1238 298 1224 V1120 Z\" fill=\"url(#bodySideGrad)\" stroke=\"#aab3be\" stroke-opacity=\".22\" stroke-width=\"3\"/>\n        <path d=\"M360 1238 H474 L456 1198 H378 Z\" fill=\"#02060a\"/>\n        <path d=\"M726 1238 H840 L824 1198 H744 Z\" fill=\"#02060a\"/>\n      </g>\n    ";
+  const clamp=(v,min,max,d)=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):d;
+  const geometry=n=>{
+    const sx=clamp(n?.width_scale,.5,2.4,1),sy=clamp(n?.height_scale,.5,2.4,1);
+    const cx=80,cy=57;
+    return {x:cx+(39-cx)*sx,y:cy+(-105-cy)*sy,width:82*sx,height:315*sy,
+      centerX:cx,centerY:cy,labelY:cy+(230-cy)*sy,readingY:cy+(244-cy)*sy,sx,sy};
+  };
+  const logs=(active)=>'<g class="ss-fireplace-wood">'+
+    '<rect x="447" y="790" width="282" height="33" rx="13" fill="#38261e" stroke="'+(active?'#d67e3b':'#7b4e31')+'" stroke-width="7" transform="rotate(-11 588 806)"/>'+
+    '<rect x="476" y="810" width="263" height="28" rx="12" fill="#463022" stroke="#a56e46" stroke-width="5" transform="rotate(10 610 824)"/>'+
+    '<path d="M464 815Q544 789 703 801" fill="none" stroke="#c48d5e" opacity=".48" stroke-width="4"/></g>';
+  const combustion=(mode,glow)=>{
+    const live=mode!=='off',burning=mode==='burning';
+    const f=HASSStudioSolidFuel.flame;
+    const fire=burning?f(484,806,43,175,.98)+f(593,814,56,259,1.12)+f(716,814,44,198,.85):'';
+    const embers=live?'<g class="ss-embers" style="animation-duration:2s">'+
+      '<ellipse cx="600" cy="823" rx="164" ry="22" fill="#ed4d22" opacity="'+(.3+.35*glow).toFixed(2)+'"/>'+
+      '<path d="M447 821Q516 835 592 822Q673 814 753 823" stroke="#ffbc55" stroke-width="7" fill="none"/></g>':
+      '<ellipse cx="600" cy="831" rx="150" ry="13" fill="#aaa" opacity=".09"/>';
+    return '<g class="ss-fireplace-combustion" data-state="'+mode+'" clip-path="url(#fireClip)">'+
+      (live?'<rect x="400" y="448" width="400" height="420" fill="#ad3014" opacity="'+(.05+.13*glow).toFixed(2)+'"/>':'')+
+      fire+embers+logs(live)+'</g>';
+  };
+  const render=(node,h)=>{
+    const mode=HASSStudioSolidFuel.resolveState(node,h);
+    const temp=HASSStudioSolidFuel.temperature(h,node.entity);
+    const glow=clamp(node.solid_glow,0,100,62)/100;
+    const bars=temp===null?0:Math.min(3,Math.max(0,Math.ceil((temp-20)/30)));
+    const glowOpacity=(.10+.35*glow).toFixed(2);
+    const id='ssfireplace'+String(node.id||'').replace(/[^a-z0-9_-]/gi,'').slice(0,24);
+    let svg=TEMPLATE.replace('__TEMP__',temp===null?'—':temp.toFixed(1)+'°C')
+      .replace('__COMBUSTION__',combustion(mode,glow))
+      .replace(/__BAR_(\\d+)__/g,(_,i)=>Number(i)<=bars?'1':'.22')
+      .replace(/(\bid=")([^"]+)(")/g,(_,a,k,z)=>a+id+k+z)
+      .replace(/url\(#([^)]+)\)/g,(_,k)=>'url(#'+id+k+')');
+    const bounds=geometry(node);
+    return '<g class="ss-modern-fireplace" data-combustion="'+mode+'">'+
+      '<g class="ss-fireplace-dimensions" transform="translate(80 57) scale('+bounds.sx+' '+bounds.sy+') translate(-80 -57)">'+
+      '<g transform="translate(0 -115) scale(.133 .262)">'+svg+'</g></g></g>';
+  };
+  const styles='<style>@media(prefers-reduced-motion:reduce){.ss-modern-fireplace .ss-fire,.ss-modern-fireplace .ss-embers{animation:none!important}}</style>';
+  return {render,styles,combustion,geometry};
+})();
+
+
 /* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
  * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
  * No external dependencies or service calls in the designer.
@@ -1927,18 +1978,18 @@ const HASSStudioElectricBoiler=(()=>{
   const W=1200,H=720,MAX_NODES=60,MAX_PIPES=80;
   const types=['boiler','tank','solar','pump','valve','sensor','pipe'];
   const graphics={
-    boiler:['wood','solid_fuel','pellet','pellet_modern','heatpump_modern','gas','gas_modern','oil','electric','electric_modern','heatpump'],
+    boiler:['wood','solid_fuel','pellet','pellet_modern','heatpump_modern','gas','gas_modern','oil','electric','electric_modern','heatpump','fireplace_modern'],
     tank:['modular','stratified','buffer','coil','dual_coil','hygiene','combi'],
     solar:['flat','tube'],pump:['circulation','inline'],
     valve:['two_way','three_way'],sensor:['temperature','pressure']
   };
   const variants={
-    pl:{modular:'Modułowy',solid_fuel:'Węgiel / drewno (nowoczesny)',pellet_modern:'Pellet (nowoczesny)',wood:'Drewno',pellet:'Pellet',gas:'Gaz',gas_modern:'Gazowy (nowoczesny)',oil:'Olej',electric:'Elektryczny',electric_modern:'Elektryczny (nowoczesny)',heatpump:'Pompa ciepła',heatpump_modern:'Pompa ciepła (nowoczesna)',
+    pl:{modular:'Modułowy',solid_fuel:'Węgiel / drewno (nowoczesny)',pellet_modern:'Pellet (nowoczesny)',wood:'Drewno',pellet:'Pellet',gas:'Gaz',gas_modern:'Gazowy (nowoczesny)',oil:'Olej',electric:'Elektryczny',electric_modern:'Elektryczny (nowoczesny)',fireplace_modern:'Kominek (nowoczesny)',heatpump:'Pompa ciepła',heatpump_modern:'Pompa ciepła (nowoczesna)',
       stratified:'Warstwowy',buffer:'Bufor',coil:'Jedna wężownica',dual_coil:'Dwie wężownice',
       hygiene:'Higieniczny',combi:'Kombi',flat:'Płaskie',tube:'Próżniowe',
       circulation:'Obiegowa',inline:'Przelotowa',two_way:'Dwudrogowy',three_way:'Trójdrogowy',
       temperature:'Temperatura',pressure:'Ciśnienie'},
-    en:{modular:'Modular',solid_fuel:'Modern solid-fuel boiler',pellet_modern:'Modern pellet boiler',wood:'Wood',pellet:'Pellet',gas:'Gas',gas_modern:'Modern gas boiler',oil:'Oil',electric:'Electric',electric_modern:'Modern electric boiler',heatpump:'Heat pump',heatpump_modern:'Modern heat pump',
+    en:{modular:'Modular',solid_fuel:'Modern solid-fuel boiler',pellet_modern:'Modern pellet boiler',wood:'Wood',pellet:'Pellet',gas:'Gas',gas_modern:'Modern gas boiler',oil:'Oil',electric:'Electric',electric_modern:'Modern electric boiler',fireplace_modern:'Modern fireplace',heatpump:'Heat pump',heatpump_modern:'Modern heat pump',
       stratified:'Stratified',buffer:'Buffer',coil:'Single coil',dual_coil:'Dual coil',
       hygiene:'Hygienic',combi:'Combi',flat:'Flat plate',tube:'Vacuum tubes',
       circulation:'Circulation',inline:'Inline',two_way:'Two-way',three_way:'Three-way',
@@ -1991,6 +2042,7 @@ const HASSStudioElectricBoiler=(()=>{
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{hpModel:'Pompa ciepła (nowoczesna)',hpPower:'Encja poboru mocy (W/kW)',hpFan:'Encja prędkości wentylatora (%/RPM)',hpMaxRpm:'Maksymalne obroty (RPM)',hpGlow:'Podświetlenie (%)'}:{hpModel:'Modern heat pump',hpPower:'Electrical power entity (W/kW)',hpFan:'Fan speed entity (%/RPM)',hpMaxRpm:'Max fan speed (RPM)',hpGlow:'Glow (%)'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{gasModel:'Piec gazowy (nowoczesny)',gasDraw:'Encja modulacji palnika (%)',gasGlow:'Intensywność podświetlenia (%)',gasHelp:'Modulacja to procent mocy palnika, nie zmierzony przepływ gazu. Brak danych wyłącza płomień.'}:{gasModel:'Modern gas boiler',gasDraw:'Burner modulation entity (%)',gasGlow:'Lighting intensity (%)',gasHelp:'Modulation is burner load, not measured gas flow. Missing data disables the flame.'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{electricModel:'Piec elektryczny (nowoczesny)',electricPower:'Encja poboru mocy (W/kW)',electricLoad:'Encja obciążenia (%) — opcjonalna',electricMax:'Moc znamionowa pieca (kW)',electricGlow:'Podświetlenie (%)',electricHelp:'Bez osobnej encji % obciążenie wynika z poboru mocy / mocy znamionowej. Brak odczytu nie jest zastępowany wartością demo.'}:{electricModel:'Modern electric boiler',electricPower:'Electrical power entity (W/kW)',electricLoad:'Load entity (%) — optional',electricMax:'Rated boiler power (kW)',electricGlow:'Lighting (%)',electricHelp:'If no % entity is set, load derives from measured power divided by rated power. Missing data never uses demo values.'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{fireplaceModel:'Kominek (nowoczesny)',fireplaceHelp:'Ogień i żar są wizualizacją, automatyka zależy od encji lub temperatury.'}:{fireplaceModel:'Modern fireplace',fireplaceHelp:'Fire and embers are visual only; auto stage uses HA status or temperature.'});
   const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
   const icons={boiler:'♨',tank:'▤',solar:'☼',pump:'◉',valve:'◇',sensor:'♧',pipe:'〰'};
   const pickLang=(config,hass)=>{
@@ -2169,7 +2221,7 @@ const HASSStudioElectricBoiler=(()=>{
   };
   const canvasSvg=(config,hass,editable=false,selected=null)=>{
     const data=normalized(config),language=pickLang(config,hass),L=words[language];
-    const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern'].includes(node.variant)))
+    const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(node.variant)))
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
     const pipes=data.pipes.map(pipe=>{
       const d=pipePath(pipe.points),enabled=pipe.flow_mode==='on'||(pipe.flow_mode==='auto'&&HASSStudioGraphics.on(hass,pipe.flow_entity));
@@ -2200,12 +2252,13 @@ const HASSStudioElectricBoiler=(()=>{
       const modernHP=node.type==='boiler'&&node.variant==='heatpump_modern';
       const modernGas=node.type==='boiler'&&node.variant==='gas_modern';
       const modernElectric=node.type==='boiler'&&node.variant==='electric_modern';
+      const modernFireplace=node.type==='boiler'&&node.variant==='fireplace_modern';
       const tallBoiler=node.type==='boiler'&&(node.visual==='warmwasser'||solidBoiler||modernPellet);
       const freeTank=node.type==='tank'&&node.variant==='modular'&&node.scale_mode==='free';
       const sx=freeTank||solidBoiler?node.width_scale:1,sy=freeTank||solidBoiler?node.height_scale:1;
       // The solid boiler is stretched about (66,53) in its renderer. Keep
       // selection bounds and external label aligned with that transform.
-      const outline=modernElectric?HASSStudioElectricBoiler.geometry(node):modernGas?HASSStudioGasBoiler.geometry(node):modernHP?HASSStudioHeatPump.geometry(node):modernPellet?HASSStudioPellet.geometry(node):
+      const outline=modernFireplace?HASSStudioFireplace.geometry(node):modernElectric?HASSStudioElectricBoiler.geometry(node):modernGas?HASSStudioGasBoiler.geometry(node):modernHP?HASSStudioHeatPump.geometry(node):modernPellet?HASSStudioPellet.geometry(node):
         solidBoiler?{x:66+(12-66)*sx,y:53+(-105-53)*sy,width:110*sx,height:318*sy,
           labelY:53+(230-53)*sy,readingY:53+(245-53)*sy}:
         tallBoiler?{x:12,y:-105,width:110,height:318,labelY:230,readingY:245}:
@@ -2213,14 +2266,14 @@ const HASSStudioElectricBoiler=(()=>{
           labelY:61+(130-61)*sy,readingY:61+(145-61)*sy}:
         {x:4,y:3,width:112,height:113,labelY:130,readingY:145};
       return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale+')">'+
-        (node.type==='tank'&&node.variant==='modular'?HASSStudioTank.render(node,hass):node.type==='boiler'&&node.variant==='solid_fuel'?HASSStudioSolidFuel.render(node,hass):modernPellet?HASSStudioPellet.render(node,hass):modernHP?HASSStudioHeatPump.render(node,hass):modernGas?HASSStudioGasBoiler.render(node,hass):modernElectric?HASSStudioElectricBoiler.render(node,hass):node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
+        (node.type==='tank'&&node.variant==='modular'?HASSStudioTank.render(node,hass):node.type==='boiler'&&node.variant==='solid_fuel'?HASSStudioSolidFuel.render(node,hass):modernPellet?HASSStudioPellet.render(node,hass):modernHP?HASSStudioHeatPump.render(node,hass):modernGas?HASSStudioGasBoiler.render(node,hass):modernElectric?HASSStudioElectricBoiler.render(node,hass):modernFireplace?HASSStudioFireplace.render(node,hass):node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
         (editable&&active?'<rect class="ss-selection" x="'+outline.x+'" y="'+outline.y+'" width="'+outline.width+'" height="'+outline.height+'" rx="8" fill="none" stroke="#52bfff" stroke-dasharray="5 4" stroke-width="1.6" pointer-events="none"/>':'')+
-        '<text x="'+(modernPellet||modernHP||modernGas||modernElectric?outline.centerX:60)+'" y="'+outline.labelY+'" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
+        '<text x="'+(modernPellet||modernHP||modernGas||modernElectric||modernFireplace?outline.centerX:60)+'" y="'+outline.labelY+'" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
         (reading&&!tallBoiler?'<text x="60" y="'+outline.readingY+'" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
         '</g>';
     }).join('');
     return '<svg class="ss-svg'+(editable?' ss-svg-editor':'')+'" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
-      HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
+      HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
       '<rect width="'+W+'" height="'+H+'" rx="10" fill="var(--secondary-background-color,#17222d)"/>'+
       '<g class="ss-devices">'+nodes+'</g><g class="ss-pipe-layer" stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-pipe-handles">'+handles+'</g></svg>';
   };
@@ -2316,6 +2369,7 @@ const HASSStudioElectricBoiler=(()=>{
       '<button type="button" data-add-preset="heatpump_modern"><span aria-hidden="true">◉</span>'+esc(L.hpModel)+'</button>'+
       '<button type="button" data-add-preset="gas_modern"><span aria-hidden="true">♨</span>'+esc(L.gasModel)+'</button>'+
       '<button type="button" data-add-preset="electric_modern"><span aria-hidden="true">⚡</span>'+esc(L.electricModel)+'</button>'+
+      '<button type="button" data-add-preset="fireplace_modern"><span aria-hidden="true">♨</span>'+esc(L.fireplaceModel)+'</button>'+
       '</aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
       '<p class="ss-note">'+esc(L.editHelp)+'</p></main>'+
       '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
@@ -2377,24 +2431,25 @@ const HASSStudioElectricBoiler=(()=>{
       markup+='<section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
-        if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
+        if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
         const previewFree=obj.type==='tank'&&obj.variant==='modular'&&obj.scale_mode==='free';
         const previewSolid=obj.type==='boiler'&&obj.variant==='solid_fuel';
         const previewPellet=obj.type==='boiler'&&obj.variant==='pellet_modern';
         const previewHP=obj.type==='boiler'&&obj.variant==='heatpump_modern';
         const previewGas=obj.type==='boiler'&&obj.variant==='gas_modern';
         const previewElectric=obj.type==='boiler'&&obj.variant==='electric_modern';
+        const previewFireplace=obj.type==='boiler'&&obj.variant==='fireplace_modern';
         const previewWidth=previewFree?Math.max(170,145*obj.width_scale):120;
         const previewHeight=previewFree?Math.max(160,155*obj.height_scale):140;
-        const previewBox=previewElectric?(()=>{const q=HASSStudioElectricBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewGas?(()=>{const q=HASSStudioGasBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewHP?(()=>{const q=HASSStudioHeatPump.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewPellet?(()=>{const b=HASSStudioPellet.geometry(obj);
+        const previewBox=previewFireplace?(()=>{const q=HASSStudioFireplace.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewElectric?(()=>{const q=HASSStudioElectricBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewGas?(()=>{const q=HASSStudioGasBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewHP?(()=>{const q=HASSStudioHeatPump.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewPellet?(()=>{const b=HASSStudioPellet.geometry(obj);
             return (b.x-8)+' '+(b.y-8)+' '+(b.width+16)+' '+(b.labelY-b.y+26);})():
           previewSolid?((66+(12-66)*obj.width_scale-8)+' '+(53+(-105-53)*obj.height_scale-8)+' '+
             (110*obj.width_scale+16)+' '+(318*obj.height_scale+16)):
           obj.visual==='warmwasser'&&obj.type==='boiler'?'0 -110 130 350':
           previewFree?((60-previewWidth/2)+' '+(70-previewHeight/2)+' '+previewWidth+' '+previewHeight):'0 0 120 140';
         markup+='<div class="ss-preview"><svg viewBox="'+previewBox+'" width="120" height="120">'+
-          HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
-          (obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,this._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,this._hass):previewPellet?HASSStudioPellet.render(obj,this._hass):previewHP?HASSStudioHeatPump.render(obj,this._hass):previewGas?HASSStudioGasBoiler.render(obj,this._hass):previewElectric?HASSStudioElectricBoiler.render(obj,this._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,this._hass):variantShape(obj))+'</svg></div>';
+          HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
+          (obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,this._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,this._hass):previewPellet?HASSStudioPellet.render(obj,this._hass):previewHP?HASSStudioHeatPump.render(obj,this._hass):previewGas?HASSStudioGasBoiler.render(obj,this._hass):previewElectric?HASSStudioElectricBoiler.render(obj,this._hass):previewFireplace?HASSStudioFireplace.render(obj,this._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,this._hass):variantShape(obj))+'</svg></div>';
         const freeScale=obj.type==='tank'&&obj.variant==='modular'&&obj.scale_mode==='free';
         if(obj.type==='tank'&&obj.variant==='modular')
           markup+=field(L.tankScaleMode,'scale_mode',obj.scale_mode,'text',
@@ -2408,7 +2463,7 @@ const HASSStudioElectricBoiler=(()=>{
             'range',null,'min="0.5" max="2.4" step="0.05"');
         }else{
           markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
-          if(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern'].includes(obj.variant)){
+          if(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)){
             markup+=field(L.solidWidth+' ('+Math.round(obj.width_scale*100)+'%)','width_scale',obj.width_scale,
               'range',null,'min="0.5" max="2.4" step="0.05"')+
               field(L.solidHeight+' ('+Math.round(obj.height_scale*100)+'%)','height_scale',obj.height_scale,
@@ -2418,6 +2473,7 @@ const HASSStudioElectricBoiler=(()=>{
         markup+='<div class="ss-row">'+field('X','x',obj.x,'number')+field('Y','y',obj.y,'number')+'</div>';
         markup+=field(L.entity,'entity',obj.entity,'search',null,'list="ss-entity-list"');
         if(obj.type==='boiler'){
+          if(obj.variant==='fireplace_modern')markup+='<p class="ss-note">'+esc(L.fireplaceHelp)+'</p>';
           if(obj.variant==='electric_modern')markup+=field(L.electricPower,'electric_power_entity',obj.electric_power_entity,'search',null,'list="ss-entity-list"')+
             field(L.electricLoad,'electric_load_entity',obj.electric_load_entity,'search',null,'list="ss-entity-list"')+
             field(L.electricMax,'electric_max_kw',obj.electric_max_kw,'number',null,'min="0.1" max="100" step="0.1"')+
@@ -2430,7 +2486,7 @@ const HASSStudioElectricBoiler=(()=>{
             field(L.hpFan,'hp_fan_entity',obj.hp_fan_entity,'search',null,'list="ss-entity-list"')+
             field(L.hpMaxRpm,'hp_max_rpm',obj.hp_max_rpm,'number',null,'min="100" max="20000" step="100"')+
             field(L.hpGlow,'hp_glow',obj.hp_glow,'range',null,'min="0" max="100" step="5"');
-          if(['solid_fuel','pellet_modern'].includes(obj.variant)){
+          if(['solid_fuel','pellet_modern','fireplace_modern'].includes(obj.variant)){
             markup+=(obj.variant==='solid_fuel'?field(L.solidFuel,'solid_fuel',obj.solid_fuel,'text',[['wood',L.solidWood],['coal',L.solidCoal]]):'')+
               field(L.solidState,'solid_state',obj.solid_state,'text',[['auto',L.solidAuto],['burning',L.solidBurning],['embers',L.solidEmbers],['off',L.solidOff]])+
               field(L.solidGlow,'solid_glow',obj.solid_glow,'range',null,'min="0" max="100" step="5"')+
@@ -2590,7 +2646,7 @@ const HASSStudioElectricBoiler=(()=>{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,visual:'warmwasser',variant:kind==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern'].includes(preset)?preset:graphics[kind][0],label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
+          scale:1,visual:'warmwasser',variant:kind==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(preset)?preset:graphics[kind][0],label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -2652,7 +2708,7 @@ const HASSStudioElectricBoiler=(()=>{
           obj.scale_mode='free';
         }
         obj[key]=clamp(val,.5,2.4,obj[key]);
-      }else if(['width_scale','height_scale'].includes(key)&&obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern'].includes(obj.variant)){
+      }else if(['width_scale','height_scale'].includes(key)&&obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)){
         // Independent from the proportional whole-node scale.
         obj[key]=clamp(val,.5,2.4,obj[key]);
       }else if(['x','y','scale','width','solid_glow','gas_glow','electric_glow','electric_max_kw','hp_glow','hp_max_rpm','flow_speed','burner_on_temp','burner_off_temp','solar_on_delta','solar_off_delta'].includes(key)){
