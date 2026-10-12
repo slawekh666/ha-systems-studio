@@ -182,3 +182,18 @@ assert.match(src,/data-add-preset="solid_fuel"/);
 assert.match(src,/field\(L\.solidFuel,'solid_fuel'/);
 assert.match(src,/field\(L\.solidState,'solid_state'/);
 console.log('OK: modern wood/coal boiler, burning/embers/off, original SVG, scoped defs.');
+
+
+// New solid-fuel boiler geometry controls: global scale stays independent.
+const stretchedModern=solid.render({...modern,width_scale:1.75,height_scale:.65},haModern);
+assert.match(stretchedModern,/class="ss-solid-boiler-dimensions" transform="translate\(66 53\) scale\(1\.75 0\.65\) translate\(-66 -53\)"/);
+assert.match(solid.render({...modern},haModern),/scale\(1 1\) translate\(-66 -53\)/);
+assert.match(solid.render({...modern,width_scale:100,height_scale:-10},haModern),
+  /scale\(2\.4 0\.5\) translate\(-66 -53\)/);
+assert.match(src,/field\(L\.scale,'scale',obj\.scale/);
+assert.match(src,/field\(L\.solidWidth\+'\s*\('\+Math\.round\(obj\.width_scale\*100\)/);
+assert.match(src,/field\(L\.solidHeight\+'\s*\('\+Math\.round\(obj\.height_scale\*100\)/);
+assert.match(src,/obj\.type==='boiler'&&obj\.variant==='solid_fuel'\)\{\n\s*\/\/ Independent from/);
+assert.match(src,/const outline=solidBoiler\?/);
+assert.match(src,/const previewBox=previewSolid\?/);
+console.log('OK: independent solid-fuel dimensions, proportional scale retained, responsive outline and preview.');

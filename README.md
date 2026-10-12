@@ -4,7 +4,7 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 ## Current status
 
-**0.4.8-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
+**0.4.9-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
 
 **Important:** the card is still under Home Assistant browser acceptance testing. CI checks packaging, JavaScript syntax and selected logic, but cannot verify final SVG appearance and pointer behavior in HA.
 
@@ -14,6 +14,8 @@ See [Release process](docs/RELEASING.md).
 The Custom designer now offers a **Modular tank** built from one SVG shell. It supports multiple HA temperature sensors, heaters with decorative halos, perforated horizontal and vertical baffles, gradient-only hygiene coils with optional flow, and an inner tank. Temperature readouts are not calculated from heater visuals. The accessory buttons wrap in the properties panel, and modular tanks support proportional or independent width/height scaling without deforming badges. The hygiene coil is a single connected path (straight inlet plus elliptical spiral). The width and height sliders are always visible and unlock independent scaling when edited. The coil now includes the upper return bend; its blue-to-hot colour follows tube travel distance, with end colour derived from the highest valid tank sensor. Accessory layers follow creation order, with up/down reorder controls. Browser acceptance testing in Home Assistant remains required before a numbered release.
 
 **New:** Custom Studio includes a *Modern wood / coal boiler* preset based on the attached clean stove SVG v3. Its empty furnace can contain wood logs or coal pieces with Warmwasser-style flame/ember animation. Three visual states (burning, embers, extinguished) are selectable manually or automatically from a combustion entity or temperature thresholds. The visualisation never controls heating hardware; the original Warmwasser wood boiler remains unchanged. Home Assistant browser visual testing is still required.
+
+The modern solid-fuel boiler has independent **Width** and **Height** multipliers (50–240%) alongside the unchanged proportional **Scale** slider. These resize the SVG body, display and furnace; the selection outline, preview and caption follow the dimensions. This is limited to the modern wood/coal variant and does not modify other graphics.
 
 ## Local build in VS Code + WSL
 
