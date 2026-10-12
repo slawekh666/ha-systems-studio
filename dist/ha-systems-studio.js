@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.4-dev';
+const VERSION = '0.4.5-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -1211,6 +1211,217 @@ const HASSStudioGraphics = (() => {
 })();
 
 
+/* Modular SVG hot-water tank for the Custom designer. No HA service calls.
+ * Adapted visually from the six user-supplied SVG demonstrations.
+ * The temperature field is measured/interpolated; heater halos are visual only.
+ */
+const HASSStudioTank = (() => {
+  const num = v => v !== '' && v != null && Number.isFinite(Number(v));
+  const clamp = (v,lo,hi,fallback=lo) => num(v) ? Math.max(lo,Math.min(hi,Number(v))) : fallback;
+  const safe = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const ident = v => String(v).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,42);
+  const state = (h,e) => e && h?.states?.[e] ? h.states[e] : null;
+  const active = (h,e) => ['on','active','heat','heating','running','open'].includes(String(state(h,e)?.state||'').toLowerCase());
+  const temperature = (h,e) => {
+    const s=state(h,e),v=s?.state;
+    if (!num(v) || ['unknown','unavailable'].includes(String(v))) return null;
+    const unit=s?.attributes?.unit_of_measurement;
+    if (unit && !['°C','C','°F','F'].includes(unit)) return null;
+    const c=unit==='°F'||unit==='F' ? (Number(v)-32)*5/9 : Number(v);
+    return c>=-40 && c<=150 ? c : null;
+  };
+  const color = t => {
+    if (!num(t)) return '#506780';
+    const palette=[[0,[28,88,218]],[20,[25,162,228]],[40,[132,87,217]],[60,[224,65,136]],[80,[239,49,63]],[100,[255,108,44]]];
+    const v=clamp(t,0,100,0);
+    for(let i=1;i<palette.length;i++) if(v<=palette[i][0]){
+      const a=palette[i-1],b=palette[i],k=(v-a[0])/(b[0]-a[0]);
+      return '#'+a[1].map((n,j)=>Math.round(n+(b[1][j]-n)*k).toString(16).padStart(2,'0')).join('');
+    }
+    return '#ff6c2c';
+  };
+  // Location values are percentages of the main water compartment.
+  const X=35,Y=15,IW=50,IH=92;
+  const point = p => ({x:X+IW*clamp(p.x,0,100,50)/100,
+    y:Y+IH*(100-clamp(p.height,0,100,50))/100});
+  const boundaries = parts => {
+    const horizontal=parts.filter(p=>p.kind==='baffle_horizontal').map(p=>({at:point(p).y,leak:clamp(p.permeability,0,1,.35)})).sort((a,b)=>a.at-b.at);
+    const vertical=parts.filter(p=>p.kind==='baffle_vertical').map(p=>({at:point(p).x,leak:clamp(p.permeability,0,1,0)})).sort((a,b)=>a.at-b.at);
+    return {horizontal,vertical};
+  };
+  const regions = barriers => {
+    const x=[X,...barriers.vertical.map(v=>v.at),X+IW];
+    const y=[Y,...barriers.horizontal.map(v=>v.at),Y+IH];
+    const out=[];
+    for(let row=1;row<y.length;row++)for(let col=1;col<x.length;col++)
+      if(y[row]>y[row-1]+.01 && x[col]>x[col-1]+.01)
+        out.push({x:x[col-1],y:y[row-1],w:x[col]-x[col-1],h:y[row]-y[row-1]});
+    return out;
+  };
+  const permeability = (a,b,barriers) => {
+    let pass=1;
+    for(const cut of barriers.horizontal) if((a.y<cut.at && b.y>cut.at)||(b.y<cut.at && a.y>cut.at))pass*=cut.leak;
+    for(const cut of barriers.vertical) if((a.x<cut.at && b.x>cut.at)||(b.x<cut.at && a.x>cut.at))pass*=cut.leak;
+    return pass;
+  };
+  const stops = (sensors,h) => {
+    const measurements=sensors.map(p=>({height:clamp(p.height,0,100,50),t:temperature(h,p.entity)}))
+      .filter(p=>p.t!==null).sort((a,b)=>b.height-a.height);
+    if(!measurements.length) return '<stop stop-color="#506780"/><stop offset="1" stop-color="#506780"/>';
+    const points=[{height:100,t:measurements[0].t},...measurements,{height:0,t:measurements[measurements.length-1].t}];
+    return points.map(p=>'<stop offset="'+(100-p.height)+'%" stop-color="'+color(p.t)+'"/>').join('');
+  };
+  const badge = (p,h,at,kind,parentScale=1) => {
+    const isSensor=kind==='sensor';
+    const reading=isSensor?temperature(h,p.entity):null;
+    const enabled=p.mode==='on'||(p.mode!=='off'&&active(h,p.entity));
+    const powerState=state(h,p.power_entity),watts=powerState&&num(powerState.state)?Number(powerState.state):null;
+    const powerUnit=powerState?.attributes?.unit_of_measurement;
+    const powerText=watts!==null && ['W','kW'].includes(powerUnit)?(watts/(powerUnit==='W'?1000:1)).toFixed(1)+' kW':(enabled?'ON':'OFF');
+    const value=isSensor?(reading===null?'—':reading.toFixed(1)+'°'):powerText;
+    const caption=String(p.label||'').slice(0,28),wide=Math.max(38,22+value.length*5.4,caption.length*4.5+12);
+    const side=p.side==='right'?'right':p.side==='inside'?'inside':'left';
+    const x=side==='left'?19:side==='right'?101:at.x;
+    const bx=side==='left'?x-wide-3:side==='right'?x+3:x-wide/2;
+    const by=at.y-(caption?15:10);
+    const bg=isSensor?(reading===null?'#4d5865':color(reading)):(enabled?'#ec4a30':'#464c57');
+    const scale=clamp(p.display_scale,.5,2,1)/clamp(parentScale,.5,2.4,1);
+    const icon=isSensor?'<path d="M0 -6v9a4 4 0 1 0 4 0v-9a2 2 0 0 0-4 0ZM2 -2v7" fill="none" stroke="white" stroke-width="1.2" stroke-linecap="round"/>':
+      '<path d="M3 -7L-2 1H2L0 8L7 -2H3Z" fill="white"/>';
+    const marker=side==='left'?30:side==='right'?90:at.x;
+    return '<g class="ss-tank-badge ss-temperature-badge"'+(p.entity?' data-more="'+safe(p.entity)+'"':'')+
+      ' transform="translate('+at.x+' '+at.y+') scale('+scale+') translate('+(-at.x)+' '+(-at.y)+')">'+
+      (side==='inside'?'':'<path d="M'+marker+' '+at.y+'H'+(side==='left'?x:x)+'" stroke="'+bg+'" stroke-width="1.3"/>')+
+      '<circle cx="'+marker+'" cy="'+at.y+'" r="2.5" fill="'+bg+'" stroke="#ebf3ff" stroke-width=".9"/>'+
+      '<rect x="'+bx+'" y="'+by+'" width="'+wide+'" height="'+(caption?29:21)+'" rx="10.5" fill="'+bg+
+      '" stroke="#f7e7e7" stroke-opacity=".8" stroke-width=".8"/>'+
+      '<g transform="translate('+(bx+9)+' '+(by+(caption?16:11))+') scale(.82)">'+icon+'</g>'+
+      (caption?'<text x="'+(bx+wide/2+6)+'" y="'+(by+10)+'" text-anchor="middle" font-size="6.2" fill="#fff" opacity=".9">'+safe(caption)+'</text>':'')+
+      '<text x="'+(bx+wide/2+6)+'" y="'+(by+(caption?23:14.5))+'" text-anchor="middle" font-size="9.7" fill="#fff" font-weight="700">'+safe(value)+'</text></g>';
+  };
+  const heater = (p,h,at,n,base,regionsList,barriers,defs) => {
+    const enabled=p.mode==='on'||(p.mode!=='off'&&active(h,p.entity));
+    const level=clamp(p.power,0,100,75)/100,atRight=p.side==='right';
+    const length=clamp(p.width,10,90,58)*.45;
+    const edge=atRight?X+IW-2:X+2,dx=atRight?-length:length;
+    const y=at.y,rod=atRight?edge-2:edge+2;
+    const d='M'+rod+' '+(y-5)+'h'+dx+'q'+(atRight?-4:4)+' 0 '+(atRight?-4:4)+' 5q0 5 '+(atRight?4:-4)+' 5h'+(-dx)+
+      'M'+rod+' '+y+'h'+(dx*.9);
+    const token=base+'Heat'+ident(p.id),glow=base+'Halo'+ident(p.id);
+    defs.push('<radialGradient id="'+glow+'"><stop stop-color="#fff2a9" stop-opacity=".82"/><stop offset=".22" stop-color="#ff772a" stop-opacity=".72"/><stop offset=".65" stop-color="#ed3b28" stop-opacity=".25"/><stop offset="1" stop-color="#e23f2c" stop-opacity="0"/></radialGradient>');
+    const halos=enabled?regionsList.map((r,i)=>{
+      const centre={x:r.x+r.w/2,y:r.y+r.h/2},permeable=permeability(at,centre,barriers);
+      if(permeable<.001)return '';
+      const clip=token+'Clip'+i;
+      defs.push('<clipPath id="'+clip+'"><rect x="'+r.x+'" y="'+r.y+'" width="'+r.w+'" height="'+r.h+'"/></clipPath>');
+      return '<g clip-path="url(#'+clip+')"><ellipse cx="'+(at.x+(atRight?-8:8))+'" cy="'+y+
+        '" rx="'+(12+length)+'" ry="'+(12+level*12)+'" fill="url(#'+glow+')" opacity="'+(level*permeable).toFixed(3)+'"/></g>';
+    }).join(''):'';
+    return '<g class="ss-tank-heater"'+(p.entity?' data-more="'+safe(p.entity)+'"':'')+'>'+
+      halos+'<g clip-path="url(#'+base+'WaterClip)">'+
+      '<path d="'+d+'" fill="none" stroke="#2f3c51" stroke-width="3.9" stroke-linecap="round"/>'+
+      '<path d="'+d+'" fill="none" stroke="'+(enabled?'#ff662d':'#b1beca')+'" stroke-width="2.6" stroke-linecap="round"/>'+
+      (enabled?'<path d="'+d+'" fill="none" stroke="#fff1b1" opacity="'+(.25+level*.7)+'" stroke-width=".8" stroke-linecap="round"/>':'')+
+      '</g><ellipse cx="'+edge+'" cy="'+y+'" rx="2.2" ry="7.5" fill="url(#'+base+'Steel)" stroke="#e6f1ff" stroke-width=".6"/></g>';
+  };
+  const coil = (p,h,at,base,defs) => {
+    const height=clamp(p.length,15,95,58)*IH/100,turns=Math.round(clamp(p.turns,3,22,12));
+    const amp=clamp(p.width,10,95,65)*IW/200,y0=Math.max(Y+2,Math.min(Y+IH-height-2,at.y-height/2));
+    const points=[],samples=turns*14;
+    for(let i=0;i<=samples;i++){
+      const t=i/samples;
+      points.push((i?'L':'M')+(at.x+Math.sin(t*Math.PI*2*turns)*amp).toFixed(2)+' '+(y0+t*height).toFixed(2));
+    }
+    const d=points.join(' ');
+    const grad=base+'Coil'+ident(p.id);
+    defs.push('<linearGradient id="'+grad+'" x1="0" y1="'+y0+'" x2="0" y2="'+(y0+height)+'" gradientUnits="userSpaceOnUse">'+
+      '<stop stop-color="#ff5c27"/><stop offset=".27" stop-color="#f45aa0"/><stop offset=".58" stop-color="#9557e4"/><stop offset="1" stop-color="#25baff"/></linearGradient>');
+    const running=p.flow_mode==='on'||(p.flow_mode!=='off'&&active(h,p.entity));
+    return '<g class="ss-tank-coil"'+(p.entity?' data-more="'+safe(p.entity)+'"':'')+' clip-path="url(#'+base+'WaterClip)">'+
+      '<path d="'+d+'" fill="none" stroke="#17243c" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>'+
+      '<path d="'+d+'" fill="none" stroke="url(#'+grad+')" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+
+      '<path d="'+d+'" fill="none" stroke="#f3f5ff" opacity=".35" stroke-width=".75" stroke-linejoin="round" stroke-linecap="round"/>'+
+      (running?'<path class="ss-tank-coil-flow" d="'+d+'" fill="none" stroke="#fff" stroke-width="1.3" stroke-dasharray="2 7" style="--ss-coil-speed:'+clamp(p.flow_speed,.35,5,1)+'s;animation-direction:'+(p.flow_direction==='reverse'?'reverse':'normal')+'"/>':'')+'</g>';
+  };
+  const plate = (p,at,base) => {
+    if(p.kind==='baffle_horizontal'){
+      const leak=clamp(p.permeability,0,1,.35),holes=leak>0 ? Array.from({length:7},(_,i)=>{
+        const cx=X+5+i*(IW-10)/6;
+        return '<ellipse cx="'+cx+'" cy="'+at.y+'" rx="'+(.65+leak*1.5)+'" ry="'+(.4+leak*.65)+'" fill="#122c4e" stroke="#b6cced" stroke-width=".32"/>';
+      }).join(''):'';
+      return '<g class="ss-tank-baffle" clip-path="url(#'+base+'WaterClip)"><ellipse cx="60" cy="'+at.y+'" rx="25" ry="4.1" fill="#476c9d" stroke="#bfd7f0" stroke-width=".9"/>'+
+        '<ellipse cx="60" cy="'+(at.y-1)+'" rx="24" ry="2.8" fill="#83a8d0" opacity=".55"/>'+holes+'</g>';
+    }
+    const x=at.x;
+    return '<g class="ss-tank-baffle" clip-path="url(#'+base+'WaterClip)"><path d="M'+x+' 15Q'+(x+3)+' 59 '+x+' 107L'+(x+3)+' 107Q'+(x+6)+' 58 '+(x+3)+' 15Z" fill="#536f99" stroke="#d4e8ff" stroke-width=".9"/>'+
+      '<path d="M'+(x+.9)+' 18Q'+(x+3.8)+' 59 '+(x+.9)+' 104" fill="none" stroke="#c9ddfa" opacity=".6" stroke-width="1"/></g>';
+  };
+  const innerTank = (p,n,h,base,defs) => {
+    const cx=point(p).x;
+    const w=clamp(p.width,20,72,45)*IW/100,ht=clamp(p.length,20,85,58)*IH/100;
+    const top=Math.max(Y+2,Math.min(Y+IH-ht-2,point(p).y-ht/2));
+    const x=Math.max(X+1,Math.min(X+IW-w-1,cx-w/2));
+    const own=(n.parts||[]).filter(q=>q.kind==='sensor'&&q.container==='inner');
+    const grad=base+'InnerTemp',clip=base+'InnerClip';
+    defs.push('<linearGradient id="'+grad+'" x1="0" y1="0" x2="0" y2="1">'+stops(own,h)+'</linearGradient>'+
+      '<clipPath id="'+clip+'"><rect x="'+x+'" y="'+top+'" width="'+w+'" height="'+ht+'" rx="'+(w*.38)+'"/></clipPath>');
+    return '<g class="ss-tank-inner" clip-path="url(#'+base+'WaterClip)"><rect x="'+x+'" y="'+top+'" width="'+w+'" height="'+ht+'" rx="'+(w*.38)+'" fill="url(#'+grad+')" stroke="#d8e7fa" stroke-width="1.15"/>'+
+      '<rect x="'+x+'" y="'+top+'" width="'+w+'" height="'+ht+'" rx="'+(w*.38)+'" fill="#e6f1ff" fill-opacity=".12"/>'+
+      '<path d="M'+(x+2.5)+' '+(top+7)+'v'+(ht-14)+'" stroke="#fff" stroke-width="2.2" stroke-opacity=".3"/>'+
+      '<path d="M'+(x+w-2.5)+' '+(top+7)+'v'+(ht-14)+'" stroke="#fff" stroke-width="1.3" stroke-opacity=".3"/></g>';
+  };
+  const render=(n,h) => {
+    const parts=Array.isArray(n.parts)?n.parts:[];
+    const base='sst'+ident(n.id),defs=[],barriers=boundaries(parts),zones=regions(barriers);
+    defs.push('<linearGradient id="'+base+'Steel" x1="0" y1="0" x2="1" y2="0">'+
+      '<stop stop-color="#607d9e"/><stop offset=".08" stop-color="#edf6ff"/><stop offset=".21" stop-color="#829cbe"/><stop offset=".47" stop-color="#d5e5f9"/><stop offset=".66" stop-color="#596f91"/><stop offset=".85" stop-color="#e4f0ff"/><stop offset="1" stop-color="#577190"/></linearGradient>'+
+      '<linearGradient id="'+base+'Gloss" x1="0" y1="0" x2="1" y2="0">'+
+      '<stop stop-color="#fff" stop-opacity=".3"/><stop offset=".18" stop-color="#fff" stop-opacity=".05"/><stop offset=".62" stop-color="#fff" stop-opacity=".02"/><stop offset="1" stop-color="#fff" stop-opacity=".25"/></linearGradient>'+
+      '<clipPath id="'+base+'WaterClip"><rect x="'+X+'" y="'+Y+'" width="'+IW+'" height="'+IH+'" rx="8"/></clipPath>');
+    const sensors=parts.filter(p=>p.kind==='sensor'&&p.container!=='inner');
+    const sealedH=barriers.horizontal.filter(b=>b.leak===0),sealedV=barriers.vertical.filter(b=>b.leak===0);
+    const xEdges=[X,...sealedV.map(v=>v.at),X+IW],yEdges=[Y,...sealedH.map(v=>v.at),Y+IH];
+    let water='';
+    for(let iy=1;iy<yEdges.length;iy++)for(let ix=1;ix<xEdges.length;ix++){
+      const x0=xEdges[ix-1],y0=yEdges[iy-1],x1=xEdges[ix],y1=yEdges[iy],id=base+'Field'+ix+'x'+iy;
+      const selected=sensors.filter(s=>{const p=point(s);return p.x>=x0-.01&&p.x<=x1+.01&&p.y>=y0-.01&&p.y<=y1+.01;});
+      // The gradient coordinates are global, keeping each temperature sensor anchored at its real height.
+      const values=selected.map(p=>({y:point(p).y,t:temperature(h,p.entity)})).filter(p=>p.t!==null).sort((a,b)=>a.y-b.y);
+      let points=values.length?[{y:Y,t:values[0].t},...values,{y:Y+IH,t:values[values.length-1].t}]:[];
+      defs.push('<linearGradient id="'+id+'" x1="0" y1="'+Y+'" x2="0" y2="'+(Y+IH)+'" gradientUnits="userSpaceOnUse">'+
+        (points.length?points.map(q=>'<stop offset="'+(100*(q.y-Y)/IH).toFixed(3)+'%" stop-color="'+color(q.t)+'"/>').join(''):
+          '<stop stop-color="#506780"/><stop offset="1" stop-color="#506780"/>')+'</linearGradient>');
+      if(x1>x0 && y1>y0)water+='<rect x="'+x0+'" y="'+y0+'" width="'+(x1-x0)+'" height="'+(y1-y0)+'" fill="url(#'+id+')"/>';
+    }
+    const inside=[];
+    // Perforated baffles transmit a configurable fraction of decorative heat halos.
+    const heaters=parts.filter(p=>p.kind==='heater');
+    for(const part of heaters)inside.push(heater(part,h,point(part),n,base,zones,barriers,defs));
+    for(const p of parts.filter(p=>p.kind==='coil'))inside.push(coil(p,h,point(p),base,defs));
+    const inner=parts.find(p=>p.kind==='inner_tank');
+    if(inner)inside.push(innerTank(inner,n,h,base,defs));
+    for(const part of parts.filter(p=>p.kind==='baffle_horizontal'||p.kind==='baffle_vertical'))inside.push(plate(part,point(part),base));
+    const badges=parts.filter(p=>p.kind==='sensor'||p.kind==='heater').map(p=>badge(p,h,point(p),p.kind,n.scale)).join('');
+    return '<g class="ss-modular-tank"><defs>'+defs.join('')+'</defs>'+
+      '<rect x="32" y="111" width="5" height="7" rx="1.3" fill="#839bb9"/>'+
+      '<rect x="83" y="111" width="5" height="7" rx="1.3" fill="#839bb9"/>'+
+      '<rect x="26" y="4" width="68" height="110" rx="12" fill="url(#'+base+'Steel)" stroke="#e6f2ff" stroke-width=".65"/>'+
+      '<rect x="31.5" y="10" width="57" height="100" rx="10" fill="#2b405c" stroke="#b2c8df" stroke-width=".45"/>'+
+      '<rect x="34" y="13.5" width="52" height="94" rx="9" fill="#091e38"/>'+
+      '<g clip-path="url(#'+base+'WaterClip)">'+water+
+      '<rect x="'+X+'" y="'+Y+'" width="'+IW+'" height="'+IH+'" fill="url(#'+base+'Gloss)" opacity=".52"/></g>'+
+      inside.join('')+
+      '<rect x="34" y="13.5" width="52" height="94" rx="9" fill="none" stroke="#d0eaff" stroke-width=".9" stroke-opacity=".57"/>'+
+      '<path d="M29 15Q26 40 29 100" stroke="#fff" opacity=".3" stroke-width="2.5" fill="none"/>'+
+      '<path d="M91 15Q94 40 91 100" stroke="#fff" opacity=".15" stroke-width="2.5" fill="none"/>'+
+      badges+'</g>';
+  };
+  const styles='<style>@keyframes ssTankFlow{to{stroke-dashoffset:-36}}'+
+    '.ss-tank-coil-flow{animation:ssTankFlow var(--ss-coil-speed,1s) linear infinite}'+
+    '.ss-modular-tank [data-more]{cursor:pointer}</style>';
+  return {render,styles,temperature,color,regions,boundaries,permeability};
+})();
+
 /* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
  * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
  * No external dependencies or service calls in the designer.
@@ -1220,17 +1431,17 @@ const HASSStudioGraphics = (() => {
   const types=['boiler','tank','solar','pump','valve','sensor','pipe'];
   const graphics={
     boiler:['wood','pellet','gas','oil','electric','heatpump'],
-    tank:['stratified','buffer','coil','dual_coil','hygiene','combi'],
+    tank:['modular','stratified','buffer','coil','dual_coil','hygiene','combi'],
     solar:['flat','tube'],pump:['circulation','inline'],
     valve:['two_way','three_way'],sensor:['temperature','pressure']
   };
   const variants={
-    pl:{wood:'Drewno',pellet:'Pellet',gas:'Gaz',oil:'Olej',electric:'Elektryczny',heatpump:'Pompa ciepła',
+    pl:{modular:'Modułowy',wood:'Drewno',pellet:'Pellet',gas:'Gaz',oil:'Olej',electric:'Elektryczny',heatpump:'Pompa ciepła',
       stratified:'Warstwowy',buffer:'Bufor',coil:'Jedna wężownica',dual_coil:'Dwie wężownice',
       hygiene:'Higieniczny',combi:'Kombi',flat:'Płaskie',tube:'Próżniowe',
       circulation:'Obiegowa',inline:'Przelotowa',two_way:'Dwudrogowy',three_way:'Trójdrogowy',
       temperature:'Temperatura',pressure:'Ciśnienie'},
-    en:{wood:'Wood',pellet:'Pellet',gas:'Gas',oil:'Oil',electric:'Electric',heatpump:'Heat pump',
+    en:{modular:'Modular',wood:'Wood',pellet:'Pellet',gas:'Gas',oil:'Oil',electric:'Electric',heatpump:'Heat pump',
       stratified:'Stratified',buffer:'Buffer',coil:'Single coil',dual_coil:'Dual coil',
       hygiene:'Hygienic',combi:'Combi',flat:'Flat plate',tube:'Vacuum tubes',
       circulation:'Circulation',inline:'Inline',two_way:'Two-way',three_way:'Three-way',
@@ -1274,6 +1485,7 @@ const HASSStudioGraphics = (() => {
       link:'Assign entity',addEntity:'Add entity',label:'Description',default:'Default',
       zoom:'Zoom',noValues:'No data',editor:'System diagram designer'}
   };
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankGlow:'Efekt cieplny grzałek (%)',heaterMode:'Stan grzałki',heaterPower:'Intensywność (%)',heaterWatts:'Encja mocy (W/kW)',partX:'Pozycja pozioma (%)',partLength:'Wysokość / długość (%)',partWidth:'Szerokość (%)',partTurns:'Liczba zwojów',permeability:'Przepuszczalność 0–1',partContainer:'Strefa czujnika',partFlowMode:'Przepływ wężownicy',baffle_horizontal:'Przegroda pozioma',baffle_vertical:'Przegroda pionowa',inner_tank:'Zbiornik wewnętrzny'}:{tankGlow:'Heater visual glow (%)',heaterMode:'Heater status',heaterPower:'Glow intensity (%)',heaterWatts:'Power entity (W/kW)',partX:'Horizontal position (%)',partLength:'Height / length (%)',partWidth:'Width (%)',partTurns:'Coil turns',permeability:'Permeability 0–1',partContainer:'Sensor compartment',partFlowMode:'Coil flow',baffle_horizontal:'Horizontal baffle',baffle_vertical:'Vertical baffle',inner_tank:'Inner tank'});
   const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
   const icons={boiler:'♨',tank:'▤',solar:'☼',pump:'◉',valve:'◇',sensor:'♧',pipe:'〰'};
   const pickLang=(config,hass)=>{
@@ -1286,13 +1498,22 @@ const HASSStudioGraphics = (() => {
   const freshId=(prefix)=>prefix+Math.random().toString(36).slice(2,10);
   const normalizeItem=(item)=>({
     id:String(item.id||freshId('i')).slice(0,32),
-    kind:['sensor','heater','coil'].includes(item.kind)?item.kind:'sensor',
+    kind:['sensor','heater','coil','baffle_horizontal','baffle_vertical','inner_tank'].includes(item.kind)?item.kind:'sensor',
     variant:['warmwasser','compact','extended'].includes(item.variant)?item.variant:'warmwasser',
     label:String(item.label||'').slice(0,64),
     side:['left','right','inside'].includes(item.side)?item.side:'left',
     height:clamp(item.height,0,100,50),
     display_scale:clamp(item.display_scale,0.5,2,1),
-    entity:validEntity(item.entity)?item.entity:''
+    entity:validEntity(item.entity)?item.entity:'',
+    power_entity:validEntity(item.power_entity)?item.power_entity:'',
+    x:clamp(item.x,0,100,50),length:clamp(item.length,15,95,58),
+    width:clamp(item.width,10,95,60),turns:clamp(item.turns,3,22,12),
+    power:clamp(item.power,0,100,75),mode:['auto','on','off'].includes(item.mode)?item.mode:'auto',
+    flow_mode:['auto','on','off'].includes(item.flow_mode)?item.flow_mode:'auto',
+    flow_direction:item.flow_direction==='reverse'?'reverse':'forward',
+    flow_speed:clamp(item.flow_speed,.35,5,1),
+    container:item.container==='inner'?'inner':'main',
+    permeability:clamp(item.permeability,0,1,.35)
   });
   const normalizeAccessory=(item)=>({
     id:String(item.id||freshId('a')).slice(0,32),
@@ -1323,7 +1544,7 @@ const HASSStudioGraphics = (() => {
       entity:validEntity(v.entity)?v.entity:'',
       entities:(Array.isArray(v.entities)?v.entities:[]).slice(0,20).map(e=>({
         entity:validEntity(e.entity)?e.entity:'',label:String(e.label||'').slice(0,64)})),
-      parts:(Array.isArray(v.parts)?v.parts:[]).slice(0,20).map(normalizeItem)
+      parts:(Array.isArray(v.parts)?v.parts:[]).slice(0,40).map(normalizeItem)
     }));
     const pipes=(Array.isArray(source.pipes)?source.pipes:[]).slice(0,MAX_PIPES).map(v=>({
       id:String(v.id||freshId('p')).slice(0,32),
@@ -1432,7 +1653,7 @@ const HASSStudioGraphics = (() => {
   };
   const canvasSvg=(config,hass,editable=false,selected=null)=>{
     const data=normalized(config),language=pickLang(config,hass),L=words[language];
-    const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser')
+    const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !(node.type==='tank'&&node.variant==='modular'))
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
     const pipes=data.pipes.map(pipe=>{
       const d=pipePath(pipe.points),enabled=pipe.flow_mode==='on'||(pipe.flow_mode==='auto'&&HASSStudioGraphics.on(hass,pipe.flow_entity));
@@ -1462,14 +1683,14 @@ const HASSStudioGraphics = (() => {
       const outline=tallBoiler?{x:12,y:-105,width:110,height:318,labelY:230,readingY:245}:
         {x:4,y:3,width:112,height:113,labelY:130,readingY:145};
       return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale+')">'+
-        (node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
+        (node.type==='tank'&&node.variant==='modular'?HASSStudioTank.render(node,hass):node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
         (editable&&active?'<rect class="ss-selection" x="'+outline.x+'" y="'+outline.y+'" width="'+outline.width+'" height="'+outline.height+'" rx="8" fill="none" stroke="#52bfff" stroke-dasharray="5 4" stroke-width="1.6" pointer-events="none"/>':'')+
         '<text x="60" y="'+outline.labelY+'" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
         (reading&&!tallBoiler?'<text x="60" y="'+outline.readingY+'" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
         '</g>';
     }).join('');
     return '<svg class="ss-svg'+(editable?' ss-svg-editor':'')+'" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
-      HASSStudioGraphics.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
+      HASSStudioGraphics.styles+HASSStudioTank.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
       '<rect width="'+W+'" height="'+H+'" rx="10" fill="var(--secondary-background-color,#17222d)"/>'+
       '<g class="ss-devices">'+nodes+'</g><g class="ss-pipe-layer" stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-pipe-handles">'+handles+'</g></svg>';
   };
@@ -1619,10 +1840,10 @@ const HASSStudioGraphics = (() => {
       if(selection.type==='node'){
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
-        const previewBox=obj.visual==='warmwasser'&&obj.type==='boiler'?'0 -110 130 350':'0 0 120 120';
+        const previewBox=obj.visual==='warmwasser'&&obj.type==='boiler'?'0 -110 130 350':'0 0 120 140';
         markup+='<div class="ss-preview"><svg viewBox="'+previewBox+'" width="120" height="120">'+
-          HASSStudioGraphics.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
-          (obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,this._hass):variantShape(obj))+'</svg></div>';
+          HASSStudioGraphics.styles+HASSStudioTank.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
+          (obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,this._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,this._hass):variantShape(obj))+'</svg></div>';
         markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
         markup+='<div class="ss-row">'+field('X','x',obj.x,'number')+field('Y','y',obj.y,'number')+'</div>';
         markup+=field(L.entity,'entity',obj.entity,'search',null,'list="ss-entity-list"');
@@ -1645,23 +1866,31 @@ const HASSStudioGraphics = (() => {
             field(L.label,'multiLabel',en.label,'text',null,'data-index="'+index+'"')).join('')+
           '<button type="button" data-action="entity">'+esc(L.addEntity)+'</button></section>';
         if(obj.type==='tank'||obj.type==='solar'){
+          const isModular=obj.type==='tank'&&obj.variant==='modular';
           markup+='<section><h4>'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'</h4'+
           obj.parts.map((item,index)=>'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+'</strong>'+
             '<button type="button" data-delete-part="'+index+'">×</button></div>'+
             (obj.type==='solar'?'':field(L.graphic,'partKind',item.kind,'text',
-              [['sensor',L.sensor],['heater',L.heater],['coil',L.coil]],'data-index="'+index+'"'))+
+              (isModular?[['sensor',L.sensor],['heater',L.heater],['coil',L.coil],['baffle_horizontal',L.baffle_horizontal],['baffle_vertical',L.baffle_vertical],['inner_tank',L.inner_tank]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]]),'data-index="'+index+'"'))+
             field(L.visual,'partVariant',item.variant,'text',
               [['warmwasser','Warmwasser'],['compact',L.compact||'Compact'],['extended',L.extended||'Extended']],
               'data-index="'+index+'"')+
             field(L.side,'partSide',item.side,'text',sides,'data-index="'+index+'"')+
+            (isModular?field(L.partX,'partX',item.x,'range',null,'min="0" max="100" data-index="'+index+'"'):'')+
             field(L.height,'partHeight',item.height,'number',null,
               'min="0" max="100" data-index="'+index+'"')+
             field(L.label,'partLabel',item.label,'text',null,'data-index="'+index+'"')+
+            (isModular && item.kind==='sensor'?field(L.partContainer,'partContainer',item.container,'text', [['main',L.tank],['inner',L.inner_tank]],'data-index="'+index+'"'):'')+
+            (isModular && item.kind==='heater'?field(L.heaterMode,'partMode',item.mode,'text',[['auto',L.flowAuto],['on',L.flowOn],['off',L.flowOff]],'data-index="'+index+'"')+field(L.heaterPower,'partPower',item.power,'range',null,'min="0" max="100" data-index="'+index+'"')+field(L.heaterWatts,'partPowerEntity',item.power_entity,'search',null,'list="ss-entity-list" data-index="'+index+'"'):'')+
+            (isModular && ['coil','inner_tank'].includes(item.kind)?field(L.partLength,'partLength',item.length,'range',null,'min="15" max="95" data-index="'+index+'"'):'')+
+            (isModular && ['heater','coil','inner_tank'].includes(item.kind)?field(L.partWidth,'partWidth',item.width,'range',null,'min="10" max="95" data-index="'+index+'"'):'')+
+            (isModular && item.kind==='coil'?field(L.partTurns,'partTurns',item.turns,'number',null,'min="3" max="22" data-index="'+index+'"')+field(L.partFlowMode,'partFlowMode',item.flow_mode,'text',[['auto',L.flowAuto],['on',L.flowOn],['off',L.flowOff]],'data-index="'+index+'"')+field(L.flowDirection,'partFlowDirection',item.flow_direction,'text',[['forward',L.forward],['reverse',L.reverse]],'data-index="'+index+'"')+field(L.flowSpeed,'partFlowSpeed',item.flow_speed,'number',null,'min="0.35" max="5" step="0.1" data-index="'+index+'"'):'')+
+            (isModular && item.kind.startsWith('baffle_')?field(L.permeability,'partPermeability',item.permeability,'range',null,'min="0" max="1" step="0.05" data-index="'+index+'"'):'')+
             (item.kind==='sensor'?field(L.sensorScale,'partDisplayScale',item.display_scale,'range',null,
               'min="0.5" max="2" step="0.1" data-index="'+index+'"'):'')+
             '<label>'+esc(L.entity)+entityField(item.entity,'partEntity',index)+'</label>'
           ).join('')+
-          '<div class="ss-row">'+(obj.type==='solar'?[['sensor',L.sensor]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]]).map(v=>
+          '<div class="ss-row">'+(obj.type==='solar'?[['sensor',L.sensor]]:(isModular?[['sensor',L.sensor],['heater',L.heater],['coil',L.coil],['baffle_horizontal',L.baffle_horizontal],['baffle_vertical',L.baffle_vertical],['inner_tank',L.inner_tank]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]])).map(v=>
             '<button type="button" data-add-part="'+v[0]+'">+ '+esc(v[1])+'</button>').join('')+'</div></section>';
         }
       }else{
@@ -1833,13 +2062,19 @@ const HASSStudioGraphics = (() => {
       else if(key==='multiLabel'&&obj.entities[index])obj.entities[index].label=val.slice(0,64);
       else if(key.startsWith('part')&&obj.parts?.[index]){
         const part=obj.parts[index];
-        if(key==='partKind')part.kind=['sensor','heater','coil'].includes(val)?val:part.kind;
+        if(key==='partKind')part.kind=['sensor','heater','coil','baffle_horizontal','baffle_vertical','inner_tank'].includes(val)?val:part.kind;
         if(key==='partVariant')part.variant=['warmwasser','compact','extended'].includes(val)?val:part.variant;
         if(key==='partSide')part.side=['left','right','inside'].includes(val)?val:part.side;
         if(key==='partHeight')part.height=clamp(val,0,100,part.height);
         if(key==='partLabel')part.label=val.slice(0,64);
         if(key==='partDisplayScale')part.display_scale=clamp(val,0.5,2,part.display_scale);
         if(key==='partEntity')part.entity=validEntity(val)?val:'';
+        if(key==='partPowerEntity')part.power_entity=validEntity(val)?val:'';
+        if(key==='partContainer')part.container=val==='inner'?'inner':'main';
+        if(key==='partMode')part.mode=['auto','on','off'].includes(val)?val:'auto';
+        if(key==='partFlowMode')part.flow_mode=['auto','on','off'].includes(val)?val:'auto';
+        if(key==='partFlowDirection')part.flow_direction=val==='reverse'?'reverse':'forward';
+        for(const [fieldName,min,max] of [['X',0,100],['Length',15,95],['Width',10,95],['Turns',3,22],['Power',0,100],['Permeability',0,1],['FlowSpeed',.35,5]])if(key==='part'+fieldName){const property=fieldName==='FlowSpeed'?'flow_speed':fieldName==='Permeability'?'permeability':fieldName.toLowerCase();part[property]=clamp(val,min,max,part[property]);}
       }else if(key==='accessoryPos'&&obj.accessories[index])
         obj.accessories[index].position=clamp(val,0,100,50);
       else if(key==='accessoryEntity'&&obj.accessories[index])
@@ -1857,12 +2092,12 @@ const HASSStudioGraphics = (() => {
       else if(button.hasAttribute('data-delete-accessory'))obj.accessories.splice(index,1);
       else if(button.hasAttribute('data-delete-entity'))obj.entities.splice(index,1);
       else if(button.dataset.addPart){
-        if(obj.parts.length>=20)return;
+        if(obj.parts.length>=40)return;
         const kind=obj.type==='solar'?'sensor':button.dataset.addPart;
         const sensorCount=obj.parts.filter(part=>part.kind==='sensor').length+1;
         obj.parts.push({id:freshId('i'),kind,label:obj.type==='solar'?'Kolektor':kind==='sensor'?'T'+sensorCount:'',
           side:obj.type==='solar'?'right':'left',height:obj.type==='solar'?80:50,
-          display_scale:1,variant:'warmwasser',entity:''});
+          display_scale:1,variant:'warmwasser',entity:'',x:50,length:58,width:60,turns:12,power:75,mode:'auto',flow_mode:'auto',flow_direction:'forward',flow_speed:1,permeability:kind==='baffle_horizontal'?.35:0,container:'main',power_entity:''});
       }else if(button.dataset.addAccessory){
         if(obj.accessories.length>=20)return;
         obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,label:'',position:50,entity:''});
