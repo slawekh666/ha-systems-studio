@@ -193,7 +193,7 @@ assert.match(solid.render({...modern,width_scale:100,height_scale:-10},haModern)
 assert.match(src,/field\(L\.scale,'scale',obj\.scale/);
 assert.match(src,/field\(L\.solidWidth\+'\s*\('\+Math\.round\(obj\.width_scale\*100\)/);
 assert.match(src,/field\(L\.solidHeight\+'\s*\('\+Math\.round\(obj\.height_scale\*100\)/);
-assert.match(src,/obj\.type==='boiler'&&obj\.variant==='solid_fuel'\)\{\n\s*\/\/ Independent from/);
+assert.match(src,/obj\.type==='boiler'&&\['solid_fuel','pellet_modern'\]\.includes\(obj\.variant\)\)\{\n\s*\/\/ Independent from/);
 assert.match(src,/const outline=solidBoiler\?/);
 assert.match(src,/const previewBox=previewSolid\?/);
 console.log('OK: independent solid-fuel dimensions, proportional scale retained, responsive outline and preview.');
