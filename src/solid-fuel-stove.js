@@ -71,8 +71,12 @@ const HASSStudioSolidFuel=(()=>{
       .replace('__COMBUSTION__',combustion(fuel,mode,intensity))
       .replace(/(\bid=")([^"]+)(")/g,(_,a,id,z)=>a+prefix+id+z)
       .replace(/url\(#([^)]+)\)/g,(_,key)=>'url(#'+prefix+key+')');
+    const sx=clamp(node.width_scale,.5,2.4,1),sy=clamp(node.height_scale,.5,2.4,1);
+    // Independent width/height are applied only to this SVG. The outer node's
+    // proportional scale still multiplies both axes in the Custom canvas.
     return '<g class="ss-solid-boiler" data-combustion="'+mode+'">'+
-      '<g transform="translate(22 -104) scale(.157 .258) translate(-232 -84)">'+svg+'</g></g>';
+      '<g class="ss-solid-boiler-dimensions" transform="translate(66 53) scale('+sx+' '+sy+') translate(-66 -53)">'+
+      '<g transform="translate(22 -104) scale(.157 .258) translate(-232 -84)">'+svg+'</g></g></g>';
   };
   const styles='<style>@media(prefers-reduced-motion:reduce){.ss-solid-boiler .ss-fire,.ss-solid-boiler .ss-embers{animation:none!important}}</style>';
   return {render,styles,resolveState,combustion,temperature};
