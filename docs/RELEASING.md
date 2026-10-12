@@ -1,6 +1,6 @@
 # Versioning and distribution (HACS dashboard card)
 
-The authoritative development version is `VERSION` (currently **0.4.12-dev**). `scripts/build.py` embeds it into the distributed `dist/ha-systems-studio.js`. `scripts/check.py` checks that the package and docs agree with `VERSION`; `node scripts/test_studio.js` covers selected rendering and state logic. The designer header shows the embedded code version.
+The authoritative development version is `VERSION` (currently **0.4.13-dev**). `scripts/build.py` embeds it into the distributed `dist/ha-systems-studio.js`. `scripts/check.py` checks that the package and docs agree with `VERSION`; `node scripts/test_studio.js` covers selected rendering and state logic. The designer header shows the embedded code version.
 
 The GitHub `main` mirror and GitHub Releases serve **different purposes**:
 

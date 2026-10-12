@@ -86,10 +86,11 @@ def build() -> None:
     pellet = ROOT / 'src' / 'pellet-stove.js'
     heatpump = ROOT / 'src' / 'heat-pump-stove.js'
     gas = ROOT / 'src' / 'gas-boiler.js'
-    for f in (library, tank, solid, pellet, heatpump, gas, extra):
+    electric = ROOT / 'src' / 'electric-boiler.js'
+    for f in (library, tank, solid, pellet, heatpump, gas, electric, extra):
         if not f.is_file():
             raise SystemExit(f'Missing {f.relative_to(ROOT)}')
-    DEST.write_text(header + transformed + '\n\n' + library.read_text(encoding='utf-8') + '\n\n' + tank.read_text(encoding='utf-8') + '\n\n' + solid.read_text(encoding='utf-8') + '\n\n' + pellet.read_text(encoding='utf-8') + '\n\n' + heatpump.read_text(encoding='utf-8') + '\n\n' + gas.read_text(encoding='utf-8') + '\n\n' + extra.read_text(encoding='utf-8'), encoding='utf-8')
+    DEST.write_text(header + transformed + '\n\n' + library.read_text(encoding='utf-8') + '\n\n' + tank.read_text(encoding='utf-8') + '\n\n' + solid.read_text(encoding='utf-8') + '\n\n' + pellet.read_text(encoding='utf-8') + '\n\n' + heatpump.read_text(encoding='utf-8') + '\n\n' + gas.read_text(encoding='utf-8') + '\n\n' + electric.read_text(encoding='utf-8') + '\n\n' + extra.read_text(encoding='utf-8'), encoding='utf-8')
     print(f'Generated {DEST.relative_to(ROOT)} ({DEST.stat().st_size} bytes)')
 
 

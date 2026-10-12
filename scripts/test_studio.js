@@ -287,3 +287,31 @@ assert.doesNotMatch(gasSvg,/<script\b|onload=|onclick=|<foreignObject/i);
 assert.match(src,/HASSStudioGasBoiler\.render\(node,hass\)/);
 assert.match(src,/data-add-preset="gas_modern"/);
 console.log('OK: gas boiler modulation, temperature, SVG isolation and resizing.');
+
+// Modern electric: actual power, water temperature and 260-degree load ring.
+const electricSrc=fs.readFileSync('src/electric-boiler.js','utf8');
+const electric=vm.runInNewContext(electricSrc+'\nHASSStudioElectricBoiler;',{});
+const electricNode={id:'electric1',type:'boiler',variant:'electric_modern',
+  electric_power_entity:'sensor.watts',entity:'sensor.water',
+  electric_max_kw:8,electric_glow:60,width_scale:1,height_scale:1};
+const electricHass={states:{
+  'sensor.watts':{state:'3200',attributes:{unit_of_measurement:'W'}},
+  'sensor.water':{state:'52',attributes:{unit_of_measurement:'°C'}},
+  'sensor.percent':{state:'25',attributes:{unit_of_measurement:'%'}}}};
+assert.equal(electric.power(electricHass,'sensor.watts'),3.2);
+assert.equal(electric.load(electricHass,electricNode),40);
+assert.equal(electric.load(electricHass,{...electricNode,electric_load_entity:'sensor.percent'}),25);
+assert.equal(electric.temperature(electricHass,'sensor.water'),52);
+assert.equal(electric.power({states:{'sensor.watts':{state:'12',attributes:{unit_of_measurement:'kWh'}}}},'sensor.watts'),null);
+assert.equal(electric.load(electricHass,{...electricNode,electric_power_entity:'sensor.unknown'}),null);
+const elSvg=electric.render(electricNode,electricHass);
+assert.match(elSvg,/3\.20 kW/);
+assert.match(elSvg,/52\.0°C/);
+assert.match(elSvg,/data-load="40\.0"/);
+assert.match(elSvg,/id="sselectricelectric1powerRing"/);
+assert.match(elSvg,/stroke-dasharray="281\.35 389\.56"/);
+assert.match(electric.render({...electricNode,electric_power_entity:'sensor.missing'},electricHass),/data-load="unknown" data-power="unknown"/);
+assert.match(electric.render({...electricNode,width_scale:1.7,height_scale:.8},electricHass),/scale\(1\.7 0\.8\)/);
+assert.match(src,/HASSStudioElectricBoiler\.render\(node,hass\)/);
+assert.match(src,/data-add-preset="electric_modern"/);
+console.log('OK: modern electric boiler, HA power/load/temp, ring and resizing.');

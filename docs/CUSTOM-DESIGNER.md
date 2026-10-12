@@ -1,4 +1,4 @@
-# Custom Designer — development status (0.4.12-dev)
+# Custom Designer — development status (0.4.13-dev)
 
 The custom designer is on `main` and remains experimental. It is built on the original Warmwasser Schema Card; automatic Warmwasser rendering remains available.
 
@@ -36,6 +36,10 @@ The `heatpump_modern` variant uses the uploaded heat pump SVG. Power supports W 
 ## Modern gas boiler
 
 `gas_modern` variant uses the uploaded gas boiler SVG, including the decorative blue flame and four modulation bars. HA temperature is from the main entity; the optional modulation entity accepts % or numeric percentages and drives the blue display flame height and indicator bars. An optional burner state entity disables the flame when off. Missing/unavailable modulation is not fabricated. `gas_draw_entity` is **burner modulation, not measured gas volume flow**. The shared Scale and independent Width/Height controls remain available; no HA services are called. Browser visual acceptance remains required.
+
+## Modern electric boiler
+
+`electric_modern` is a separate variant from Warmwasser `electric`. The attached SVG is rendered with live HA power (W / kW), boiler water temperature, and a 260° circular load gauge around the knob. Percentage is optional from an HA `%` entity or computed from real power / configurable rated power (default 8 kW). Invalid and unavailable readings remain unknown. No control actions occur. Global Scale, independent Width and Height are available. Browser validation is required.
 
 ## Limitations and test requirements
 
