@@ -4,7 +4,7 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 ## Current status
 
-**0.4.10-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
+**0.4.11-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
 
 **Important:** the card is still under Home Assistant browser acceptance testing. CI checks packaging, JavaScript syntax and selected logic, but cannot verify final SVG appearance and pointer behavior in HA.
 
@@ -18,6 +18,8 @@ The Custom designer now offers a **Modular tank** built from one SVG shell. It s
 The modern solid-fuel boiler has independent **Width** and **Height** multipliers (50–240%) alongside the unchanged proportional **Scale** slider. These resize the SVG body, display and furnace; the selection outline, preview and caption follow the dimensions. This is limited to the modern wood/coal variant and does not modify other graphics.
 
 **Modern pellet boiler:** based on the supplied clean pellet stove SVG v1 with attached right-hand hopper and feed drive. It is a distinct `pellet_modern` variant and library preset, retaining the existing Warmwasser `pellet` variant. It shares the modern solid-fuel boiler's state logic and Warmwasser flickering flame/ember SVG classes, with pellet bed (instead of logs/coal), temperature display from HA, and the same Scale / Width / Height controls. States may be previewed manually or driven by a combustion entity or temperature thresholds. This renderer never issues HA service calls. Browser-based visual acceptance still required.
+
+**Modern heat pump:** new SVG from the uploaded heat-pump HTML, HA power entity (W/kW), fan speed entity (%/RPM), configurable maximum RPM, and Scale/Width/Height. Missing data is shown as unavailable; an unknown or stopped fan does not rotate. Browser validation required.
 
 ## Local build in VS Code + WSL
 

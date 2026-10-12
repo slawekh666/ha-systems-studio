@@ -193,10 +193,10 @@ assert.match(solid.render({...modern,width_scale:100,height_scale:-10},haModern)
 assert.match(src,/field\(L\.scale,'scale',obj\.scale/);
 assert.match(src,/field\(L\.solidWidth\+'\s*\('\+Math\.round\(obj\.width_scale\*100\)/);
 assert.match(src,/field\(L\.solidHeight\+'\s*\('\+Math\.round\(obj\.height_scale\*100\)/);
-assert.match(src,/obj\.type==='boiler'&&\['solid_fuel','pellet_modern'\]\.includes\(obj\.variant\)\)\{\n\s*\/\/ Independent from/);
-assert.match(src,/const outline=modernPellet\?HASSStudioPellet\.geometry\(node\):/);
+assert.match(src,/obj\.type==='boiler'&&\['solid_fuel','pellet_modern','heatpump_modern'\]\.includes\(obj\.variant\)\)\{\n\s*\/\/ Independent from/);
+assert.match(src,/const outline=modernHP\?HASSStudioHeatPump\.geometry\(node\):modernPellet\?HASSStudioPellet\.geometry\(node\):/);
 assert.match(src,/solidBoiler\?\{x:66/);
-assert.match(src,/const previewBox=previewPellet\?/);
+assert.match(src,/const previewBox=previewHP\?/);
 assert.match(src,/previewSolid\?\(\(66/);
 console.log('OK: independent solid-fuel dimensions, proportional scale retained, responsive outline and preview.');
 
@@ -240,8 +240,25 @@ assert.equal(pellet.geometry(pelletNode).centerX,97);
 assert.match(src,/pellet_modern:'Pellet \(nowoczesny\)'/);
 assert.match(src,/HASSStudioPellet\.render\(node,hass\)/);
 assert.match(src,/data-add-preset="pellet_modern"/);
-assert.match(src,/const outline=modernPellet\?HASSStudioPellet\.geometry\(node\)/);
-assert.match(src,/const previewBox=previewPellet\?/);
+assert.match(src,/modernPellet\?HASSStudioPellet\.geometry\(node\)/);
+assert.match(src,/previewPellet\?/);
 assert.match(src,/field\(L\.solidState,'solid_state'/);
 assert.match(src,/field\(L\.solidGlow,'solid_glow'/);
 console.log('OK: modern pellet renderer, Warmwasser flames/embers, shared state, HA readings, geometry.');
+
+// Heat pump: HA watts/kilowatts, fan RPM or %, missing values and stop.
+const heatPumpSource=fs.readFileSync('src/heat-pump-stove.js','utf8');
+const hp=vm.runInNewContext(heatPumpSource+'\nHASSStudioHeatPump;',{});
+const hpNode={id:'hp1',type:'boiler',variant:'heatpump_modern',hp_power_entity:'sensor.power',hp_fan_entity:'sensor.fan',hp_max_rpm:1800,hp_glow:65,width_scale:1,height_scale:1};
+const hpState={states:{'sensor.power':{state:'1800',attributes:{unit_of_measurement:'W'}},'sensor.fan':{state:'900',attributes:{unit_of_measurement:'rpm'}}}};
+assert.equal(hp.power(hpState,'sensor.power'),1.8);
+assert.equal(hp.fan(hpState,'sensor.fan',1800).percent,50);
+assert.equal(hp.power({states:{'sensor.power':{state:'3',attributes:{unit_of_measurement:'kWh'}}}},'sensor.power'),null);
+assert.equal(hp.power({states:{'sensor.power':{state:'1.8',attributes:{unit_of_measurement:'kW'}}}},'sensor.power'),1.8);
+assert.equal(hp.fan({states:{'sensor.fan':{state:'0',attributes:{unit_of_measurement:'%'}}}},'sensor.fan').percent,0);
+const hpSvg=hp.render(hpNode,hpState);
+assert.match(hpSvg,/1\.80 kW/);assert.match(hpSvg,/900 RPM/);assert.match(hpSvg,/class="ss-hp-rotating"/);
+assert.match(hpSvg,/class="ss-modern-heat-pump"/);assert.match(hpSvg,/sshphp1bodyGrad/);
+assert.match(hp.render({...hpNode,hp_fan_entity:'sensor.absent'},hpState),/class="ss-hp-still"/);
+assert.match(src,/HASSStudioHeatPump\.render\(node,hass\)/);
+console.log('OK: modern heat pump power and fan state.');
