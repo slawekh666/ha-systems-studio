@@ -1,6 +1,6 @@
 /* Basic SVG and logic regression tests; browser integration remains for HA. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const src=fs.readFileSync('src/studio-custom.js','utf8');
+const src=fs.readFileSync('src/studio-custom.js','utf8')+'\n'+fs.readFileSync('src/studio-layout.js','utf8');
 const haCore=fs.readFileSync('src/ha-state.js','utf8')+'\n'+fs.readFileSync('src/animation-state.js','utf8')+'\n';
 // Device registry: saved layout identifiers and ordering are stable.
 const registrySrc=fs.readFileSync('src/device-registry.js','utf8');
