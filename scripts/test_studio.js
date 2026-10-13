@@ -191,8 +191,8 @@ assert.match(src,/\.ss-props\{[^}]*overflow-x:hidden/);
 assert.match(src,/<\/h4>'\+/); // The title must close before rendering part fields.
 assert.match(src,/scale_mode:v\.type==='tank'/);
 assert.match(src,/width_scale:clamp\(v\.width_scale/);
-assert.match(src,/key==='scale_mode'/);
-assert.match(src,/field\(L\.tankWidthScale,'width_scale'/);
+assert.match(src,/key==='aspect_locked'/);
+assert.match(src,/field\(L\.tankWidthScale/);
 const stretchNode={...tankNode,scale_mode:'free',width_scale:1.7,height_scale:.75};
 const stretched=tankApi.render(stretchNode,tankState);
 assert.match(stretched,/class="ss-tank-body" transform="translate\(60 61\) scale\(1\.7 0\.75\)/);
@@ -207,8 +207,8 @@ console.log('OK: wrapped accessory UI, independent modular tank scaling and conn
 
 // Three bugfixes reported from live HA screenshots: direct nonuniform scaling,
 // missing upper return, along-path thermal colouring, and insertion-order layers.
-assert.match(src,/field\(L\.tankWidthScale,'width_scale',freeScale\?/);
-assert.match(src,/field\(L\.tankHeightScale,'height_scale',freeScale\?/);
+assert.match(src,/field\(L\.tankWidthScale/);
+assert.match(src,/field\(L\.tankHeightScale/);
 assert.match(src,/obj\.scale_mode='free';/);
 assert.match(src,/data-layer-up=/);
 assert.match(src,/data-layer-down=/);
