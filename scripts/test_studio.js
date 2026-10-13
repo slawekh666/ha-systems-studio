@@ -1,6 +1,6 @@
 /* Basic SVG and logic regression tests; browser integration remains for HA. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const src=fs.readFileSync('src/studio-custom.js','utf8')+'\n'+fs.readFileSync('src/studio-layout.js','utf8');
+const src=fs.readFileSync('src/studio-custom.js','utf8')+'\n'+fs.readFileSync('src/studio-layout.js','utf8')+'\n'+fs.readFileSync('src/studio-inspector.js','utf8');
 const haCore=fs.readFileSync('src/ha-state.js','utf8')+'\n'+fs.readFileSync('src/animation-state.js','utf8')+'\n';
 // Device registry: saved layout identifiers and ordering are stable.
 const registrySrc=fs.readFileSync('src/device-registry.js','utf8');
@@ -26,6 +26,8 @@ assert(src.includes('registry.normalizeVariant(v.type,v.variant)'));
 assert(src.includes('registry.variantOptions(node.type,pickLang('));
 console.log('OK: device catalog and existing layout variants.');
 
+const inspectSrc=fs.readFileSync('src/studio-inspector.js','utf8');
+assert(inspectSrc.includes('const renderProps=()=>{') && src.includes('HASSStudioEditorInspector.create({'));
 const graphics=fs.readFileSync('src/warmwasser-shapes.js','utf8');
 const api=vm.runInNewContext(graphics+'\nHASSStudioGraphics;', {esc:s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')});
 const state=map=>({states:Object.fromEntries(Object.entries(map).map(([id,v])=>[id,{state:String(v)}]))});
