@@ -74,7 +74,7 @@ const drawInspector=inspector.create({editor:{_config:{},_hass:{states:{}}},
     (row[0]===selected?' selected':'')+'>'+row[1]+'</option>').join(''),
   registry,pickLang:()=> 'pl',get:()=>({nodes:[sampleTank],pipes:[]}),
   selectedObject:()=>sampleTank,getSelection:()=>({type:'node'}),
-  getSelectedPartId:()=>selectedPart,variantShape:()=>''});
+  getSelectedPartId:()=>selectedPart,getExpandedPartId:()=>selectedPart,variantShape:()=>''});
 drawInspector();
 assert(mockProperties.innerHTML.includes('data-select-part="sensor-one"'));
 assert(mockProperties.innerHTML.includes('data-select-part="coil-two"'));
