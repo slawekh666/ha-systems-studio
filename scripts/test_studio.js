@@ -443,3 +443,10 @@ assert.match(fireplace.render({...hearth,width_scale:1.4,height_scale:.75},haMod
 assert.match(src,/HASSStudioFireplace\.render\(node,hass\)/);
 assert(libHtml.includes('data-add-preset="fireplace_modern"'));
 console.log('OK: modern fireplace flames, embers, temperature and sizing.');
+
+// v0.4.16 compatibility and hierarchical-library regression assertions.
+assert(libHtml.includes('ha-icon') && libHtml.includes('mdi:'));
+assert(libHtml.includes('Kolektory solarne') && libHtml.includes('ss-lib-subgroup'));
+assert(inspectSrc.includes('ss-part-card') && inspectSrc.includes('getExpandedPartId'));
+assert(inspectSrc.includes("'aspect_locked'"));
+assert(src.includes("obj.scale_mode='free';") && !src.includes("obj.scale=1;\n          obj.scale_mode='free';"));

@@ -57,8 +57,8 @@ const HASSStudioEditorInspector = (() => {
         const previewGas=obj.type==='boiler'&&obj.variant==='gas_modern';
         const previewElectric=obj.type==='boiler'&&obj.variant==='electric_modern';
         const previewFireplace=obj.type==='boiler'&&obj.variant==='fireplace_modern';
-        const previewWidth=previewFree?Math.max(170,145*obj.width_scale):120;
-        const previewHeight=previewFree?Math.max(160,155*obj.height_scale):140;
+        const previewWidth=previewFree?Math.max(112*obj.width_scale+30,145*obj.width_scale):120;
+        const previewHeight=previewFree?Math.max(113*obj.height_scale+40,155*obj.height_scale):140;
         const previewBox=previewFireplace?(()=>{const q=HASSStudioFireplace.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewElectric?(()=>{const q=HASSStudioElectricBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewGas?(()=>{const q=HASSStudioGasBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewHP?(()=>{const q=HASSStudioHeatPump.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewPellet?(()=>{const b=HASSStudioPellet.geometry(obj);
             return (b.x-8)+' '+(b.y-8)+' '+(b.width+16)+' '+(b.labelY-b.y+26);})():
           previewSolid?((66+(12-66)*obj.width_scale-8)+' '+(53+(-105-53)*obj.height_scale-8)+' '+
