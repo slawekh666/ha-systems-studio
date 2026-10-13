@@ -2078,31 +2078,113 @@ const HASSStudioFireplace=(()=>{
 })();
 
 
+/* Home Assistant Systems Studio — central device registry.
+ * Saved configurations keep the existing node.type and node.variant fields.
+ * Device families and catalog categories are metadata, not a migration.
+ */
+const HASSStudioDeviceRegistry = (() => {
+  const categories = Object.freeze({
+    heat_sources: {pl:'Źródła ciepła',en:'Heat sources'},
+    tanks: {pl:'Zbiorniki',en:'Tanks'},
+    solar: {pl:'Solary',en:'Solar thermal'},
+    hydraulics: {pl:'Pompy i zawory',en:'Pumps and valves'},
+    measurements: {pl:'Czujniki',en:'Sensors'},
+    connections: {pl:'Rury i połączenia',en:'Pipes and connections'}
+  });
+  // Common logical identity, independent from the selected drawing.
+  const families = Object.freeze({
+    solid_fuel_boiler:{category:'heat_sources',pl:'Kocioł na drewno / węgiel',en:'Wood / coal boiler',fuels:['wood','coal'],entities:['entity','burner_entity'],animations:['combustion']},
+    pellet_boiler:{category:'heat_sources',pl:'Kocioł na pellet',en:'Pellet boiler',entities:['entity','burner_entity'],animations:['combustion']},
+    gas_boiler:{category:'heat_sources',pl:'Kocioł gazowy',en:'Gas boiler',entities:['entity','burner_entity','gas_draw_entity'],animations:['burner']},
+    electric_boiler:{category:'heat_sources',pl:'Kocioł elektryczny',en:'Electric boiler',entities:['entity','electric_power_entity','electric_load_entity'],animations:['heating']},
+    oil_boiler:{category:'heat_sources',pl:'Kocioł olejowy',en:'Oil boiler',entities:['entity','burner_entity'],animations:['burner']},
+    heat_pump:{category:'heat_sources',pl:'Pompa ciepła',en:'Heat pump',entities:['entity','hp_power_entity','hp_fan_entity'],animations:['fan']},
+    fireplace:{category:'heat_sources',pl:'Kominek',en:'Fireplace',entities:['entity','burner_entity'],animations:['combustion']},
+    tank:{category:'tanks',pl:'Zbiornik',en:'Tank',entities:['entity'],animations:['coil_flow','heater_glow'],parts:['sensor','heater','coil','baffle_horizontal','baffle_vertical','inner_tank']},
+    solar_collector:{category:'solar',pl:'Kolektor solarny',en:'Solar collector',entities:['entity','pump_entity','tank_entity'],animations:['solar_activity']},
+    pump:{category:'hydraulics',pl:'Pompa',en:'Pump',entities:['entity'],animations:['running']},
+    valve:{category:'hydraulics',pl:'Zawór',en:'Valve',entities:['entity'],animations:[]},
+    sensor:{category:'measurements',pl:'Czujnik',en:'Sensor',entities:['entity'],animations:[]},
+    pipe:{category:'connections',pl:'Rura',en:'Pipe',entities:['flow_entity'],animations:['flow']}
+  });
+
+  // Do not change order, names or ids: these are stored in existing HA layouts.
+  // Each entry: [legacy variant, logical family, Polish, English, renderer, SVG].
+  const legacy = Object.freeze({
+    boiler:{icon:'♨',variants:[
+      ['wood','solid_fuel_boiler','Drewno','Wood','warmwasser'],
+      ['solid_fuel','solid_fuel_boiler','Węgiel / drewno (nowoczesny)','Modern solid-fuel boiler','solidFuel','solid-fuel-stove.svg'],
+      ['pellet','pellet_boiler','Pellet','Pellet','warmwasser'],
+      ['pellet_modern','pellet_boiler','Pellet (nowoczesny)','Modern pellet boiler','pellet','pellet-stove.svg'],
+      ['heatpump_modern','heat_pump','Pompa ciepła (nowoczesna)','Modern heat pump','heatPump','heat-pump-stove.svg'],
+      ['gas','gas_boiler','Gaz','Gas','warmwasser'],
+      ['gas_modern','gas_boiler','Gazowy (nowoczesny)','Modern gas boiler','gasBoiler','gas-boiler.svg'],
+      ['oil','oil_boiler','Olej','Oil','warmwasser'],
+      ['electric','electric_boiler','Elektryczny','Electric','warmwasser'],
+      ['electric_modern','electric_boiler','Elektryczny (nowoczesny)','Modern electric boiler','electricBoiler','electric-boiler.svg'],
+      ['heatpump','heat_pump','Pompa ciepła','Heat pump','warmwasser'],
+      ['fireplace_modern','fireplace','Kominek (nowoczesny)','Modern fireplace','fireplace','fireplace.svg']
+    ]},
+    tank:{icon:'▤',variants:[
+      ['modular','tank','Modułowy','Modular','modularTank'],
+      ['stratified','tank','Warstwowy','Stratified','warmwasser'],
+      ['buffer','tank','Bufor','Buffer','warmwasser'],
+      ['coil','tank','Jedna wężownica','Single coil','warmwasser'],
+      ['dual_coil','tank','Dwie wężownice','Dual coil','warmwasser'],
+      ['hygiene','tank','Higieniczny','Hygienic','warmwasser'],
+      ['combi','tank','Kombi','Combi','warmwasser']
+    ]},
+    solar:{icon:'☼',variants:[
+      ['flat','solar_collector','Płaskie','Flat plate','warmwasser'],
+      ['tube','solar_collector','Próżniowe','Vacuum tubes','warmwasser']
+    ]},
+    pump:{icon:'◉',variants:[['circulation','pump','Obiegowa','Circulation','warmwasser'],['inline','pump','Przelotowa','Inline','warmwasser']]},
+    valve:{icon:'◇',variants:[['two_way','valve','Dwudrogowy','Two-way','warmwasser'],['three_way','valve','Trójdrogowy','Three-way','warmwasser']]},
+    sensor:{icon:'♧',variants:[['temperature','sensor','Temperatura','Temperature','warmwasser'],['pressure','sensor','Ciśnienie','Pressure','warmwasser']]},
+    pipe:{icon:'〰',variants:[]}
+  });
+  const types = Object.freeze(Object.keys(legacy));
+  const variantMap = new Map();
+  for (const type of types) {
+    const entries = legacy[type].variants.map(([id,family,pl,en,renderer,svg]) =>
+      Object.freeze({id,family,label:Object.freeze({pl,en}),renderer,svg:svg||null}));
+    for (const variant of entries) {
+      if (!families[variant.family] || variantMap.has(type+':'+variant.id))
+        throw new Error('Invalid device variant: '+type+':'+variant.id);
+      variantMap.set(type+':'+variant.id,variant);
+    }
+  }
+  const listTypes = () => types;
+  const variantsFor = type => legacy[type]
+    ? legacy[type].variants.map(entry => variantMap.get(type+':'+entry[0])) : [];
+  const isNodeType = type => variantsFor(type).length>0;
+  const isVariant = (type,id) => variantMap.has(type+':'+id);
+  const defaultVariant = type => variantsFor(type)[0]?.id || null;
+  const normalizeVariant = (type,id) => isVariant(type,id)?id:defaultVariant(type);
+  const iconFor = type => legacy[type]?.icon || '';
+  const variantOptions = (type,lang='pl') => variantsFor(type)
+    .map(item => [item.id,item.label[lang==='en'?'en':'pl']]);
+  const resolve = (type,variant) => {
+    const graphic=variantMap.get(type+':'+variant);
+    return graphic ? Object.freeze({...graphic,type,category:families[graphic.family].category,device:families[graphic.family]}):null;
+  };
+  const catalog = (lang='pl') => Object.keys(families).map(id => Object.freeze({
+    id,category:families[id].category,label:families[id][lang==='en'?'en':'pl'],
+    variants:types.flatMap(type => variantsFor(type).filter(item=>item.family===id).map(item=>item.id))
+  }));
+  return Object.freeze({categories,families,listTypes,variantsFor,isNodeType,
+    isVariant,defaultVariant,normalizeVariant,iconFor,variantOptions,resolve,catalog});
+})();
+
+
 /* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
  * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
  * No external dependencies or service calls in the designer.
  */
 (() => {
   const W=1200,H=720,MAX_NODES=60,MAX_PIPES=80;
-  const types=['boiler','tank','solar','pump','valve','sensor','pipe'];
-  const graphics={
-    boiler:['wood','solid_fuel','pellet','pellet_modern','heatpump_modern','gas','gas_modern','oil','electric','electric_modern','heatpump','fireplace_modern'],
-    tank:['modular','stratified','buffer','coil','dual_coil','hygiene','combi'],
-    solar:['flat','tube'],pump:['circulation','inline'],
-    valve:['two_way','three_way'],sensor:['temperature','pressure']
-  };
-  const variants={
-    pl:{modular:'Modułowy',solid_fuel:'Węgiel / drewno (nowoczesny)',pellet_modern:'Pellet (nowoczesny)',wood:'Drewno',pellet:'Pellet',gas:'Gaz',gas_modern:'Gazowy (nowoczesny)',oil:'Olej',electric:'Elektryczny',electric_modern:'Elektryczny (nowoczesny)',fireplace_modern:'Kominek (nowoczesny)',heatpump:'Pompa ciepła',heatpump_modern:'Pompa ciepła (nowoczesna)',
-      stratified:'Warstwowy',buffer:'Bufor',coil:'Jedna wężownica',dual_coil:'Dwie wężownice',
-      hygiene:'Higieniczny',combi:'Kombi',flat:'Płaskie',tube:'Próżniowe',
-      circulation:'Obiegowa',inline:'Przelotowa',two_way:'Dwudrogowy',three_way:'Trójdrogowy',
-      temperature:'Temperatura',pressure:'Ciśnienie'},
-    en:{modular:'Modular',solid_fuel:'Modern solid-fuel boiler',pellet_modern:'Modern pellet boiler',wood:'Wood',pellet:'Pellet',gas:'Gas',gas_modern:'Modern gas boiler',oil:'Oil',electric:'Electric',electric_modern:'Modern electric boiler',fireplace_modern:'Modern fireplace',heatpump:'Heat pump',heatpump_modern:'Modern heat pump',
-      stratified:'Stratified',buffer:'Buffer',coil:'Single coil',dual_coil:'Dual coil',
-      hygiene:'Hygienic',combi:'Combi',flat:'Flat plate',tube:'Vacuum tubes',
-      circulation:'Circulation',inline:'Inline',two_way:'Two-way',three_way:'Three-way',
-      temperature:'Temperature',pressure:'Pressure'}
-  };
+  const registry=HASSStudioDeviceRegistry;
+  const types=registry.listTypes();
   const words={
     pl:{sensorScale:'Skala odczytu',accessoryLabel:'Podpis przy ikonie',boilerState:'Praca palnika / grzania',burnerEntity:'Encja palnika (opcjonalna; inaczej temperatura)',burnerOnTemp:'Kocioł aktywny powyżej (°C)',burnerOffTemp:'Kocioł nieaktywny poniżej (°C)',solarTank:'Temperatura zbiornika (do porównania)',solarOnDelta:'Kolektor aktywny – różnica (°C)',solarOffDelta:'Kolektor nieaktywny – różnica (°C)',solarSensors:'Czujniki kolektora',solarPump:'Encja pompy solarnej',pipeStart:'Króciec na początku',pipeEnd:'Króciec na końcu',yes:'Tak',no:'Nie',compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
       flowOn:'Włączona (podgląd)',flowAuto:'Według encji',flowDirection:'Kierunek przepływu',
@@ -2152,7 +2234,6 @@ const HASSStudioFireplace=(()=>{
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{electricModel:'Piec elektryczny (nowoczesny)',electricPower:'Encja poboru mocy (W/kW)',electricLoad:'Encja obciążenia (%) — opcjonalna',electricMax:'Moc znamionowa pieca (kW)',electricGlow:'Podświetlenie (%)',electricHelp:'Bez osobnej encji % obciążenie wynika z poboru mocy / mocy znamionowej. Brak odczytu nie jest zastępowany wartością demo.'}:{electricModel:'Modern electric boiler',electricPower:'Electrical power entity (W/kW)',electricLoad:'Load entity (%) — optional',electricMax:'Rated boiler power (kW)',electricGlow:'Lighting (%)',electricHelp:'If no % entity is set, load derives from measured power divided by rated power. Missing data never uses demo values.'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{fireplaceModel:'Kominek (nowoczesny)',fireplaceHelp:'Ogień i żar są wizualizacją, automatyka zależy od encji lub temperatury.'}:{fireplaceModel:'Modern fireplace',fireplaceHelp:'Fire and embers are visual only; auto stage uses HA status or temperature.'});
   const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
-  const icons={boiler:'♨',tank:'▤',solar:'☼',pump:'◉',valve:'◇',sensor:'♧',pipe:'〰'};
   const pickLang=(config,hass)=>{
     const setting=config?.studio_language;
     return setting==='pl'||setting==='en'?setting:
@@ -2189,7 +2270,7 @@ const HASSStudioFireplace=(()=>{
   });
   const normalized=(config)=>{
     const source=config?.studio_layout||{};
-    const nodes=(Array.isArray(source.nodes)?source.nodes:[]).filter(v=>v && graphics[v.type] &&
+    const nodes=(Array.isArray(source.nodes)?source.nodes:[]).filter(v=>v && registry.isNodeType(v.type) &&
       typeof v.id==='string').slice(0,MAX_NODES).map(v=>({
       id:v.id.slice(0,32),type:v.type,
       x:clamp(v.x,0,W-120,40),y:clamp(v.y,0,H-140,40),
@@ -2215,7 +2296,7 @@ const HASSStudioFireplace=(()=>{
       solar_on_delta:clamp(v.solar_on_delta,1,40,6),
       solar_off_delta:clamp(v.solar_off_delta,0,39,3),
       visual:v.visual==='studio'?'studio':'warmwasser',
-      variant:graphics[v.type].includes(v.variant)?v.variant:graphics[v.type][0],
+      variant:registry.normalizeVariant(v.type,v.variant),
       label:String(v.label||'').slice(0,64),
       entity:validEntity(v.entity)?v.entity:'',
       entities:(Array.isArray(v.entities)?v.entities:[]).slice(0,20).map(e=>({
@@ -2470,7 +2551,7 @@ const HASSStudioFireplace=(()=>{
       '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
       '<button id="ss-close" type="button">'+esc(L.close)+'</button></div>'+
       '<div class="ss-grid" id="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+
-      types.map(type=>'<button type="button" data-add="'+type+'"><span aria-hidden="true">'+icons[type]+'</span>'+
+      types.map(type=>'<button type="button" data-add="'+type+'"><span aria-hidden="true">'+registry.iconFor(type)+'</span>'+
         esc(L[type==='pump'?'pumps':type==='valve'?'valves':type==='sensor'?'sensorsMenu':type==='pipe'?'pipes':type])+'</button>').join('')+
       '<button type="button" data-add-preset="solid_fuel"><span aria-hidden="true">♨</span>'+esc(L.solidModel)+'</button>'+
       '<button type="button" data-add-preset="pellet_modern"><span aria-hidden="true">♨</span>'+esc(L.pelletModel)+'</button>'+
@@ -2528,7 +2609,7 @@ const HASSStudioFireplace=(()=>{
         (index!==undefined?' data-index="'+index+'"':'')+
         ' value="'+esc(value||'')+'" placeholder="sensor..." autocomplete="off"/>';
     };
-    const variantOptions=(node)=>graphics[node.type].map(key=>[key,variants[pickLang(this._config,this._hass)][key]]);
+    const variantOptions=(node)=>registry.variantOptions(node.type,pickLang(this._config,this._hass));
     const styleOptions=[['warmwasser','Warmwasser (default)'],['studio','Studio (simple)']];
     const sides=[['left',L.left],['right',L.right],['inside',L.inside]];
     const colorsList=[['hot',L.hot],['cold',L.cold],['solar',L.solarFlow],['return',L.returnFlow]];
@@ -2754,7 +2835,7 @@ const HASSStudioFireplace=(()=>{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,visual:'warmwasser',variant:kind==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(preset)?preset:graphics[kind][0],label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
+          scale:1,visual:'warmwasser',variant:kind==='boiler'&&registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -2832,7 +2913,7 @@ const HASSStudioFireplace=(()=>{
         else if(key==='visual')obj.visual=val==='studio'?'studio':'warmwasser';
         else if(key==='flow_mode')obj.flow_mode=['on','off','auto'].includes(val)?val:'auto';
         else if(key==='flow_direction')obj.flow_direction=val==='reverse'?'reverse':'forward';
-        else if(key==='variant')obj.variant=graphics[obj.type]?.includes(val)?val:obj.variant;
+        else if(key==='variant')obj.variant=registry.isVariant(obj.type,val)?val:obj.variant;
         else if(key==='color')obj.color=colors[val]?val:obj.color;
         else obj.label=val.slice(0,64);
       }else if(key==='multiEntity'&&obj.entities[index])obj.entities[index].entity=validEntity(val)?val:'';
