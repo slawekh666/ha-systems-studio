@@ -1,6 +1,30 @@
 /* Basic SVG and logic regression tests; browser integration remains for HA. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const src=fs.readFileSync('src/studio-custom.js','utf8');
+// Device registry: saved layout identifiers and ordering are stable.
+const registrySrc=fs.readFileSync('src/device-registry.js','utf8');
+const registry=vm.runInNewContext(registrySrc+'\nHASSStudioDeviceRegistry;',{});
+const legacy={
+  boiler:'wood solid_fuel pellet pellet_modern heatpump_modern gas gas_modern oil electric electric_modern heatpump fireplace_modern',
+  tank:'modular stratified buffer coil dual_coil hygiene combi',
+  solar:'flat tube',pump:'circulation inline',valve:'two_way three_way',sensor:'temperature pressure'
+};
+assert.equal(Array.from(registry.listTypes()).join(' '),'boiler tank solar pump valve sensor pipe');
+for(const [type,variants] of Object.entries(legacy)){
+  assert.equal(registry.variantsFor(type).map(item=>item.id).join(' '),variants);
+  for(const variant of variants.split(' ')){
+    assert.equal(registry.normalizeVariant(type,variant),variant);
+    assert(registry.resolve(type,variant)?.category);
+  }
+}
+assert.equal(registry.isNodeType('pipe'),false);
+assert.equal(registry.resolve('boiler','solid_fuel').family,'solid_fuel_boiler');
+assert.equal(registry.resolve('boiler','pellet_modern').family,'pellet_boiler');
+assert.equal(registry.resolve('boiler','heatpump_modern').family,'heat_pump');
+assert(src.includes('registry.normalizeVariant(v.type,v.variant)'));
+assert(src.includes('registry.variantOptions(node.type,pickLang('));
+console.log('OK: device catalog and existing layout variants.');
+
 const graphics=fs.readFileSync('src/warmwasser-shapes.js','utf8');
 const api=vm.runInNewContext(graphics+'\nHASSStudioGraphics;', {esc:s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')});
 const state=map=>({states:Object.fromEntries(Object.entries(map).map(([id,v])=>[id,{state:String(v)}]))});
