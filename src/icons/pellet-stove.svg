@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1260">
+<defs>
+        <linearGradient id="steelFront" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#3c5270"/>
+          <stop offset=".16" stop-color="#7c96bb"/>
+          <stop offset=".5" stop-color="#121a27"/>
+          <stop offset=".84" stop-color="#4e678d"/>
+          <stop offset="1" stop-color="#2c3f5b"/>
+        </linearGradient>
+        <linearGradient id="steelPanel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#364a61"/>
+          <stop offset="1" stop-color="#111925"/>
+        </linearGradient>
+        <linearGradient id="edgeGlowGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#dbe9ff"/>
+          <stop offset="1" stop-color="#8ecfff"/>
+        </linearGradient>
+        <linearGradient id="darkGlass" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#202a35"/>
+          <stop offset="1" stop-color="#070c13"/>
+        </linearGradient>
+        <linearGradient id="screenGlass" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#0a233a"/>
+          <stop offset="1" stop-color="#02070f"/>
+        </linearGradient>
+        <linearGradient id="screenHighlight" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffffff" stop-opacity=".18"/>
+          <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="hopperGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#425878"/>
+          <stop offset="1" stop-color="#111926"/>
+        </linearGradient>
+        <linearGradient id="motorGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#25384f"/>
+          <stop offset=".5" stop-color="#59739b"/>
+          <stop offset="1" stop-color="#22354a"/>
+        </linearGradient>
+        <filter id="blueGlow" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="10"/></filter>
+        <filter id="softBlueGlow" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="6"/></filter>
+      <clipPath id="pelletBurnerClip"><rect x="242" y="560" width="188" height="240" rx="12"/></clipPath></defs>
+
+      <g id="aura">
+        <path d="M120 210 L560 210 L596 246 L596 1106 L560 1140 L120 1140 L84 1106 L84 246 Z" fill="none" stroke="#2aa5ff" stroke-opacity=".22" stroke-width="16" filter="url(#blueGlow)"/>
+        <path d="M672 242 L1084 242 L1120 276 L1120 688 L988 834 L988 1060 L920 1098 L794 1098 L794 864 L672 726 Z" fill="none" stroke="#2aa5ff" stroke-opacity=".18" stroke-width="14" filter="url(#blueGlow)"/>
+      </g>
+
+      <g id="chimney">
+        <rect x="280" y="82" width="126" height="132" rx="16" fill="url(#steelFront)" stroke="#dcecff" stroke-opacity=".85" stroke-width="4"/>
+        <line x1="280" y1="150" x2="406" y2="150" stroke="#edf5ff" stroke-opacity=".66" stroke-width="3"/>
+      </g>
+
+      <g id="stoveBody">
+        <path d="M120 210 L560 210 L596 246 L596 1106 L560 1140 L120 1140 L84 1106 L84 246 Z" fill="url(#steelFront)" stroke="#dcecff" stroke-opacity=".88" stroke-width="4"/>
+        <path d="M84 246 L120 210 V1140 L84 1106 Z" fill="#40699f" opacity=".48"/>
+        <path d="M560 210 L596 246 V1106 L560 1140 Z" fill="#2a4263" opacity=".56"/>
+        <rect x="114" y="220" width="446" height="16" rx="3" fill="#eef6ff" opacity=".82"/>
+        <line x1="180" y1="220" x2="180" y2="520" stroke="#0a121b" stroke-opacity=".42" stroke-width="3"/>
+        <line x1="534" y1="220" x2="534" y2="1140" stroke="#0a121b" stroke-opacity=".28" stroke-width="3"/>
+        <line x1="114" y1="392" x2="560" y2="392" stroke="#d6e8ff" stroke-opacity=".18" stroke-width="3"/>
+      </g>
+
+      <g id="displayPanel">
+        <rect x="164" y="262" width="316" height="106" rx="12" fill="#061018" stroke="#8fd1ff" stroke-width="3"/>
+        <rect x="174" y="272" width="296" height="86" rx="10" fill="url(#screenGlass)"/>
+        <path d="M180 278 H318 L286 354 H180 Z" fill="url(#screenHighlight)"/>
+        <text x="200" y="305" font-size="14" fill="#7cc8ff" font-family="monospace">TEMP</text>
+        <text id="tempValue" x="200" y="345" font-size="42" fill="#e3f8ff" font-family="monospace" font-weight="700">65.0°</text>
+        <text x="298" y="343" font-size="18" fill="#72c8ff" font-family="monospace">C</text>
+        <g opacity=".84" fill="#5fb9ff">
+          <rect x="354" y="290" width="26" height="6" rx="3"/>
+          <rect x="354" y="306" width="26" height="6" rx="3"/>
+          <rect x="354" y="322" width="26" height="6" rx="3"/>
+          <rect x="354" y="338" width="26" height="6" rx="3"/>
+        </g>
+        <circle cx="422" cy="314" r="28" fill="#07111a" stroke="#88d0ff" stroke-width="4"/>
+        <circle id="statusRingGlow" cx="422" cy="314" r="34" fill="none" stroke="#2ab2ff" stroke-opacity=".26" stroke-width="6" filter="url(#softBlueGlow)"/>
+        <path d="M422 286 A 28 28 0 1 1 421.9 286" fill="none" stroke="#263449" stroke-width="9" stroke-linecap="round"/>
+        <path id="statusArc" d="M422 286 A 28 28 0 1 1 421.9 286" fill="none" stroke="#59c84c" stroke-width="9" stroke-linecap="round" stroke-dasharray="120 176"/>
+      </g>
+
+      <g id="doorSection">
+        <rect x="150" y="446" width="366" height="438" rx="20" fill="#0b121b" opacity=".46"/>
+        <rect x="186" y="488" width="300" height="382" rx="16" fill="url(#steelPanel)" stroke="#9eb4d6" stroke-opacity=".56" stroke-width="2.4"/>
+        <rect x="224" y="542" width="224" height="274" rx="16" fill="url(#darkGlass)" stroke="#92d1ff" stroke-width="3"/>
+        <rect id="doorGlowFrame" x="224" y="542" width="224" height="274" rx="16" fill="none" stroke="#2aa5ff" stroke-opacity=".18" stroke-width="10" filter="url(#softBlueGlow)"/>
+        <path d="M240 564 h46 v178 l-32 0 z" fill="#ffffff" opacity=".10"/>
+        <path d="M436 556 h-40 l-30 258 h28 z" fill="#a4d8ff" opacity=".05"/>
+        <g id="emptyBurner">
+          <rect x="242" y="560" width="188" height="240" rx="12" fill="#0a0f16"/>
+          <rect x="242" y="560" width="188" height="240" rx="12" fill="none" stroke="#8ecfff" stroke-opacity=".08" stroke-width="2"/>
+          <g opacity=".10" stroke="#ddeaff" stroke-width="1.4">
+            <line x1="290" y1="566" x2="290" y2="798"/>
+            <line x1="336" y1="566" x2="336" y2="798"/>
+            <line x1="382" y1="566" x2="382" y2="798"/>
+          </g>
+          <rect x="260" y="760" width="150" height="12" rx="4" fill="#1e2631"/>
+          <g fill="#202933">
+            <rect x="268" y="742" width="8" height="28" rx="2"/>
+            <rect x="288" y="742" width="8" height="28" rx="2"/>
+            <rect x="308" y="742" width="8" height="28" rx="2"/>
+            <rect x="328" y="742" width="8" height="28" rx="2"/>
+            <rect x="348" y="742" width="8" height="28" rx="2"/>
+            <rect x="368" y="742" width="8" height="28" rx="2"/>
+            <rect x="388" y="742" width="8" height="28" rx="2"/>
+          </g>
+          <g id="combustionSlot"></g>
+        </g>
+        <g fill="url(#steelFront)" stroke="#90d1ff" stroke-width="2.2">
+          <rect x="170" y="588" width="14" height="96" rx="4"/>
+          <rect x="170" y="786" width="14" height="96" rx="4"/>
+        </g>
+        <g id="mainHandle">
+          <rect x="478" y="670" width="30" height="118" rx="10" fill="url(#steelFront)" stroke="#91d0ff" stroke-width="2.5"/>
+          <rect x="468" y="660" width="14" height="46" rx="6" fill="#9bd2ff" opacity=".74"/>
+        </g>
+      </g>
+
+      <g id="drawerSection">
+        <rect x="168" y="922" width="318" height="150" rx="12" fill="url(#steelPanel)" stroke="#a4b7d7" stroke-opacity=".56" stroke-width="2.2"/>
+        <rect x="250" y="978" width="154" height="42" rx="8" fill="#081018" stroke="#8fcfff" stroke-opacity=".55" stroke-width="2.2"/>
+        <g fill="url(#steelFront)" stroke="#90d1ff" stroke-width="2">
+          <rect x="170" y="976" width="12" height="94" rx="4"/>
+          <rect x="448" y="962" width="22" height="70" rx="7"/>
+        </g>
+      </g>
+
+      <g id="stoveBase">
+        <path d="M82 1088 H598 L598 1156 L566 1184 H114 L82 1156 Z" fill="url(#steelFront)" stroke="#8fd1ff" stroke-opacity=".82" stroke-width="4"/>
+        <rect x="130" y="1180" width="26" height="18" rx="4" fill="#223248"/>
+        <rect x="522" y="1180" width="26" height="18" rx="4" fill="#223248"/>
+      </g>
+
+      <g id="hopperGroup">
+        <path d="M672 242 L1084 242 L1120 276 L1120 688 L988 834 L988 1060 L920 1098 L794 1098 L794 864 L672 726 Z" fill="url(#hopperGrad)" stroke="#dcecff" stroke-opacity=".84" stroke-width="4"/>
+        <path d="M672 242 L714 212 H1046 L1084 242 Z" fill="url(#steelFront)" stroke="#dcecff" stroke-opacity=".76" stroke-width="4"/>
+        <path d="M714 212 H1046 L1088 252 H756 Z" fill="#495f7f" opacity=".74"/>
+        <rect x="810" y="202" width="132" height="20" rx="8" fill="#1d2836" stroke="#b8d6ff" stroke-width="2.4"/>
+        <rect x="864" y="244" width="36" height="38" rx="4" fill="#34485f" stroke="#aacfff" stroke-width="2"/>
+        <rect x="894" y="338" width="58" height="286" rx="18" fill="#070d13" stroke="#8ecfff" stroke-opacity=".46" stroke-width="2.2"/>
+        <rect x="905" y="352" width="36" height="258" rx="14" fill="#0f1620"/>
+        <rect x="905" y="352" width="36" height="258" rx="14" fill="none" stroke="#9fd7ff" stroke-opacity=".10" stroke-width="2"/>
+        <path d="M766 706 H1098 L988 834 H794 Z" fill="#162234" opacity=".84"/>
+        <path d="M794 864 L988 864 L988 1060 L920 1098 L794 1098 Z" fill="#122030" opacity=".86"/>
+      </g>
+
+
+      <g id="connectionPipe">
+        <rect x="596" y="974" width="164" height="64" rx="24" fill="url(#motorGrad)" stroke="#d7ebff" stroke-opacity=".62" stroke-width="3"/>
+        <rect x="612" y="986" width="132" height="40" rx="18" fill="#12202e" opacity=".62"/>
+        <rect x="580" y="986" width="20" height="40" rx="6" fill="url(#steelFront)" stroke="#9fd5ff" stroke-opacity=".46" stroke-width="2"/>
+        <rect x="744" y="986" width="18" height="40" rx="6" fill="url(#steelFront)" stroke="#9fd5ff" stroke-opacity=".46" stroke-width="2"/>
+        <ellipse cx="596" cy="1006" rx="16" ry="26" fill="url(#steelFront)" stroke="#b9dcff" stroke-opacity=".72" stroke-width="2.6"/>
+      </g>
+
+      <g id="feedSystem">
+        <rect x="760" y="946" width="140" height="122" rx="16" fill="url(#motorGrad)" stroke="#d7ebff" stroke-opacity=".64" stroke-width="3"/>
+        <rect x="900" y="972" width="80" height="72" rx="18" fill="#12202e" stroke="#9fd5ff" stroke-opacity=".44" stroke-width="2.4"/>
+        <rect x="978" y="966" width="84" height="84" rx="14" fill="#1c2c40" stroke="#cae6ff" stroke-opacity=".66" stroke-width="3"/>
+        <ellipse cx="1062" cy="1008" rx="28" ry="42" fill="url(#steelFront)" stroke="#b9dcff" stroke-width="3"/>
+        <rect x="884" y="1060" width="16" height="78" rx="6" fill="url(#steelFront)"/>
+        <rect x="1020" y="1062" width="16" height="76" rx="6" fill="url(#steelFront)"/>
+        <rect x="834" y="1060" width="20" height="56" rx="6" fill="#162331" stroke="#99d1ff" stroke-opacity=".45" stroke-width="2"/>
+        <rect x="826" y="1110" width="36" height="12" rx="4" fill="url(#steelFront)"/>
+        <circle cx="786" cy="970" r="4" fill="#e6f3ff"/>
+        <circle cx="874" cy="970" r="4" fill="#e6f3ff"/>
+        <circle cx="786" cy="1044" r="4" fill="#e6f3ff"/>
+        <circle cx="874" cy="1044" r="4" fill="#e6f3ff"/>
+      </g>
+</svg>

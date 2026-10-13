@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1450">
+<defs>
+        <linearGradient id="bodyGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f8fbff"/>
+          <stop offset=".24" stop-color="#eef2f7"/>
+          <stop offset=".58" stop-color="#d7dde7"/>
+          <stop offset="1" stop-color="#bcc7d5"/>
+        </linearGradient>
+        <linearGradient id="bodyShade" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#d5dde8"/>
+          <stop offset=".5" stop-color="#ffffff"/>
+          <stop offset="1" stop-color="#bac4d4"/>
+        </linearGradient>
+        <linearGradient id="panelDark" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#111b2b"/>
+          <stop offset="1" stop-color="#060d16"/>
+        </linearGradient>
+        <linearGradient id="metalGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#283546"/>
+          <stop offset=".25" stop-color="#7c90ab"/>
+          <stop offset=".55" stop-color="#f0f6ff"/>
+          <stop offset="1" stop-color="#2a3648"/>
+        </linearGradient>
+        <linearGradient id="waterDropOuter" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#7ff7ff"/>
+          <stop offset=".4" stop-color="#19b4ff"/>
+          <stop offset="1" stop-color="#0a4eff"/>
+        </linearGradient>
+        <linearGradient id="waterDropInner" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#eefcff"/>
+          <stop offset="1" stop-color="#57d8ff"/>
+        </linearGradient>
+        <linearGradient id="lightningGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fff4a9"/>
+          <stop offset=".4" stop-color="#ffd233"/>
+          <stop offset="1" stop-color="#ff9f00"/>
+        </linearGradient>
+        <linearGradient id="ringHeat" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ff3b1f"/>
+          <stop offset=".55" stop-color="#ffb000"/>
+          <stop offset="1" stop-color="#ffe66a"/>
+        </linearGradient>
+        <filter id="blueGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="12"/></filter>
+        <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="6"/></filter>
+        <filter id="warmGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="10"/></filter>
+      </defs>
+
+      <g id="aura">
+        <path d="M236 132 H848 Q926 132 926 210 V1244 Q926 1322 848 1322 H236 Q158 1322 158 1244 V210 Q158 132 236 132 Z" fill="none" stroke="#28a6ff" stroke-opacity=".25" stroke-width="20" filter="url(#blueGlow)"/>
+      </g>
+
+      <g id="bodyGroup">
+        <path id="bodyShape" d="M236 132 H848 Q926 132 926 210 V1244 Q926 1322 848 1322 H236 Q158 1322 158 1244 V210 Q158 132 236 132 Z" fill="url(#bodyGrad)" stroke="#f6fbff" stroke-width="4"/>
+        <path d="M176 220 Q176 160 232 160 H264 V1260 H230 Q176 1260 176 1206 Z" fill="#ffffff" opacity=".42"/>
+        <path d="M842 160 H876 Q906 160 918 180 Q930 200 930 232 V1228 Q930 1284 880 1300 L842 1308 Z" fill="#b7c3d4" opacity=".55"/>
+        <path d="M250 160 C390 148 670 146 834 162" stroke="#ffffff" stroke-opacity=".46" stroke-width="7" fill="none" stroke-linecap="round"/>
+        <path d="M368 162 L626 938" stroke="#ffffff" stroke-opacity=".16" stroke-width="6"/>
+        <line x1="158" y1="1018" x2="926" y2="1018" stroke="#6e8098" stroke-opacity=".55" stroke-width="4"/>
+      </g>
+
+      <g id="lightningGroup" transform="translate(-5 -30)">
+        <path id="lightningGlow" d="M575 468 L639 468 L607 576 L692 576 L544 786 L582 642 L488 642 Z" fill="#ffcb34" opacity="0.25" filter="url(#warmGlow)"/>
+        <path id="lightningBolt" d="M575 468 L639 468 L607 576 L692 576 L544 786 L582 642 L488 642 Z" fill="url(#lightningGrad)" stroke="#fff3b8" stroke-width="3"/>
+      </g>
+
+      <g id="controlPanelGroup">
+        <rect id="controlPanelFrame" x="372" y="780" width="376" height="332" rx="28" fill="#dce6ef" stroke="#51657e" stroke-width="3"/>
+        <rect id="controlPanelInner" x="388" y="796" width="344" height="300" rx="24" fill="url(#panelDark)" stroke="#6fd4ff" stroke-opacity=".55" stroke-width="2.6"/>
+        <path d="M400 806 H560 L520 1090 H400 Z" fill="#ffffff" opacity=".10"/>
+
+        <g id="powerDisplayGroup">
+          <rect id="powerDisplayFrame" x="448" y="820" width="224" height="58" rx="12" fill="#0a1321" stroke="#67c9ff" stroke-opacity=".45" stroke-width="2"/>
+          <text x="470" y="844" font-size="12" fill="#75c9ff" font-family="monospace">POWER DRAW</text>
+          <text id="powerKwDisplay" x="470" y="868" font-size="30" fill="#eef9ff" font-family="monospace" font-weight="700">3.20 kW</text>
+        </g>
+
+        <g id="ringGroup">
+          <circle id="ringBg" stroke-dasharray="281.35 389.56" cx="560" cy="960" r="62" fill="none" stroke="#203043" stroke-width="16" stroke-linecap="round" transform="rotate(-218.4 560 960)" stroke-dasharray="281.35 389.56"/>
+          <g id="powerRing"></g>
+          <g id="tickMarks" opacity=".55"></g>
+          <circle id="knobOuter" cx="560" cy="960" r="48" fill="#09111b" stroke="#8dc8ff" stroke-opacity=".28" stroke-width="3"/>
+          <circle id="knobInner" cx="560" cy="960" r="38" fill="url(#metalGrad)" stroke="#243548" stroke-width="3"/>
+          <path id="knobIndicator" d="M560 960 L560 924" stroke="#eaf8ff" stroke-width="6" stroke-linecap="round" transform="rotate(0 560 960)"/>
+          <circle id="knobHub" cx="560" cy="960" r="9" fill="#20354d"/>
+          <text id="powerPercentText" x="560" y="968" font-size="19" fill="#d6f2ff" font-family="monospace" font-weight="700" text-anchor="middle">40%</text>
+        </g>
+
+        <g id="waterDisplayGroup">
+          <rect id="waterDisplayFrame" x="430" y="1036" width="260" height="46" rx="12" fill="#0a1321" stroke="#67c9ff" stroke-opacity=".45" stroke-width="2"/>
+<text x="526" y="1048" font-size="11" fill="#75c9ff" font-family="monospace">WATER TEMP</text>
+          <text id="waterTempDisplay" x="560" y="1074" font-size="28" fill="#eef9ff" font-family="monospace" font-weight="700" text-anchor="middle">52.0°C</text>
+        </g>
+      </g>
+
+      <g id="connectorsGroup">
+        <g id="leftConnector" transform="translate(340 1320)">
+          <rect x="0" y="0" width="70" height="90" rx="12" fill="url(#metalGrad)" stroke="#d4ebff" stroke-width="3"/>
+          <rect x="10" y="74" width="50" height="12" rx="4" fill="#1fb4ff" opacity=".7" filter="url(#softGlow)"/>
+        </g>
+        <g id="rightConnector" transform="translate(686 1320)">
+          <rect x="0" y="0" width="76" height="100" rx="12" fill="#b88b33" stroke="#ffe3a4" stroke-width="3"/>
+          <rect x="10" y="82" width="56" height="12" rx="4" fill="#1fb4ff" opacity=".7" filter="url(#softGlow)"/>
+        </g>
+      </g>
+</svg>
