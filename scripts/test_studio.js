@@ -1,6 +1,7 @@
 /* Basic SVG and logic regression tests; browser integration remains for HA. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const src=fs.readFileSync('src/studio-custom.js','utf8');
+const haCore=fs.readFileSync('src/ha-state.js','utf8')+'\n'+fs.readFileSync('src/animation-state.js','utf8')+'\n';
 // Device registry: saved layout identifiers and ordering are stable.
 const registrySrc=fs.readFileSync('src/device-registry.js','utf8');
 const registry=vm.runInNewContext(registrySrc+'\nHASSStudioDeviceRegistry;',{});
@@ -92,7 +93,7 @@ console.log('OK: independent sensor scaling, sensor labels, accessory captions, 
 
 // Modular tank invariants: data-driven temperatures and decorative heat only.
 const tankSrc=fs.readFileSync('src/studio-tank.js','utf8');
-const tankApi=vm.runInNewContext(tankSrc+'\nHASSStudioTank;',{});
+const tankApi=vm.runInNewContext(haCore+tankSrc+'\nHASSStudioTank;',{});
 const tankNode={id:'tank_unique',type:'tank',variant:'modular',scale:1,parts:[
   {id:'t1',kind:'sensor',height:85,x:20,side:'left',entity:'sensor.top'},
   {id:'t2',kind:'sensor',height:15,x:20,side:'left',entity:'sensor.bottom'},
@@ -184,7 +185,7 @@ const assets = Object.fromEntries(
   })
 );
 const assetJs = 'const HASSStudioIconTemplates = ' + JSON.stringify(assets) + ';';
-const iconPrelude = svgLib + '\n' + assetJs + '\n';
+const iconPrelude = haCore + svgLib + '\n' + assetJs + '\n';
 const solidSrc=fs.readFileSync('src/solid-fuel-stove.js','utf8');
 const solid=vm.runInNewContext(iconPrelude+solidSrc+'\nHASSStudioSolidFuel;', {});
 const modern={id:'smodern1',type:'boiler',variant:'solid_fuel',entity:'sensor.boiler',

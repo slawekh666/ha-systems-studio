@@ -5,22 +5,8 @@
 const HASSStudioHeatPump = (()=>{
   // Source artwork: src/icons/heat-pump-stove.svg
   const clamp=(v,lo,hi,fallback)=>Number.isFinite(Number(v))?Math.max(lo,Math.min(hi,Number(v))):fallback;
-  const finiteReading=(h,id)=>{
-    const item=id&&h?.states?.[id];
-    if(!item || typeof item.state!=='string'&&typeof item.state!=='number')return null;
-    const value=String(item.state).trim();
-    if(!value||!Number.isFinite(Number(value)))return null;
-    return {value:Number(value),unit:String(item.attributes?.unit_of_measurement||'').trim()};
-  };
-  const power=(h,id)=>{
-    const reading=finiteReading(h,id);
-    if(!reading||reading.value<0)return null;
-    let kw;
-    if(reading.unit==='W')kw=reading.value/1000;
-    else if(reading.unit==='kW')kw=reading.value;
-    else return null; // Do not silently interpret energy (kWh), current (A) or unlabeled values.
-    return Number.isFinite(kw)?kw:null;
-  };
+  const finiteReading=HASSStudioHA.reading;
+  const power=HASSStudioHA.powerKw;
   const fan=(h,id,maxRpm=1800)=>{
     const reading=finiteReading(h,id);
     if(!reading||reading.value<0)return null;

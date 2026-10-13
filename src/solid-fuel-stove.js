@@ -6,27 +6,8 @@ const HASSStudioSolidFuel=(()=>{
   // Editable artwork: src/icons/solid-fuel-stove.svg
   const clamp=(v,a,b,d)=>Number.isFinite(Number(v))?Math.max(a,Math.min(b,Number(v))):d;
   const safe=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const raw=(h,e)=>e?h?.states?.[e]:null;
-  const temperature=(h,e)=>{
-    const item=raw(h,e),v=item?.state,u=item?.attributes?.unit_of_measurement;
-    if(v==null||String(v).trim()===''||!Number.isFinite(Number(v))||(u&&!['°C','C','°F','F'].includes(u)))return null;
-    const t=(u==='°F'||u==='F')?(Number(v)-32)*5/9:Number(v);
-    return t>=-40&&t<=150?t:null;
-  };
-  const resolveState=(node,h)=>{
-    if(['burning','embers','off'].includes(node.solid_state))return node.solid_state;
-    const entity=raw(h,node.burner_entity);
-    if(entity){
-      const s=String(entity.state).toLowerCase();
-      if(['on','burning','active','running','heating','fire'].includes(s))return 'burning';
-      if(['embers','smoldering','cooling','glowing'].includes(s))return 'embers';
-      // An explicit off/unknown state is not overridden by a hot water reading.
-      return 'off';
-    }
-    const t=temperature(h,node.entity),upper=clamp(node.burner_on_temp,20,90,35);
-    const lower=Math.min(upper-.5,clamp(node.burner_off_temp,10,89,32));
-    return t===null?'off':t>=upper?'burning':t>=lower?'embers':'off';
-  };
+  const temperature=HASSStudioHA.temperature;
+  const resolveState=HASSStudioAnimation.combustion;
   // Geometry and three nested paths follow the original Warmwasser flame renderer.
   const flame=(x,y,w,ht,speed)=>{
     const d=(r,h)=>'M'+(-r)+' 0C'+(-r-2)+' '+(-h*.45)+' '+(-r*.15)+' '+(-h*.6)+' '+(r*.1)+' '+(-h)+

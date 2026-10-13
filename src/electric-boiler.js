@@ -5,23 +5,9 @@
 const HASSStudioElectricBoiler=(()=>{
   // Source artwork: src/icons/electric-boiler.svg
   const clamp=(v,min,max,otherwise)=>v!==''&&v!=null&&typeof v!=='boolean'&&Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):otherwise;
-  const read=(h,e)=>{
-    const item=e&&h?.states?.[e],value=item?.state;
-    if(value===undefined||value===null||typeof value==='boolean'||String(value).trim()===''||!Number.isFinite(Number(value)))return null;
-    return {value:Number(value),unit:String(item.attributes?.unit_of_measurement??'').trim()};
-  };
-  const power=(h,e)=>{
-    const r=read(h,e);if(!r||r.value<0)return null;
-    if(r.unit==='W')return r.value/1000;
-    if(r.unit==='kW')return r.value;
-    return null;
-  };
-  const temperature=(h,e)=>{
-    const r=read(h,e);
-    if(!r||!['','°C','C','°F','F'].includes(r.unit))return null;
-    const t=r.unit==='°F'||r.unit==='F'?(r.value-32)*5/9:r.value;
-    return t>=-40&&t<=150?t:null;
-  };
+  const read=HASSStudioHA.reading;
+  const power=HASSStudioHA.powerKw;
+  const temperature=HASSStudioHA.temperature;
   const load=(h,node)=>{
     if(node.electric_load_entity){
       const r=read(h,node.electric_load_entity);

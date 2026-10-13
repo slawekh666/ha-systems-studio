@@ -111,6 +111,7 @@ def build() -> None:
     embedded = 'const HASSStudioIconTemplates = Object.freeze({\n' + ',\n'.join(assets) + '\n});\n'
 
     source_names = (
+        'ha-state.js', 'animation-state.js',
         'warmwasser-shapes.js', 'studio-tank.js', 'svg-template.js',
         'solid-fuel-stove.js', 'pellet-stove.js', 'heat-pump-stove.js',
         'gas-boiler.js', 'electric-boiler.js', 'fireplace.js',

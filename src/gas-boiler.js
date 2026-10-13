@@ -6,30 +6,10 @@ const HASSStudioGasBoiler=(()=>{
   // Geometry is edited in src/icons/gas-boiler.svg; values are supplied by HA.
 
   const clamp=(v,min,max,def)=>typeof v!=='boolean'&&v!=null&&v!==''&&Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):def;
-  const reading=(h,e)=>{
-    const o=e&&h?.states?.[e];
-    if(!o||typeof o.state!=='string'&&typeof o.state!=='number')return null;
-    const v=String(o.state).trim();
-    if(!v||!Number.isFinite(Number(v)))return null;
-    return {value:Number(v),unit:String(o.attributes?.unit_of_measurement||'').trim()};
-  };
-  const temperature=(h,e)=>{
-    const r=reading(h,e);if(!r||!['','°C','C','°F','F'].includes(r.unit))return null;
-    const value=r.unit==='°F'||r.unit==='F'?(r.value-32)*5/9:r.value;
-    return value>=-40&&value<=150?value:null;
-  };
-  const modulation=(h,e)=>{
-    const r=reading(h,e);
-    // This percentage is burner MODULATION, not actual gas flow in m3/h.
-    // HA integrations may represent percentages as a bare number.
-    if(!r||!['','%','percent'].includes(r.unit)||r.value<0||r.value>100)return null;
-    return r.value;
-  };
-  const burnerEnabled=(h,e)=>{
-    if(!e)return true;
-    const o=h?.states?.[e];if(!o)return false;
-    return ['on','burning','heating','active','running','open'].includes(String(o.state).toLowerCase());
-  };
+  const reading=HASSStudioHA.reading;
+  const temperature=HASSStudioHA.temperature;
+  const modulation=(h,e)=>HASSStudioHA.percentage(h,e,true);
+  const burnerEnabled=(h,e)=>!e||HASSStudioHA.active(h,e,['burning']);
   const geometry=n=>{
     const sx=clamp(n?.width_scale,.5,2.4,1),sy=clamp(n?.height_scale,.5,2.4,1);
     const cx=66,cy=56;
