@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.15-dev';
+const VERSION = '0.4.16-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -1520,7 +1520,7 @@ const HASSStudioTank = (() => {
           '<stop stop-color="#506780"/><stop offset="1" stop-color="#506780"/>')+'</linearGradient>');
       if(x1>x0 && y1>y0)water+='<rect x="'+x0+'" y="'+y0+'" width="'+(x1-x0)+'" height="'+(y1-y0)+'" fill="url(#'+id+')"/>';
     }
-    const nonUniform=n.scale_mode==='free';
+    const nonUniform=n.scale_mode==='free'; // Legacy proportional layouts still use the whole-node scale only.
     const sx=nonUniform?clamp(n.width_scale,.5,2.4,1):1;
     const sy=nonUniform?clamp(n.height_scale,.5,2.4,1):1;
     const remap=at=>({x:60+(at.x-60)*sx,y:61+(at.y-61)*sy});
@@ -2081,12 +2081,19 @@ const HASSStudioFireplace=(()=>{
 const HASSStudioDeviceRegistry = (() => {
   const categories = Object.freeze({
     heat_sources: {pl:'Źródła ciepła',en:'Heat sources'},
-    tanks: {pl:'Zbiorniki',en:'Tanks'},
+    tanks: {pl:'Zbiorniki i wymienniki',en:'Tanks and heat exchangers'},
     solar: {pl:'Solary',en:'Solar thermal'},
-    hydraulics: {pl:'Pompy i zawory',en:'Pumps and valves'},
-    measurements: {pl:'Czujniki',en:'Sensors'},
+    hydraulics: {pl:'Pompy, zawory i osprzęt',en:'Pumps, valves and accessories'},
+    measurements: {pl:'Czujniki i pomiary',en:'Sensors and measurements'},
     connections: {pl:'Rury i połączenia',en:'Pipes and connections'}
   });
+  // MDI identifiers refer to native Home Assistant icons, not custom SVG assets.
+  const categoryIcons=Object.freeze({heat_sources:'mdi:fire',tanks:'mdi:water-boiler',solar:'mdi:white-balance-sunny',
+    hydraulics:'mdi:pump',measurements:'mdi:thermometer',connections:'mdi:pipe'});
+  const familyIcons=Object.freeze({solid_fuel_boiler:'mdi:fire',pellet_boiler:'mdi:fire',gas_boiler:'mdi:fire',
+    electric_boiler:'mdi:flash',oil_boiler:'mdi:fire',heat_pump:'mdi:heat-pump',fireplace:'mdi:fireplace',
+    tank:'mdi:water-boiler',solar_collector:'mdi:white-balance-sunny',pump:'mdi:pump',valve:'mdi:valve',
+    sensor:'mdi:thermometer',pipe:'mdi:pipe'});
   // Common logical identity, independent from the selected drawing.
   const families = Object.freeze({
     solid_fuel_boiler:{category:'heat_sources',pl:'Kocioł na drewno / węgiel',en:'Wood / coal boiler',fuels:['wood','coal'],entities:['entity','burner_entity'],animations:['combustion']},
@@ -2170,23 +2177,30 @@ const HASSStudioDeviceRegistry = (() => {
   const libraryPresets = Object.freeze([
     ['boiler','solid_fuel','solid_fuels'],
     ['boiler','pellet_modern','solid_fuels'],
-    ['boiler','gas_modern'],
-    ['boiler','electric_modern'],
-    ['boiler','oil'],
-    ['boiler','heatpump_modern'],
-    ['boiler','fireplace_modern'],
-    ['tank','modular'],
-    ['solar','flat'],
-    ['pump','circulation'],
-    ['pump','inline'],
-    ['valve','two_way'],
-    ['valve','three_way'],
-    ['sensor','temperature'],
-    ['sensor','pressure'],
-    ['pipe',null]
+    ['boiler','gas_modern','other_heat'],
+    ['boiler','electric_modern','other_heat'],
+    ['boiler','oil','other_heat'],
+    ['boiler','heatpump_modern','other_heat'],
+    ['boiler','fireplace_modern','other_heat'],
+    ['tank','modular','tank_group'],
+    ['solar','flat','solar_group'],
+    ['pump','circulation','pump_group'],
+    ['pump','inline','pump_group'],
+    ['valve','two_way','valve_group'],
+    ['valve','three_way','valve_group'],
+    ['sensor','temperature','sensor_group'],
+    ['sensor','pressure','sensor_group'],
+    ['pipe',null,'pipe_group']
   ]);
   const subgroups = Object.freeze({
-    solid_fuels: Object.freeze({pl:'Kotły na paliwo stałe',en:'Solid-fuel boilers'})
+    solid_fuels: Object.freeze({pl:'Kotły na paliwo stałe',en:'Solid-fuel boilers',icon:'mdi:fire'}),
+    other_heat: Object.freeze({pl:'Pozostałe źródła ciepła',en:'Other heat sources',icon:'mdi:fireplace'}),
+    tank_group: Object.freeze({pl:'Zbiorniki',en:'Tanks',icon:'mdi:water-boiler'}),
+    solar_group: Object.freeze({pl:'Kolektory solarne',en:'Solar collectors',icon:'mdi:white-balance-sunny'}),
+    pump_group: Object.freeze({pl:'Pompy',en:'Pumps',icon:'mdi:pump'}),
+    valve_group: Object.freeze({pl:'Zawory',en:'Valves',icon:'mdi:valve'}),
+    sensor_group: Object.freeze({pl:'Czujniki',en:'Sensors',icon:'mdi:thermometer'}),
+    pipe_group: Object.freeze({pl:'Rury',en:'Pipes',icon:'mdi:pipe'})
   });
   const presetNames = Object.freeze({
     'pump:circulation':{pl:'Pompa obiegowa',en:'Circulation pump'},
@@ -2206,7 +2220,7 @@ const HASSStudioDeviceRegistry = (() => {
       || choice.device[language];
     return Object.freeze({
       type,variant,category:choice.category,family:choice.family||'pipe',
-      subgroup:subgroup||null,label,icon:iconFor(type)
+      subgroup:subgroup||null,label,icon:familyIcons[choice.family]||'mdi:cube-outline'
     });
   });
   const variantOptionsForNode = (node, lang='pl') => {
@@ -2220,7 +2234,7 @@ const HASSStudioDeviceRegistry = (() => {
     id,category:families[id].category,label:families[id][lang==='en'?'en':'pl'],
     variants:types.flatMap(type => variantsFor(type).filter(item=>item.family===id).map(item=>item.id))
   }));
-  return Object.freeze({categories,families,listTypes,variantsFor,isNodeType,
+  return Object.freeze({categories,categoryIcons,families,listTypes,variantsFor,isNodeType,
     isVariant,defaultVariant,normalizeVariant,iconFor,variantOptions,variantOptionsForNode,
     resolve,catalog,subgroups,libraryEntries});
 })();
@@ -2268,6 +2282,7 @@ const HASSStudioLayout = (() => {
       x:clamp(v.x,0,W-120,40),y:clamp(v.y,0,H-140,40),
       scale:clamp(v.scale,0.5,2.4,1),
       scale_mode:v.type==='tank' && v.variant==='modular' && v.scale_mode==='free'?'free':'proportional',
+       aspect_locked:typeof v.aspect_locked==='boolean'?v.aspect_locked:v.scale_mode!=='free',
       width_scale:clamp(v.width_scale,0.5,2.4,1),height_scale:clamp(v.height_scale,0.5,2.4,1),
       // Use uniform scale for both full render and interactive drag.
       burner_entity:validEntity(v.burner_entity)?v.burner_entity:'',
@@ -2460,8 +2475,8 @@ const HASSStudioCanvas = (() => {
       return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale+')">'+
         (node.type==='tank'&&node.variant==='modular'?HASSStudioTank.render(node,hass):node.type==='boiler'&&node.variant==='solid_fuel'?HASSStudioSolidFuel.render(node,hass):modernPellet?HASSStudioPellet.render(node,hass):modernHP?HASSStudioHeatPump.render(node,hass):modernGas?HASSStudioGasBoiler.render(node,hass):modernElectric?HASSStudioElectricBoiler.render(node,hass):modernFireplace?HASSStudioFireplace.render(node,hass):node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node))+
         (editable&&active?'<rect class="ss-selection" x="'+outline.x+'" y="'+outline.y+'" width="'+outline.width+'" height="'+outline.height+'" rx="8" fill="none" stroke="#52bfff" stroke-dasharray="5 4" stroke-width="1.6" pointer-events="none"/>':'')+
-        '<text x="'+(modernPellet||modernHP||modernGas||modernElectric||modernFireplace?outline.centerX:60)+'" y="'+outline.labelY+'" text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text>'+
-        (reading&&!tallBoiler?'<text x="60" y="'+outline.readingY+'" text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text>':'')+
+        '<g transform="translate('+(modernPellet||modernHP||modernGas||modernElectric||modernFireplace?outline.centerX:60)+' '+outline.labelY+') scale('+(1/node.scale)+')"><text text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text></g>'+
+        (reading&&!tallBoiler?'<g transform="translate(60 '+outline.readingY+') scale('+(1/node.scale)+')"><text text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text></g>':'')+
         '</g>';
     }).join('');
     return '<svg class="ss-svg'+(editable?' ss-svg-editor':'')+'" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
@@ -2482,7 +2497,7 @@ const HASSStudioCanvas = (() => {
  */
 const HASSStudioEditorInspector = (() => {
   const create = ({editor, L, properties, esc, opts, registry, pickLang,
-    get, selectedObject, getSelection, getSelectedPartId, variantShape}) => {
+    get, selectedObject, getSelection, getSelectedPartId, getExpandedPartId, variantShape}) => {
     const entityList=()=>{
       const states=editor._hass?.states||{};
       return Object.keys(states).sort().slice(0,2000).map(id=>
@@ -2504,12 +2519,27 @@ const HASSStudioEditorInspector = (() => {
     const styleOptions=[['warmwasser','Warmwasser (default)'],['studio','Studio (simple)']];
     const sides=[['left',L.left],['right',L.right],['inside',L.inside]];
     const colorsList=[['hot',L.hot],['cold',L.cold],['solar',L.solarFlow],['return',L.returnFlow]];
+    const openSections=new Map();
+    const sectionAttr=id=>openSections.get(id)===false?'':' open';
+    const sectionIcon=(name)=>'<ha-icon icon="'+name+'" aria-hidden="true"></ha-icon>';
+    const partIcons={sensor:'mdi:thermometer',heater:'mdi:flash',coil:'mdi:heating-coil',
+      baffle_horizontal:'mdi:minus',baffle_vertical:'mdi:minus',inner_tank:'mdi:water-boiler'};
     const renderProps=()=>{
+      // UI state is deliberately not persisted in studio_layout.
+      for(const details of properties.querySelectorAll('details[data-section]'))
+        openSections.set(details.dataset.section,details.open);
       const selection=getSelection();
       const model=get(),obj=selectedObject(model);
       let markup='<h3>'+esc(L.properties)+'</h3>';
       if(!obj){properties.innerHTML=markup+'<p>'+esc(L.choose)+'</p>';return;}
-      markup+='<section>'+field(L.name,'label',obj.label);
+      const lang=pickLang(editor._config,editor._hass);
+      const deviceName=selection.type==='pipe'?(L.pipe||'Rura'):
+        (registry.resolve(obj.type,obj.variant)?.device?.[lang]||L[obj.type]||obj.type);
+      markup+='<div class="ss-inspector-heading">'+sectionIcon(selection.type==='pipe'?'mdi:pipe':(registry.categoryIcons[registry.resolve(obj.type,obj.variant)?.category]||'mdi:cube-outline'))+
+        '<span>'+esc(obj.label||deviceName)+'</span></div>'+
+        '<details class="ss-section-details" data-section="device"'+sectionAttr('device')+'><summary>'+
+        sectionIcon('mdi:tune-variant')+'<span>'+esc(obj.type==='tank'?(L.tankSettings||'Ustawienia zbiornika'):(L.properties||'Właściwości'))+'</span>'+
+        sectionIcon('mdi:chevron-down')+'</summary><section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
@@ -2520,8 +2550,8 @@ const HASSStudioEditorInspector = (() => {
         const previewGas=obj.type==='boiler'&&obj.variant==='gas_modern';
         const previewElectric=obj.type==='boiler'&&obj.variant==='electric_modern';
         const previewFireplace=obj.type==='boiler'&&obj.variant==='fireplace_modern';
-        const previewWidth=previewFree?Math.max(170,145*obj.width_scale):120;
-        const previewHeight=previewFree?Math.max(160,155*obj.height_scale):140;
+        const previewWidth=previewFree?Math.max(112*obj.width_scale+30,145*obj.width_scale):120;
+        const previewHeight=previewFree?Math.max(113*obj.height_scale+40,155*obj.height_scale):140;
         const previewBox=previewFireplace?(()=>{const q=HASSStudioFireplace.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewElectric?(()=>{const q=HASSStudioElectricBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewGas?(()=>{const q=HASSStudioGasBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewHP?(()=>{const q=HASSStudioHeatPump.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewPellet?(()=>{const b=HASSStudioPellet.geometry(obj);
             return (b.x-8)+' '+(b.y-8)+' '+(b.width+16)+' '+(b.labelY-b.y+26);})():
           previewSolid?((66+(12-66)*obj.width_scale-8)+' '+(53+(-105-53)*obj.height_scale-8)+' '+
@@ -2532,16 +2562,15 @@ const HASSStudioEditorInspector = (() => {
           HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+HASSStudioGraphics.defs(obj,editor._hass)+'</defs>'+
           (obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,editor._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,editor._hass):previewPellet?HASSStudioPellet.render(obj,editor._hass):previewHP?HASSStudioHeatPump.render(obj,editor._hass):previewGas?HASSStudioGasBoiler.render(obj,editor._hass):previewElectric?HASSStudioElectricBoiler.render(obj,editor._hass):previewFireplace?HASSStudioFireplace.render(obj,editor._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,editor._hass):variantShape(obj))+'</svg></div>';
         const freeScale=obj.type==='tank'&&obj.variant==='modular'&&obj.scale_mode==='free';
-        if(obj.type==='tank'&&obj.variant==='modular')
-          markup+=field(L.tankScaleMode,'scale_mode',obj.scale_mode,'text',
-            [['proportional',L.tankScaleProportional],['free',L.tankScaleFree]]);
         if(obj.type==='tank'&&obj.variant==='modular'){
-          // Axis sliders are never hidden. Editing either one automatically unlocks proportions.
-          if(!freeScale)markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
-          markup+=field(L.tankWidthScale,'width_scale',freeScale?obj.width_scale:obj.scale,
-            'range',null,'min="0.5" max="2.4" step="0.05"')+
-            field(L.tankHeightScale,'height_scale',freeScale?obj.height_scale:obj.scale,
-            'range',null,'min="0.5" max="2.4" step="0.05"');
+          markup+=field(L.scale+' ('+Math.round(obj.scale*100)+'%)','scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.05"')+
+            field(L.tankWidthScale+' ('+Math.round(obj.width_scale*100)+'%)','width_scale',obj.width_scale,
+              'range',null,'min="0.5" max="2.4" step="0.05"')+
+            field(L.tankHeightScale+' ('+Math.round(obj.height_scale*100)+'%)','height_scale',obj.height_scale,
+              'range',null,'min="0.5" max="2.4" step="0.05"')+
+            field(L.tankScaleMode,'aspect_locked',obj.aspect_locked?'true':'false','text',
+              [['true',L.tankScaleProportional],['false',L.tankScaleFree]])+
+            '<button type="button" data-action="reset-tank-aspect">'+esc(L.tankScaleProportional)+' 1:1</button>';
         }else{
           markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
           if(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)){
@@ -2583,28 +2612,36 @@ const HASSStudioEditorInspector = (() => {
           markup+=field(L.solarOnDelta,'solar_on_delta',obj.solar_on_delta,'number',null,'min="1" max="40" step="0.5"');
           markup+=field(L.solarOffDelta,'solar_off_delta',obj.solar_off_delta,'number',null,'min="0" max="39" step="0.5"');
         }
-        markup+='</section><section><h4>'+esc(L.entities)+'</h4>'+
+        markup+='</section></details><details class="ss-section-details" data-section="entities"'+sectionAttr('entities')+'><summary>'+
+           sectionIcon('mdi:chart-timeline-variant')+'<span>'+esc(L.entities)+'</span>'+sectionIcon('mdi:chevron-down')+
+           '</summary><section>'+
           obj.entities.map((en,index)=>'<div class="ss-row">'+
             entityField(en.entity,'multiEntity',index)+
             '<button type="button" data-delete-entity="'+index+'">×</button></div>'+
             field(L.label,'multiLabel',en.label,'text',null,'data-index="'+index+'"')).join('')+
-          '<button type="button" data-action="entity">'+esc(L.addEntity)+'</button></section>';
+          '<button type="button" data-action="entity">'+esc(L.addEntity)+'</button></section></details>';
         if(obj.type==='tank'||obj.type==='solar'){
           const isModular=obj.type==='tank'&&obj.variant==='modular';
-          markup+='<section><h4>'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'</h4>'+
-            '<div class="ss-part-list" role="group" aria-label="'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'">'+
-            obj.parts.map((part,i)=>'<button type="button" class="ss-part-pick'+
-              (part.id===getSelectedPartId()?' ss-part-active':'')+'" data-select-part="'+esc(part.id)+'" aria-pressed="'+
-              (part.id===getSelectedPartId()?'true':'false')+'">'+
-              esc(part.label||((L[part.kind]||part.kind)+' '+(i+1)))+
-              (part.entity?' · '+esc(part.entity):'')+'</button>').join('')+'</div>'+
-            (obj.parts.some(part=>part.id===getSelectedPartId())?'<h4>'+esc(L.properties)+'</h4>':'')+
-          obj.parts.map((item,index)=>item.id!==getSelectedPartId()?'':'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+(isModular?' · '+esc(L.partLayer)+' '+index:'')+'</strong>'+
-            (isModular?'<button type="button" title="'+esc(L.partLayerDown)+'" aria-label="'+esc(L.partLayerDown)+'" data-layer-down="'+index+'"'+(index===0?' disabled':'')+'>↓</button>'+
-              '<button type="button" title="'+esc(L.partLayerUp)+'" aria-label="'+esc(L.partLayerUp)+'" data-layer-up="'+index+'"'+(index===obj.parts.length-1?' disabled':'')+'>↑</button>':'')+
-            '<button type="button" data-delete-part="'+index+'">×</button></div>'+
-            (obj.type==='solar'?'':field(L.graphic,'partKind',item.kind,'text',
-              (isModular?[['sensor',L.sensor],['heater',L.heater],['coil',L.coil],['baffle_horizontal',L.baffle_horizontal],['baffle_vertical',L.baffle_vertical],['inner_tank',L.inner_tank]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]]),'data-index="'+index+'"'))+
+          markup+='<details class="ss-section-details" data-section="parts"'+sectionAttr('parts')+'><summary>'+
+            sectionIcon('mdi:layers-outline')+'<span>'+esc(obj.type==='solar'?L.solarSensors:(L.internalParts||'Elementy wewnętrzne'))+
+            '</span><span class="ss-part-count">'+obj.parts.length+'</span>'+sectionIcon('mdi:chevron-down')+'</summary>'+
+            '<section><div class="ss-part-cards">'+obj.parts.map((item,index)=>
+              '<div class="ss-part-card'+(item.id===getSelectedPartId()?' ss-part-active':'')+'">'+
+              '<button type="button" class="ss-part-pick" data-select-part="'+esc(item.id)+'" aria-pressed="'+
+                (item.id===getSelectedPartId()?'true':'false')+'" aria-expanded="'+(item.id===getExpandedPartId()?'true':'false')+'">'+
+                sectionIcon(partIcons[item.kind]||'mdi:cube-outline')+
+                '<span class="ss-part-caption"><strong>'+esc(item.label||((L[item.kind]||item.kind)+' '+(index+1)))+
+                '</strong><small>'+esc(item.entity||((L[item.kind]||item.kind)+' · '+(index+1)))+'</small></span>'+
+                sectionIcon(item.id===getExpandedPartId()?'mdi:chevron-up':'mdi:chevron-down')+
+              '</button>'+
+              (item.id!==getExpandedPartId()?'':'<div class="ss-part-fields">'+
+                '<div class="ss-row ss-part-actions"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+
+                (isModular?' · '+esc(L.partLayer)+' '+index:'')+'</strong>'+
+                (isModular?'<button type="button" title="'+esc(L.partLayerDown)+'" aria-label="'+esc(L.partLayerDown)+'" data-layer-down="'+index+'"'+(index===0?' disabled':'')+'>↓</button>'+
+                  '<button type="button" title="'+esc(L.partLayerUp)+'" aria-label="'+esc(L.partLayerUp)+'" data-layer-up="'+index+'"'+(index===obj.parts.length-1?' disabled':'')+'>↑</button>':'')+
+                '<button type="button" aria-label="'+esc(L.remove)+'" data-delete-part="'+index+'">×</button></div>'+
+                (obj.type==='solar'?'':field(L.graphic,'partKind',item.kind,'text',
+                  (isModular?[['sensor',L.sensor],['heater',L.heater],['coil',L.coil],['baffle_horizontal',L.baffle_horizontal],['baffle_vertical',L.baffle_vertical],['inner_tank',L.inner_tank]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]]),'data-index="'+index+'"'))+
             field(L.visual,'partVariant',item.variant,'text',
               [['warmwasser','Warmwasser'],['compact',L.compact||'Compact'],['extended',L.extended||'Extended']],
               'data-index="'+index+'"')+
@@ -2621,10 +2658,11 @@ const HASSStudioEditorInspector = (() => {
             (isModular && item.kind.startsWith('baffle_')?field(L.permeability,'partPermeability',item.permeability,'range',null,'min="0" max="1" step="0.05" data-index="'+index+'"'):'')+
             (item.kind==='sensor'?field(L.sensorScale,'partDisplayScale',item.display_scale,'range',null,
               'min="0.5" max="2" step="0.1" data-index="'+index+'"'):'')+
-            '<label>'+esc(L.entity)+entityField(item.entity,'partEntity',index)+'</label>'
-          ).join('')+
+            '<label>'+esc(L.entity)+entityField(item.entity,'partEntity',index)+'</label>'+
+              '</div>')+'</div>'
+            ).join('')+'</div>'+
           '<div class="ss-add-parts">'+(obj.type==='solar'?[['sensor',L.sensor]]:(isModular?[['sensor',L.sensor],['heater',L.heater],['coil',L.coil],['baffle_horizontal',L.baffle_horizontal],['baffle_vertical',L.baffle_vertical],['inner_tank',L.inner_tank]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]])).map(v=>
-            '<button type="button" data-add-part="'+v[0]+'">+ '+esc(v[1])+'</button>').join('')+'</div></section>';
+            '<button type="button" data-add-part="'+v[0]+'">+ '+esc(v[1])+'</button>').join('')+'</div></section></details>';
         }
       }else{
         markup+=field(L.pipeColor,'color',obj.color,'text',colorsList);
@@ -2651,7 +2689,9 @@ const HASSStudioEditorInspector = (() => {
           '<div class="ss-add-parts"><button type="button" data-add-accessory="pump">+ '+esc(L.pump)+'</button>'+
           '<button type="button" data-add-accessory="valve">+ '+esc(L.valve)+'</button></div></section>';
       }
+      const scroll=properties.scrollTop;
       properties.innerHTML=markup+'<datalist id="ss-entity-list">'+entityList()+'</datalist>';
+      properties.scrollTop=scroll;
       // Every entity field gets an HA-like search list from the first typed character.
       const popup=document.createElement('div');
       popup.className='ss-entities';popup.hidden=true;
@@ -2685,30 +2725,34 @@ const HASSStudioEditorInspector = (() => {
 })();
 
 
-/* Grouped equipment library; variants are resolved by the device registry. */
+/* Native Home Assistant icons and hierarchical equipment library. */
 const HASSStudioEditorLibrary=(()=>{
   const render=({registry,language='pl',esc})=>{
     const lang=language==='en'?'en':'pl',entries=registry.libraryEntries(lang);
+    const icon=name=>'<ha-icon class="ss-lib-icon" icon="'+esc(name)+'" aria-hidden="true"></ha-icon>';
+    const arrow=()=>'<ha-icon class="ss-lib-chevron" icon="mdi:chevron-down" aria-hidden="true"></ha-icon>';
     const button=item=>{
       const attrs=item.type==='boiler'?' data-add-preset="'+esc(item.variant)+'"':
         ' data-add="'+esc(item.type)+'"'+(item.variant?' data-variant="'+esc(item.variant)+'"':'');
       return '<button type="button" class="ss-lib-item"'+attrs+' aria-label="'+esc(item.label)+'">'+
-        '<span class="ss-lib-icon" aria-hidden="true">'+esc(item.icon)+'</span>'+
-        '<span class="ss-lib-label">'+esc(item.label)+'</span></button>';
+        icon(item.icon)+'<span class="ss-lib-label">'+esc(item.label)+'</span></button>';
     };
     return Object.entries(registry.categories).map(([category,names])=>{
       const items=entries.filter(item=>item.category===category);
       if(!items.length)return '';
       const nested=Object.entries(registry.subgroups).map(([group,labels])=>{
         const subset=items.filter(item=>item.subgroup===group);
-        return subset.length?'<details class="ss-lib-subgroup" open><summary>'+esc(labels[lang])+
-          '<span class="ss-lib-count">'+subset.length+'</span></summary><div class="ss-lib-items">'+
-          subset.map(button).join('')+'</div></details>':'';
+        return subset.length?'<details class="ss-lib-subgroup"'+(category==='heat_sources'?' open':'')+'><summary>'+
+          icon(labels.icon)+'<span class="ss-lib-title">'+esc(labels[lang])+'</span>'+
+          '<span class="ss-lib-count">'+subset.length+'</span>'+arrow()+'</summary>'+
+          '<div class="ss-lib-items">'+subset.map(button).join('')+'</div></details>':'';
       }).join('');
       const direct=items.filter(item=>!item.subgroup).map(button).join('');
       return '<details class="ss-lib-group" data-lib-category="'+esc(category)+'"'+
-        (category==='heat_sources'?' open':'')+'><summary>'+esc(names[lang])+
-        '<span class="ss-lib-count">'+items.length+'</span></summary>'+
+        (category==='heat_sources'?' open':'')+'><summary>'+
+        icon(registry.categoryIcons[category]||'mdi:cube-outline')+
+        '<span class="ss-lib-title">'+esc(names[lang])+'</span>'+
+        '<span class="ss-lib-count">'+items.length+'</span>'+arrow()+'</summary>'+
         '<div class="ss-lib-contents">'+nested+direct+'</div></details>';
     }).join('');
   };
@@ -2840,18 +2884,22 @@ const HASSStudioEditorLibrary=(()=>{
       '.ss-props{border-right:none;border-left:1px solid var(--divider-color,#555);min-width:0;overflow-x:hidden}'+
       '.ss-library h3,.ss-props h3{font-size:12px;letter-spacing:.06em;color:var(--secondary-text-color);margin:0 0 12px}'+
       '.ss-library button{display:flex;align-items:center;gap:12px;width:100%;margin-bottom:8px;text-align:left;font-size:13px}'+
-      '.ss-library button span{font-size:19px;display:inline-block;width:24px;text-align:center}'+
+      '.ss-library ha-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 20px;width:20px;height:20px;--mdc-icon-size:20px;color:var(--secondary-text-color,#9eacbb)}'+
+       '.ss-library .ss-lib-chevron{flex:0 0 16px;width:16px;height:16px;--mdc-icon-size:16px;transition:transform .15s}'+
+       '.ss-lib-group:not([open])>summary .ss-lib-chevron,.ss-lib-subgroup:not([open])>summary .ss-lib-chevron{transform:rotate(-90deg)}'+
+       '.ss-library summary::-webkit-details-marker{display:none}.ss-library summary{list-style:none}'+
       '.ss-library .ss-lib-group{border:1px solid var(--divider-color,#555);border-radius:8px;margin:0 0 8px;overflow:hidden}'+
-      '.ss-library .ss-lib-group>summary,.ss-library .ss-lib-subgroup>summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:10px 8px;font-size:12px;font-weight:600;list-style-position:inside}'+
+      '.ss-library .ss-lib-group>summary,.ss-library .ss-lib-subgroup>summary{cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 8px;font-size:12px;font-weight:600;min-width:0}'+
       '.ss-library .ss-lib-group>summary{background:var(--secondary-background-color,#18222e)}'+
-      '.ss-library .ss-lib-subgroup{margin:4px 0 8px;border-left:2px solid var(--divider-color,#555)}'+
+      '.ss-library .ss-lib-subgroup{margin:4px 0 8px;border-left:1px solid var(--divider-color,#555);padding-left:3px}'+
+       '.ss-library .ss-lib-title{flex:1;min-width:0;overflow-wrap:anywhere}'+
       '.ss-library .ss-lib-subgroup>summary{font-size:11px;padding:8px}'+
       '.ss-library .ss-lib-contents{padding:6px}'+
       '.ss-library .ss-lib-count{color:var(--secondary-text-color);font-weight:400}'+
       '.ss-library button.ss-lib-item{gap:8px;padding:8px 6px;margin:0 0 4px;border-color:transparent;background:transparent;white-space:normal}'+
       '.ss-library button.ss-lib-item:hover,.ss-library button.ss-lib-item:focus-visible{background:var(--secondary-background-color,#18222e);border-color:var(--primary-color,#168bce)}'+
       '.ss-library .ss-lib-label{font-size:12px;line-height:1.3;display:block;min-width:0;flex:1;overflow-wrap:anywhere}'+
-      '.ss-library .ss-lib-icon{flex:0 0 22px}'+
+      '.ss-library .ss-lib-icon{flex:0 0 20px}'+
       '.ss-canvas{min-width:0;min-height:0;overflow:auto;background:var(--secondary-background-color,#18222e);padding:16px}'+
       '.ss-stage{width:max-content;max-width:none}.ss-svg{display:block;width:1200px;height:720px;max-height:none;padding:0;touch-action:none}'+
       '.ss-svg-editor .ss-node{cursor:grab}.ss-svg-editor .ss-pipe-hit{cursor:pointer;pointer-events:stroke}.ss-handle{cursor:move}'+
@@ -2867,7 +2915,25 @@ const HASSStudioEditorLibrary=(()=>{
       '.ss-props .ss-add-parts button{flex:0 1 auto;max-width:100%;white-space:normal;overflow-wrap:anywhere}'+
       '.ss-part-list{display:flex;flex-direction:column;gap:4px;max-height:210px;overflow-y:auto}'+
       '.ss-props button.ss-part-pick{text-align:left;padding:8px;white-space:normal;overflow-wrap:anywhere;font-size:12px}'+
-      '.ss-part-pick.ss-part-active{outline:2px solid var(--primary-color,#168bce)}'+
+      '.ss-inspector-heading{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;margin-bottom:12px;overflow-wrap:anywhere}'+
+       '.ss-inspector-heading ha-icon{--mdc-icon-size:22px;color:var(--primary-color,#168bce)}'+
+       '.ss-section-details{border:1px solid var(--divider-color,#555);border-radius:9px;margin-bottom:10px;overflow:hidden}'+
+       '.ss-section-details>summary{display:flex;align-items:center;gap:8px;list-style:none;padding:11px;cursor:pointer;background:var(--secondary-background-color,#18222e);font-weight:600;font-size:12px}'+
+       '.ss-section-details>summary::-webkit-details-marker{display:none}'+
+       '.ss-section-details>summary span:first-of-type{flex:1}'+
+       '.ss-section-details>summary ha-icon{--mdc-icon-size:18px;width:18px;height:18px;color:var(--secondary-text-color)}'+
+       '.ss-section-details:not([open])>summary ha-icon:last-child{transform:rotate(-90deg)}'+
+       '.ss-section-details>section{border:0;padding:10px;gap:10px}'+
+       '.ss-part-count{color:var(--secondary-text-color);font-weight:400}'+
+       '.ss-part-cards{display:grid;gap:6px}'+
+       '.ss-part-card{border:1px solid var(--divider-color,#555);border-radius:8px;overflow:hidden;min-width:0}'+
+       '.ss-part-card.ss-part-active{border-color:var(--primary-color,#168bce)}'+
+       '.ss-props button.ss-part-pick{display:flex;align-items:center;gap:8px;text-align:left;width:100%;border:0;border-radius:0;background:var(--card-background-color,#29323c)}'+
+       '.ss-part-pick ha-icon{--mdc-icon-size:18px;flex:0 0 18px;color:var(--secondary-text-color)}'+
+       '.ss-part-caption{display:flex;flex-direction:column;flex:1;min-width:0;gap:3px;overflow-wrap:anywhere}'+
+       '.ss-part-caption small{font-size:10px;color:var(--secondary-text-color)}'+
+       '.ss-part-fields{display:grid;gap:10px;padding:10px;border-top:1px solid var(--divider-color,#555)}'+
+       '.ss-part-actions strong{font-size:11px}'+
       '.ss-selected{outline:1px solid var(--primary-color)}'+
       '.ss-preview{border:1px solid var(--divider-color,#555);border-radius:8px;display:grid;place-items:center;padding:8px}'+
       '.ss-entities{max-height:210px;overflow-y:auto;border:1px solid var(--divider-color,#555);border-radius:8px}'+
@@ -2907,7 +2973,7 @@ const HASSStudioEditorLibrary=(()=>{
         grip.addEventListener('pointercancel',end);
       });
     }
-    let selection=null,drag=null,zoom=1,selectedPartId=null;
+    let selection=null,drag=null,zoom=1,selectedPartId=null,expandedPartId=null;
     const get=()=>normalized(this._config);
     const commit=(model)=>{
       this._config={...this._config,studio_layout:model};
@@ -2920,7 +2986,7 @@ const HASSStudioEditorLibrary=(()=>{
     };
     const renderProps=HASSStudioEditorInspector.create({
       editor:this,L,properties,esc,opts,registry,pickLang,get,selectedObject,
-      getSelection:()=>selection,getSelectedPartId:()=>selectedPartId,variantShape
+      getSelection:()=>selection,getSelectedPartId:()=>selectedPartId,getExpandedPartId:()=>expandedPartId,variantShape
     });
     const render=()=>{
       stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
@@ -2929,7 +2995,7 @@ const HASSStudioEditorLibrary=(()=>{
       renderProps();
     };
     const setSelected=(type,id)=>{
-      selection={type,id};selectedPartId=type==='node'?get().nodes.find(n=>n.id===id)?.parts?.[0]?.id||null:null;render();
+      selection={type,id};selectedPartId=type==='node'?get().nodes.find(n=>n.id===id)?.parts?.[0]?.id||null:null;expandedPartId=selectedPartId;render();
     };
     const point=(ev,svg)=>{
       const p=svg.createSVGPoint();p.x=ev.clientX;p.y=ev.clientY;
@@ -3011,7 +3077,7 @@ const HASSStudioEditorLibrary=(()=>{
       const model=get();
       if(selection.type==='node')model.nodes=model.nodes.filter(n=>n.id!==selection.id);
       else model.pipes=model.pipes.filter(n=>n.id!==selection.id);
-      selection=null;selectedPartId=null;commit(model);render();
+      selection=null;selectedPartId=null;expandedPartId=null;commit(model);render();
     });
     root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add,button.dataset.variant||'')));
     root.querySelectorAll('[data-add-preset]').forEach(button=>button.addEventListener('click',()=>create('boiler',button.dataset.addPreset)));
@@ -3021,24 +3087,20 @@ const HASSStudioEditorLibrary=(()=>{
       const model=get(),obj=selectedObject(model);if(!obj)return;
       const index=Number(el.dataset.index);
       const val=el.value;
-      if(key==='scale_mode'&&obj.type==='tank'&&obj.variant==='modular'){
-        if(val==='free'&&obj.scale_mode!=='free'){
-          obj.width_scale=clamp(obj.scale,0.5,2.4,1);
-          obj.height_scale=clamp(obj.scale,0.5,2.4,1);
-          obj.scale=1;
-        }else if(val!=='free'&&obj.scale_mode==='free'){
-          obj.scale=clamp(Math.sqrt(obj.width_scale*obj.height_scale),0.5,2.4,1);
-          obj.width_scale=1;obj.height_scale=1;
-        }
-        obj.scale_mode=val==='free'?'free':'proportional';
+      if(key==='aspect_locked'&&obj.type==='tank'&&obj.variant==='modular'){
+        obj.aspect_locked=val==='true';
       }else if(['width_scale','height_scale'].includes(key)&&obj.type==='tank'&&obj.variant==='modular'){
-        if(obj.scale_mode!=='free'){
-          obj.width_scale=obj.scale;
-          obj.height_scale=obj.scale;
-          obj.scale=1;
-          obj.scale_mode='free';
+        const previous=obj[key];
+        const next=clamp(val,.5,2.4,previous);
+        if(obj.aspect_locked){
+          const other=key==='width_scale'?'height_scale':'width_scale';
+          const ratio=previous>0?next/previous:1;
+          const companion=obj[other]*ratio;
+          if(companion>=.5&&companion<=2.4)obj[other]=companion;
+          else {obj.aspect_locked=false;}
         }
-        obj[key]=clamp(val,.5,2.4,obj[key]);
+        obj[key]=next;
+        obj.scale_mode='free';
       }else if(['width_scale','height_scale'].includes(key)&&obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)){
         // Independent from the proportional whole-node scale.
         obj[key]=clamp(val,.5,2.4,obj[key]);
@@ -3087,9 +3149,14 @@ const HASSStudioEditorLibrary=(()=>{
       const button=event.target.closest('button');
       if(!button||!selection)return;
       const model=get(),obj=selectedObject(model);if(!obj)return;
+      if(button.dataset.action==='reset-tank-aspect' && obj.type==='tank'&&obj.variant==='modular'){
+        obj.width_scale=1;obj.height_scale=1;obj.scale_mode='free';obj.aspect_locked=true;
+        commit(model);render();return;
+      }
       if(button.hasAttribute('data-select-part')){
         if(obj.parts?.some(part=>part.id===button.dataset.selectPart)){
-          selectedPartId=button.dataset.selectPart;renderProps();
+          selectedPartId=button.dataset.selectPart;
+          expandedPartId=expandedPartId===selectedPartId?null:selectedPartId;renderProps();
         }
         return;
       }
@@ -3104,7 +3171,7 @@ const HASSStudioEditorLibrary=(()=>{
         else return;
       }else if(button.hasAttribute('data-delete-part')){
         const removed=obj.parts.splice(index,1)[0];
-        if(removed?.id===selectedPartId)selectedPartId=obj.parts[Math.min(index,obj.parts.length-1)]?.id||null;
+        if(removed?.id===selectedPartId){selectedPartId=obj.parts[Math.min(index,obj.parts.length-1)]?.id||null;expandedPartId=selectedPartId;}
       }
       else if(button.hasAttribute('data-delete-accessory'))obj.accessories.splice(index,1);
       else if(button.hasAttribute('data-delete-entity'))obj.entities.splice(index,1);
@@ -3115,7 +3182,7 @@ const HASSStudioEditorLibrary=(()=>{
         const newPart={id:freshId('i'),kind,label:obj.type==='solar'?'Kolektor':kind==='sensor'?'T'+sensorCount:'',
           side:obj.type==='solar'?'right':'left',height:obj.type==='solar'?80:50,
           display_scale:1,variant:'warmwasser',entity:'',x:50,length:58,width:60,turns:12,power:75,mode:'auto',flow_mode:'auto',flow_direction:'forward',flow_speed:1,permeability:kind==='baffle_horizontal'?.35:0,container:'main',power_entity:''};
-        obj.parts.push(newPart);selectedPartId=newPart.id;
+        obj.parts.push(newPart);selectedPartId=newPart.id;expandedPartId=newPart.id;
       }else if(button.dataset.addAccessory){
         if(obj.accessories.length>=20)return;
         obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,label:'',position:50,entity:''});
@@ -3144,6 +3211,7 @@ const HASSStudioEditorLibrary=(()=>{
           selection={type:'node',id:node.dataset.id};
           const partHit=event.target.closest?.('[data-part-id]');
           selectedPartId=partHit?.dataset.partId||get().nodes.find(n=>n.id===node.dataset.id)?.parts?.[0]?.id||null;
+           expandedPartId=selectedPartId;
           if(partHit){renderProps();return;}
           const model=get(),obj=selectedObject(model),svg=stage.querySelector('svg'),p=point(event,svg);
           if(!obj)return;
@@ -3151,7 +3219,7 @@ const HASSStudioEditorLibrary=(()=>{
         }else{
           const pipe=event.target.closest?.('.ss-pipe');
           if(pipe){setSelected('pipe',pipe.dataset.id);return;}
-          selection=null;selectedPartId=null;render();return;
+          selection=null;selectedPartId=null;expandedPartId=null;render();return;
         }
       }
       stage.querySelector('svg')?.setPointerCapture(event.pointerId);
