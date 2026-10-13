@@ -7,16 +7,9 @@ const HASSStudioTank = (() => {
   const clamp = (v,lo,hi,fallback=lo) => num(v) ? Math.max(lo,Math.min(hi,Number(v))) : fallback;
   const safe = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const ident = v => String(v).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,42);
-  const state = (h,e) => e && h?.states?.[e] ? h.states[e] : null;
-  const active = (h,e) => ['on','active','heat','heating','running','open'].includes(String(state(h,e)?.state||'').toLowerCase());
-  const temperature = (h,e) => {
-    const s=state(h,e),v=s?.state;
-    if (!num(v) || ['unknown','unavailable'].includes(String(v))) return null;
-    const unit=s?.attributes?.unit_of_measurement;
-    if (unit && !['°C','C','°F','F'].includes(unit)) return null;
-    const c=unit==='°F'||unit==='F' ? (Number(v)-32)*5/9 : Number(v);
-    return c>=-40 && c<=150 ? c : null;
-  };
+  const state = HASSStudioHA.entity;
+  const active = (h,e) => HASSStudioHA.active(h,e,['heat']);
+  const temperature = HASSStudioHA.temperature;
   const color = t => {
     if (!num(t)) return '#506780';
     const palette=[[0,[28,88,218]],[20,[25,162,228]],[40,[132,87,217]],[60,[224,65,136]],[80,[239,49,63]],[100,[255,108,44]]];
@@ -187,7 +180,7 @@ const HASSStudioTank = (() => {
       return '<path d="M'+a.x.toFixed(3)+' '+a.y.toFixed(3)+'L'+pt.x.toFixed(3)+' '+pt.y.toFixed(3)+
         '" stroke="'+c+'" stroke-width="3" stroke-linecap="round" fill="none"/>';
     }).join('');
-    const running=p.flow_mode==='on'||(p.flow_mode!=='off'&&active(h,p.entity));
+    const running=HASSStudioAnimation.flowActive(p.flow_mode,h,p.entity,['heat']);
     return '<g class="ss-tank-coil"'+(p.entity?' data-more="'+safe(p.entity)+'"':'')+' clip-path="url(#'+base+'WaterClip)">'+
       '<path d="'+d+'" fill="none" stroke="#17243c" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>'+
       '<g class="ss-tank-coil-gradient" data-start="#1a9df9" data-end="'+endColor+'">'+colorful+'</g>'+

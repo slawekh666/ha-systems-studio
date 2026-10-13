@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1250 1350">
+<defs>
+        <linearGradient id="bodyGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#3a424d"/>
+          <stop offset=".18" stop-color="#212933"/>
+          <stop offset=".48" stop-color="#0b121a"/>
+          <stop offset=".76" stop-color="#111923"/>
+          <stop offset="1" stop-color="#2f3742"/>
+        </linearGradient>
+        <linearGradient id="bodySideGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#2b3440"/>
+          <stop offset=".22" stop-color="#0f151d"/>
+          <stop offset=".5" stop-color="#0a1017"/>
+          <stop offset=".78" stop-color="#151d27"/>
+          <stop offset="1" stop-color="#303946"/>
+        </linearGradient>
+        <linearGradient id="metalGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#5e6872"/>
+          <stop offset=".18" stop-color="#9ca4ad"/>
+          <stop offset=".5" stop-color="#2e3742"/>
+          <stop offset=".82" stop-color="#0b1118"/>
+          <stop offset="1" stop-color="#3d4650"/>
+        </linearGradient>
+        <linearGradient id="glassGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#404654" stop-opacity=".76"/>
+          <stop offset=".3" stop-color="#1a2028" stop-opacity=".60"/>
+          <stop offset=".72" stop-color="#090d12" stop-opacity=".84"/>
+          <stop offset="1" stop-color="#030507" stop-opacity=".95"/>
+        </linearGradient>
+        <linearGradient id="displayGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#08131f"/>
+          <stop offset="1" stop-color="#02070d"/>
+        </linearGradient>
+        <linearGradient id="screenShine" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffffff" stop-opacity=".10"/>
+          <stop offset=".6" stop-color="#ffffff" stop-opacity="0"/>
+          <stop offset="1" stop-color="#ffffff" stop-opacity=".04"/>
+        </linearGradient>
+        <filter id="blueGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter>
+        <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"/></filter>
+      <clipPath id="fireClip"><rect x="400" y="448" width="400" height="420" rx="12"/></clipPath></defs>
+
+      <g id="auraGroup">
+        <path d="M350 162 H850 Q906 162 906 218 V1096 Q906 1154 850 1154 H350 Q294 1154 294 1096 V218 Q294 162 350 162 Z" fill="none" stroke="#2aa6ff" stroke-opacity=".28" stroke-width="18" filter="url(#blueGlow)"/>
+        <ellipse cx="600" cy="1172" rx="330" ry="34" fill="#1f6dff" fill-opacity=".22" filter="url(#blueGlow)"/>
+      </g>
+
+      <g id="chimneyGroup">
+        <rect x="512" y="52" width="176" height="152" rx="18" fill="url(#bodySideGrad)" stroke="#aeb7c1" stroke-opacity=".26" stroke-width="3"/>
+        <path d="M522 58 H678" stroke="#45b9ff" stroke-width="5" stroke-linecap="round" opacity=".92" filter="url(#softGlow)"/>
+        <rect x="492" y="202" width="216" height="26" rx="10" fill="#060a0f" opacity=".95"/>
+      </g>
+
+      <g id="topCapGroup">
+        <path d="M346 184 H854 L908 210 V286 H292 V210 Z" fill="url(#metalGrad)" stroke="#c2cad3" stroke-opacity=".28" stroke-width="3"/>
+        <path d="M354 190 H846" stroke="#48b8ff" stroke-width="4" stroke-linecap="round" opacity=".92" filter="url(#softGlow)"/>
+        <path d="M344 282 H856" stroke="#070c12" stroke-width="10" opacity=".78"/>
+      </g>
+
+      <g id="bodyGroup">
+        <path d="M354 252 H846 Q900 252 900 306 V1092 Q900 1144 846 1144 H354 Q300 1144 300 1092 V306 Q300 252 354 252 Z" fill="url(#bodyGrad)" stroke="#c1c8d0" stroke-opacity=".25" stroke-width="3"/>
+        <path d="M326 304 V1080" stroke="#3d4857" stroke-opacity=".26" stroke-width="2"/>
+        <path d="M874 304 V1080" stroke="#0d131c" stroke-opacity=".44" stroke-width="2"/>
+        <path d="M318 312 C338 280 356 268 380 266 H820 C858 266 882 284 892 308" fill="none" stroke="#0e151d" stroke-width="10" opacity=".64"/>
+      </g>
+
+      <g id="displayGroup">
+        <rect x="528" y="298" width="212" height="68" rx="12" fill="#181d24" stroke="#9ca6b3" stroke-opacity=".28" stroke-width="3"/>
+        <rect x="536" y="306" width="196" height="52" rx="10" fill="url(#displayGrad)" stroke="#44b8ff" stroke-opacity=".56" stroke-width="2"/>
+        <text x="556" y="326" font-size="11" font-family="monospace" fill="#73ddff">STOVE TEMP</text>
+        <text id="stoveTempDisplay" x="556" y="350" font-size="30" font-family="monospace" font-weight="700" fill="#eef8ff">65.0°C</text>
+        <g id="displayBars" transform="translate(666 316)">
+          <rect x="0" y="18" width="10" height="14" rx="2" fill="#19b8ff" id="displayBar1" opacity=".22"/>
+          <rect x="18" y="10" width="10" height="22" rx="2" fill="#28c0ff" id="displayBar2" opacity=".22"/>
+          <rect x="36" y="2" width="10" height="30" rx="2" fill="#55d4ff" id="displayBar3" opacity=".22"/>
+          <circle cx="70" cy="8" r="3" fill="#44b8ff"/>
+          <circle cx="70" cy="22" r="3" fill="#2875c9"/>
+        </g>
+      </g>
+
+      <g id="windowOuterGroup">
+        <rect x="346" y="394" width="508" height="528" rx="44" fill="#0c1218" stroke="#5d6771" stroke-width="4"/>
+        <rect x="376" y="424" width="448" height="468" rx="30" fill="#060a0d" stroke="#1a222c" stroke-width="4"/>
+        <rect x="400" y="448" width="400" height="420" rx="12" fill="url(#glassGrad)" stroke="#5d1f09" stroke-opacity=".20" stroke-width="3"/>
+        <g id="combustionSlot"></g>
+        <rect x="392" y="440" width="416" height="436" rx="16" fill="none" stroke="#1a2129" stroke-width="12"/>
+        <path d="M430 464 H612 L472 860 H430 Z" fill="#ffffff" opacity=".10"/>
+        <path d="M676 458 C730 516 754 580 760 652" fill="none" stroke="#ffffff" stroke-opacity=".05" stroke-width="18" stroke-linecap="round"/>
+        <path d="M414 460 H786" stroke="#8a2d0d" stroke-opacity=".22" stroke-width="4" stroke-linecap="round"/>
+      </g>
+
+      <g id="doorHandleGroup">
+        <rect x="844" y="596" width="14" height="114" rx="7" fill="#090d12" opacity=".88"/>
+        <rect x="858" y="584" width="32" height="174" rx="10" fill="url(#metalGrad)" stroke="#d4dce6" stroke-opacity=".26" stroke-width="2"/>
+      </g>
+
+      <g id="baseGroup">
+        <path d="M316 1102 H884 L902 1120 V1224 Q902 1238 888 1238 H312 Q298 1238 298 1224 V1120 Z" fill="url(#bodySideGrad)" stroke="#aab3be" stroke-opacity=".22" stroke-width="3"/>
+        <path d="M360 1238 H474 L456 1198 H378 Z" fill="#02060a"/>
+        <path d="M726 1238 H840 L824 1198 H744 Z" fill="#02060a"/>
+      </g>
+</svg>

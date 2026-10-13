@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.14-dev';
+const VERSION = '0.4.15-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -980,6 +980,76 @@ if (!window.customCards.some((x) => x.type === 'ha-systems-studio'))
 console.info(`%c WARMWASSER-SCHEMA-CARD %c ${VERSION} `, 'background:#ff4b3e;color:#fff;font-weight:700', 'background:#333;color:#fff');
 
 
+/* Shared, read-only Home Assistant state adapters.
+ * Unknown/unavailable values are never replaced by demo measurements.
+ * No HA service calls, timers or subscriptions.
+ */
+const HASSStudioHA = (() => {
+  const entity = (h, id) => id && typeof id === 'string' ? h?.states?.[id] || null : null;
+  const reading = (h, id) => {
+    const item = entity(h, id);
+    const value = item?.state;
+    if (typeof value !== 'string' && typeof value !== 'number') return null;
+    const text = String(value).trim();
+    if (!text || !Number.isFinite(Number(text))) return null;
+    return { value: Number(text), unit: String(item.attributes?.unit_of_measurement ?? '').trim() };
+  };
+  const temperature = (h, id) => {
+    const r = reading(h, id);
+    if (!r || !['', '°C', 'C', '°F', 'F'].includes(r.unit)) return null;
+    const c = r.unit === '°F' || r.unit === 'F' ? (r.value - 32) * 5 / 9 : r.value;
+    return c >= -40 && c <= 150 ? c : null;
+  };
+  const powerKw = (h, id) => {
+    const r = reading(h, id);
+    if (!r || r.value < 0) return null;
+    if (r.unit === 'W') return r.value / 1000;
+    if (r.unit === 'kW') return r.value;
+    return null;
+  };
+  const percentage = (h, id, allowUnitless = true) => {
+    const r = reading(h, id);
+    if (!r || !(r.unit === '%' || r.unit === 'percent' || (allowUnitless && r.unit === ''))) return null;
+    return r.value >= 0 && r.value <= 100 ? r.value : null;
+  };
+  const active = (h, id, extraStates = []) => {
+    const value = String(entity(h, id)?.state ?? '').trim().toLowerCase();
+    return ['on', 'open', 'active', 'running', 'heating', ...extraStates].includes(value);
+  };
+  return Object.freeze({ entity, reading, temperature, powerKw, percentage, active });
+})();
+
+
+/* Read-only SVG animation state resolution.
+ * Modes 'on' and 'off' are persisted in studio_layout; 'auto' follows HA.
+ * This module never controls or writes to Home Assistant entities.
+ */
+const HASSStudioAnimation = (() => {
+  const clamp = (v, a, b, fallback) =>
+    v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v))
+      ? Math.max(a, Math.min(b, Number(v))) : fallback;
+  const flowActive = (mode, h, entity, extraStates = []) =>
+    mode === 'on' || (mode !== 'off' && HASSStudioHA.active(h, entity, extraStates));
+  const combustion = (node, h) => {
+    // Existing saved manual settings take priority over HA.
+    if (['burning', 'embers', 'off'].includes(node.solid_state)) return node.solid_state;
+    const state = HASSStudioHA.entity(h, node.burner_entity);
+    if (state) {
+      const value = String(state.state).toLowerCase();
+      if (['on', 'burning', 'active', 'running', 'heating', 'fire'].includes(value)) return 'burning';
+      if (['embers', 'smoldering', 'cooling', 'glowing'].includes(value)) return 'embers';
+      // Keep historical behavior for explicit off/unknown HA states.
+      return 'off';
+    }
+    const t = HASSStudioHA.temperature(h, node.entity);
+    const upper = clamp(node.burner_on_temp, 20, 90, 35);
+    const lower = Math.min(upper - .5, clamp(node.burner_off_temp, 10, 89, 32));
+    return t === null ? 'off' : t >= upper ? 'burning' : t >= lower ? 'embers' : 'off';
+  };
+  return Object.freeze({ flowActive, combustion });
+})();
+
+
 /* Warmwasser-style SVG functions, adapted from mariofritzer's MIT implementation. */
 const HASSStudioGraphics = (() => {
   const id = n=>'ww'+String(n.id).replace(/[^a-z0-9]/gi,'').slice(0,24);
@@ -1220,16 +1290,9 @@ const HASSStudioTank = (() => {
   const clamp = (v,lo,hi,fallback=lo) => num(v) ? Math.max(lo,Math.min(hi,Number(v))) : fallback;
   const safe = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const ident = v => String(v).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,42);
-  const state = (h,e) => e && h?.states?.[e] ? h.states[e] : null;
-  const active = (h,e) => ['on','active','heat','heating','running','open'].includes(String(state(h,e)?.state||'').toLowerCase());
-  const temperature = (h,e) => {
-    const s=state(h,e),v=s?.state;
-    if (!num(v) || ['unknown','unavailable'].includes(String(v))) return null;
-    const unit=s?.attributes?.unit_of_measurement;
-    if (unit && !['°C','C','°F','F'].includes(unit)) return null;
-    const c=unit==='°F'||unit==='F' ? (Number(v)-32)*5/9 : Number(v);
-    return c>=-40 && c<=150 ? c : null;
-  };
+  const state = HASSStudioHA.entity;
+  const active = (h,e) => HASSStudioHA.active(h,e,['heat']);
+  const temperature = HASSStudioHA.temperature;
   const color = t => {
     if (!num(t)) return '#506780';
     const palette=[[0,[28,88,218]],[20,[25,162,228]],[40,[132,87,217]],[60,[224,65,136]],[80,[239,49,63]],[100,[255,108,44]]];
@@ -1400,7 +1463,7 @@ const HASSStudioTank = (() => {
       return '<path d="M'+a.x.toFixed(3)+' '+a.y.toFixed(3)+'L'+pt.x.toFixed(3)+' '+pt.y.toFixed(3)+
         '" stroke="'+c+'" stroke-width="3" stroke-linecap="round" fill="none"/>';
     }).join('');
-    const running=p.flow_mode==='on'||(p.flow_mode!=='off'&&active(h,p.entity));
+    const running=HASSStudioAnimation.flowActive(p.flow_mode,h,p.entity,['heat']);
     return '<g class="ss-tank-coil"'+(p.entity?' data-more="'+safe(p.entity)+'"':'')+' clip-path="url(#'+base+'WaterClip)">'+
       '<path d="'+d+'" fill="none" stroke="#17243c" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>'+
       '<g class="ss-tank-coil-gradient" data-start="#1a9df9" data-end="'+endColor+'">'+colorful+'</g>'+
@@ -1505,35 +1568,97 @@ const HASSStudioTank = (() => {
   return {render,styles,temperature,color,regions,boundaries,permeability,coilPath,coilColor};
 })();
 
+/* SVG template helpers shared by device renderers. Keep artwork in src/icons/*.svg. */
+const HASSStudioSvg = (() => {
+  const escapeXml = value => String(value).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;'
+  }[ch]));
+
+  /** Extract editable standalone SVG contents for insertion into the HA diagram. */
+  const fragment = xml => {
+    const match = /^\s*(?:<\?xml[^>]*>\s*)?<svg\b[^>]*>([\s\S]*)<\/svg>\s*$/i.exec(xml);
+    if (!match) throw new Error('Expected one complete standalone SVG document');
+    return match[1];
+  };
+
+  /** Replace attributes/text of explicitly named SVG elements, never hand-edit paths. */
+  const apply = (template, bindings) => {
+    const found = new Set();
+    const attributed = template.replace(/<([A-Za-z][\w:.-]*)([^<>]*?)>/g, (opening, tag, attributes) => {
+      const id = /(?:^|\s)id="([^"]+)"/.exec(attributes)?.[1];
+      if (!id || !Object.prototype.hasOwnProperty.call(bindings, id)) return opening;
+      found.add(id);
+      const updates = bindings[id];
+      for (const [name, value] of Object.entries(updates)) {
+        if (name === 'text') continue;
+        if (!/^[a-z][a-z-]*$/.test(name)) throw new Error('Invalid SVG attribute: ' + name);
+        const attr = new RegExp('(\\s)' + name + '="[^"]*"');
+        const replacement = ' ' + name + '="' + escapeXml(value) + '"';
+        if (attr.test(attributes)) attributes = attributes.replace(attr, replacement);
+        else attributes += replacement;
+      }
+      return '<' + tag + attributes + '>';
+    });
+    const rendered = attributed.replace(/(<text\b[^>]*\bid="([^"]+)"[^>]*>)([^<]*)(<\/text>)/g,
+      (whole, start, id, previous, end) =>
+        Object.prototype.hasOwnProperty.call(bindings[id] || {}, 'text')
+          ? start + escapeXml(bindings[id].text) + end : whole);
+    for (const id of Object.keys(bindings)) {
+      if (!found.has(id)) throw new Error('SVG element not found: ' + id);
+    }
+    return rendered;
+  };
+
+  /** Fill a named empty SVG group with renderer-generated animation SVG. */
+  const inject = (template, slots) => {
+    let result = template;
+    for (const [id, content] of Object.entries(slots)) {
+      if (!/^[a-z][a-zA-Z0-9_-]*$/.test(id)) throw new Error('Invalid SVG slot name');
+      const marker = '<g id="' + id + '"';
+      const start = result.indexOf(marker);
+      if (start < 0 || result.indexOf(marker, start + marker.length) >= 0) {
+        throw new Error('Expected exactly one SVG slot: ' + id);
+      }
+      const openEnd = result.indexOf('>', start);
+      const close = result.indexOf('</g>', openEnd + 1);
+      if (openEnd < 0 || close < 0 || result.slice(openEnd + 1, close).trim()) {
+        throw new Error('Expected one empty SVG slot: ' + id);
+      }
+      result = result.slice(0, openEnd + 1) + content + result.slice(close);
+    }
+    return result;
+  };
+
+  /** Namespace every SVG id/reference so repeated cards cannot collide. */
+  const namespaceIds = (svg, prefix) => svg
+    .replace(/(\bid=")([^"]+)(")/g, (_, a, id, z) => a + prefix + id + z)
+    .replace(/url\(#([^)]+)\)/g, (_, id) => 'url(#' + prefix + id + ')')
+    .replace(/(\b(?:href|xlink:href)="#)([^"]+)(")/g, (_, a, id, z) => a + prefix + id + z);
+
+  return Object.freeze({ fragment, apply, inject, namespaceIds });
+})();
+
+
+const HASSStudioIconTemplates = Object.freeze({
+  solidFuel: "\n<defs>\n        <linearGradient id=\"bodyFront\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#344864\"/>\n          <stop offset=\".14\" stop-color=\"#60759a\"/>\n          <stop offset=\".50\" stop-color=\"#101926\"/>\n          <stop offset=\".86\" stop-color=\"#4f668a\"/>\n          <stop offset=\"1\" stop-color=\"#2b3d57\"/>\n        </linearGradient>\n        <linearGradient id=\"bodyPanel\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#364960\"/>\n          <stop offset=\"1\" stop-color=\"#121b27\"/>\n        </linearGradient>\n        <linearGradient id=\"metalDark\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#0f1723\"/>\n          <stop offset=\"1\" stop-color=\"#05090f\"/>\n        </linearGradient>\n        <linearGradient id=\"sideBevel\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#152338\"/>\n          <stop offset=\".5\" stop-color=\"#4f6790\"/>\n          <stop offset=\"1\" stop-color=\"#19283e\"/>\n        </linearGradient>\n        <linearGradient id=\"screenGlass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#0d223a\"/>\n          <stop offset=\"1\" stop-color=\"#030811\"/>\n        </linearGradient>\n        <linearGradient id=\"screenHighlight\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#d5eeff\" stop-opacity=\".15\"/>\n          <stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n        </linearGradient>\n        <linearGradient id=\"doorGlass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#202834\"/>\n          <stop offset=\".55\" stop-color=\"#0f1620\"/>\n          <stop offset=\"1\" stop-color=\"#070c13\"/>\n        </linearGradient>\n        <linearGradient id=\"doorInnerFrame\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#202a39\"/>\n          <stop offset=\".5\" stop-color=\"#556882\"/>\n          <stop offset=\"1\" stop-color=\"#1b2531\"/>\n        </linearGradient>\n        <linearGradient id=\"grateGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#2a313b\"/>\n          <stop offset=\"1\" stop-color=\"#11161d\"/>\n        </linearGradient>\n        <linearGradient id=\"displayAccent\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#74c7ff\"/>\n          <stop offset=\"1\" stop-color=\"#35f0db\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softBlueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"6\"/></filter>\n      <clipPath id=\"solidFireClip\"><rect x=\"420\" y=\"586\" width=\"180\" height=\"210\" rx=\"12\"/></clipPath></defs>\n\n      <g id=\"outerAura\"><path d=\"M270 210 L754 210 L792 248 L792 1146 L754 1180 L270 1180 L232 1146 L232 248 Z\" fill=\"none\" stroke=\"#1a95ff\" stroke-opacity=\".26\" stroke-width=\"16\" filter=\"url(#blueGlow)\"/></g>\n\n      <g id=\"chimney\">\n        <rect x=\"446\" y=\"84\" width=\"132\" height=\"140\" rx=\"16\" fill=\"url(#bodyFront)\" stroke=\"#90d1ff\" stroke-opacity=\".95\" stroke-width=\"4\"/>\n        <rect x=\"438\" y=\"216\" width=\"148\" height=\"18\" rx=\"3\" fill=\"#dcecff\" opacity=\".80\"/>\n      </g>\n\n      <g id=\"stoveBody\">\n        <path d=\"M270 210 L754 210 L792 248 L792 1146 L754 1180 L270 1180 L232 1146 L232 248 Z\" fill=\"url(#bodyFront)\" stroke=\"#dcecff\" stroke-opacity=\".86\" stroke-width=\"4\"/>\n        <path d=\"M232 248 L270 210 V1180 L232 1146 Z\" fill=\"url(#sideBevel)\" opacity=\".70\"/>\n        <path d=\"M754 210 L792 248 V1146 L754 1180 Z\" fill=\"url(#sideBevel)\" opacity=\".50\"/>\n        <rect x=\"262\" y=\"220\" width=\"500\" height=\"15\" rx=\"2\" fill=\"#f1f6ff\" opacity=\".86\"/>\n        <line x1=\"364\" y1=\"220\" x2=\"364\" y2=\"646\" stroke=\"#0a111a\" stroke-opacity=\".50\" stroke-width=\"3\"/>\n        <line x1=\"660\" y1=\"220\" x2=\"660\" y2=\"646\" stroke=\"#0a111a\" stroke-opacity=\".50\" stroke-width=\"3\"/>\n        <line x1=\"262\" y1=\"646\" x2=\"762\" y2=\"646\" stroke=\"#d8e8ff\" stroke-opacity=\".24\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"displayGroup\">\n        <rect x=\"416\" y=\"294\" width=\"266\" height=\"150\" rx=\"16\" fill=\"#070f18\" stroke=\"#8fd1ff\" stroke-width=\"3\"/>\n        <rect x=\"424\" y=\"302\" width=\"250\" height=\"134\" rx=\"14\" fill=\"url(#screenGlass)\"/>\n        <path d=\"M430 308 H560 L525 430 H430 Z\" fill=\"url(#screenHighlight)\"/>\n        <text x=\"446\" y=\"340\" font-size=\"18\" fill=\"#89cfff\" font-family=\"monospace\">TEMP</text>\n        <text id=\"tempValue\" x=\"446\" y=\"396\" font-size=\"56\" font-weight=\"700\" fill=\"#e0f8ff\" font-family=\"monospace\">65.0°</text>\n        <text x=\"560\" y=\"394\" font-size=\"20\" fill=\"#7bd1ff\" font-family=\"monospace\">C</text>\n        <text id=\"fuelLabel\" x=\"446\" y=\"424\" font-size=\"18\" fill=\"#58bcff\" font-family=\"monospace\">DREWNO</text>\n        <circle cx=\"596\" cy=\"370\" r=\"38\" fill=\"#08111a\" stroke=\"#9ed9ff\" stroke-width=\"5\"/>\n        <path d=\"M596 332 A 38 38 0 1 1 595.9 332\" fill=\"none\" stroke=\"#233043\" stroke-width=\"11\" stroke-linecap=\"round\"/>\n        <path id=\"dialArc\" d=\"M596 332 A 38 38 0 1 1 595.9 332\" fill=\"none\" stroke=\"#59c84c\" stroke-width=\"11\" stroke-linecap=\"round\" stroke-dasharray=\"120 240\"/>\n        <circle cx=\"596\" cy=\"370\" r=\"11\" fill=\"#08111a\"/>\n        <circle cx=\"702\" cy=\"332\" r=\"14\" fill=\"#07111a\" stroke=\"#7fc6ff\" stroke-width=\"3\"/>\n        <circle cx=\"702\" cy=\"370\" r=\"14\" fill=\"#07111a\" stroke=\"#7fc6ff\" stroke-width=\"3\"/>\n        <circle cx=\"702\" cy=\"408\" r=\"14\" fill=\"#07111a\" stroke=\"#7fc6ff\" stroke-width=\"3\"/>\n        <circle cx=\"702\" cy=\"332\" r=\"4\" fill=\"#7fc6ff\"/>\n        <path d=\"M696 371 h12 M702 365 v12\" stroke=\"#7fc6ff\" stroke-width=\"2\" stroke-linecap=\"round\"/>\n        <rect x=\"696\" y=\"402\" width=\"12\" height=\"12\" rx=\"2\" fill=\"none\" stroke=\"#7fc6ff\" stroke-width=\"2\"/>\n      </g>\n\n      <g id=\"fireSection\">\n        <rect x=\"322\" y=\"500\" width=\"380\" height=\"470\" rx=\"18\" fill=\"#0a1119\" opacity=\".52\"/>\n        <rect x=\"296\" y=\"468\" width=\"432\" height=\"500\" rx=\"6\" fill=\"#081019\" opacity=\".26\"/>\n        <rect x=\"350\" y=\"520\" width=\"320\" height=\"420\" rx=\"16\" fill=\"url(#bodyPanel)\" stroke=\"#9bb1d3\" stroke-opacity=\".58\" stroke-width=\"2.2\"/>\n        <rect x=\"390\" y=\"556\" width=\"240\" height=\"338\" rx=\"22\" fill=\"url(#doorGlass)\" stroke=\"#8fcfff\" stroke-width=\"3.2\"/>\n        <rect id=\"doorGlowFrame\" x=\"390\" y=\"556\" width=\"240\" height=\"338\" rx=\"22\" fill=\"none\" stroke=\"#23a4ff\" stroke-opacity=\".22\" stroke-width=\"10\" filter=\"url(#softBlueGlow)\"/>\n        <path d=\"M408 582 h56 v224 l-42 0 z\" fill=\"#ffffff\" opacity=\".11\"/>\n        <path d=\"M612 570 h-48 l-34 320 h34 z\" fill=\"#9dd5ff\" opacity=\".05\"/>\n\n        <!-- empty combustion chamber -->\n        <g id=\"emptyChamber\">\n          <rect x=\"408\" y=\"575\" width=\"204\" height=\"300\" rx=\"18\" fill=\"#0d131b\" stroke=\"url(#doorInnerFrame)\" stroke-width=\"2\"/>\n          <rect x=\"420\" y=\"586\" width=\"180\" height=\"210\" rx=\"12\" fill=\"#0a0f16\"/>\n          <rect x=\"420\" y=\"586\" width=\"180\" height=\"210\" rx=\"12\" fill=\"none\" stroke=\"#8ecfff\" stroke-opacity=\".08\" stroke-width=\"2\"/>\n          <g opacity=\".12\" stroke=\"#dbeaff\" stroke-width=\"1.5\">\n            <line x1=\"452\" y1=\"590\" x2=\"452\" y2=\"792\"/>\n            <line x1=\"512\" y1=\"590\" x2=\"512\" y2=\"792\"/>\n            <line x1=\"572\" y1=\"590\" x2=\"572\" y2=\"792\"/>\n          </g>\n          <g id=\"grate\">\n            <rect x=\"432\" y=\"804\" width=\"156\" height=\"14\" rx=\"4\" fill=\"url(#grateGrad)\"/>\n            <g fill=\"url(#grateGrad)\">\n              <rect x=\"438\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"458\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"478\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"498\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"518\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"538\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"558\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"578\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n            </g>\n          </g>\n          <path d=\"M430 835 C468 825 554 825 590 835\" fill=\"none\" stroke=\"#9ccfff\" stroke-opacity=\".07\" stroke-width=\"10\" stroke-linecap=\"round\"/>\n        </g>\n\n        <g id=\"combustionSlot\"></g>\n        <g id=\"hinges\" fill=\"url(#bodyFront)\" stroke=\"#8fcfff\" stroke-width=\"2.2\">\n          <rect x=\"372\" y=\"606\" width=\"16\" height=\"98\" rx=\"4\"/>\n          <rect x=\"372\" y=\"804\" width=\"16\" height=\"98\" rx=\"4\"/>\n        </g>\n        <g id=\"handle\">\n          <rect x=\"650\" y=\"756\" width=\"32\" height=\"104\" rx=\"10\" fill=\"url(#bodyFront)\" stroke=\"#91d0ff\" stroke-width=\"2.5\"/>\n          <rect x=\"642\" y=\"746\" width=\"14\" height=\"44\" rx=\"6\" fill=\"#7ec9ff\" opacity=\".72\"/>\n        </g>\n      </g>\n\n      <g id=\"drawer\">\n        <rect x=\"366\" y=\"1010\" width=\"292\" height=\"130\" rx=\"10\" fill=\"url(#bodyPanel)\" stroke=\"#a4b7d7\" stroke-opacity=\".60\" stroke-width=\"2.2\"/>\n        <rect x=\"472\" y=\"1064\" width=\"80\" height=\"26\" rx=\"4\" fill=\"#0b1118\" stroke=\"#91cfff\" stroke-width=\"2\"/>\n      </g>\n\n      <g id=\"base\">\n        <path d=\"M238 1162 H786 L788 1236 L754 1266 H270 L236 1236 Z\" fill=\"url(#bodyFront)\" stroke=\"#8fd2ff\" stroke-opacity=\".88\" stroke-width=\"4\"/>\n        <path d=\"M236 1236 L270 1266 V1162 H238 Z\" fill=\"#40699f\" opacity=\".62\"/>\n        <path d=\"M786 1162 L788 1236 L754 1266 V1162 Z\" fill=\"#2f4a72\" opacity=\".58\"/>\n        <ellipse cx=\"284\" cy=\"1298\" rx=\"28\" ry=\"14\" fill=\"url(#bodyFront)\"/>\n        <rect x=\"256\" y=\"1248\" width=\"56\" height=\"54\" rx=\"8\" fill=\"url(#bodyFront)\"/>\n        <ellipse cx=\"740\" cy=\"1298\" rx=\"28\" ry=\"14\" fill=\"url(#bodyFront)\"/>\n        <rect x=\"712\" y=\"1248\" width=\"56\" height=\"54\" rx=\"8\" fill=\"url(#bodyFront)\"/>\n      </g>\n",
+  pellet: "\n<defs>\n        <linearGradient id=\"steelFront\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#3c5270\"/>\n          <stop offset=\".16\" stop-color=\"#7c96bb\"/>\n          <stop offset=\".5\" stop-color=\"#121a27\"/>\n          <stop offset=\".84\" stop-color=\"#4e678d\"/>\n          <stop offset=\"1\" stop-color=\"#2c3f5b\"/>\n        </linearGradient>\n        <linearGradient id=\"steelPanel\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#364a61\"/>\n          <stop offset=\"1\" stop-color=\"#111925\"/>\n        </linearGradient>\n        <linearGradient id=\"edgeGlowGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#dbe9ff\"/>\n          <stop offset=\"1\" stop-color=\"#8ecfff\"/>\n        </linearGradient>\n        <linearGradient id=\"darkGlass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#202a35\"/>\n          <stop offset=\"1\" stop-color=\"#070c13\"/>\n        </linearGradient>\n        <linearGradient id=\"screenGlass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#0a233a\"/>\n          <stop offset=\"1\" stop-color=\"#02070f\"/>\n        </linearGradient>\n        <linearGradient id=\"screenHighlight\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#ffffff\" stop-opacity=\".18\"/>\n          <stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n        </linearGradient>\n        <linearGradient id=\"hopperGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#425878\"/>\n          <stop offset=\"1\" stop-color=\"#111926\"/>\n        </linearGradient>\n        <linearGradient id=\"motorGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#25384f\"/>\n          <stop offset=\".5\" stop-color=\"#59739b\"/>\n          <stop offset=\"1\" stop-color=\"#22354a\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softBlueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"6\"/></filter>\n      <clipPath id=\"pelletBurnerClip\"><rect x=\"242\" y=\"560\" width=\"188\" height=\"240\" rx=\"12\"/></clipPath></defs>\n\n      <g id=\"aura\">\n        <path d=\"M120 210 L560 210 L596 246 L596 1106 L560 1140 L120 1140 L84 1106 L84 246 Z\" fill=\"none\" stroke=\"#2aa5ff\" stroke-opacity=\".22\" stroke-width=\"16\" filter=\"url(#blueGlow)\"/>\n        <path d=\"M672 242 L1084 242 L1120 276 L1120 688 L988 834 L988 1060 L920 1098 L794 1098 L794 864 L672 726 Z\" fill=\"none\" stroke=\"#2aa5ff\" stroke-opacity=\".18\" stroke-width=\"14\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"chimney\">\n        <rect x=\"280\" y=\"82\" width=\"126\" height=\"132\" rx=\"16\" fill=\"url(#steelFront)\" stroke=\"#dcecff\" stroke-opacity=\".85\" stroke-width=\"4\"/>\n        <line x1=\"280\" y1=\"150\" x2=\"406\" y2=\"150\" stroke=\"#edf5ff\" stroke-opacity=\".66\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"stoveBody\">\n        <path d=\"M120 210 L560 210 L596 246 L596 1106 L560 1140 L120 1140 L84 1106 L84 246 Z\" fill=\"url(#steelFront)\" stroke=\"#dcecff\" stroke-opacity=\".88\" stroke-width=\"4\"/>\n        <path d=\"M84 246 L120 210 V1140 L84 1106 Z\" fill=\"#40699f\" opacity=\".48\"/>\n        <path d=\"M560 210 L596 246 V1106 L560 1140 Z\" fill=\"#2a4263\" opacity=\".56\"/>\n        <rect x=\"114\" y=\"220\" width=\"446\" height=\"16\" rx=\"3\" fill=\"#eef6ff\" opacity=\".82\"/>\n        <line x1=\"180\" y1=\"220\" x2=\"180\" y2=\"520\" stroke=\"#0a121b\" stroke-opacity=\".42\" stroke-width=\"3\"/>\n        <line x1=\"534\" y1=\"220\" x2=\"534\" y2=\"1140\" stroke=\"#0a121b\" stroke-opacity=\".28\" stroke-width=\"3\"/>\n        <line x1=\"114\" y1=\"392\" x2=\"560\" y2=\"392\" stroke=\"#d6e8ff\" stroke-opacity=\".18\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"displayPanel\">\n        <rect x=\"164\" y=\"262\" width=\"316\" height=\"106\" rx=\"12\" fill=\"#061018\" stroke=\"#8fd1ff\" stroke-width=\"3\"/>\n        <rect x=\"174\" y=\"272\" width=\"296\" height=\"86\" rx=\"10\" fill=\"url(#screenGlass)\"/>\n        <path d=\"M180 278 H318 L286 354 H180 Z\" fill=\"url(#screenHighlight)\"/>\n        <text x=\"200\" y=\"305\" font-size=\"14\" fill=\"#7cc8ff\" font-family=\"monospace\">TEMP</text>\n        <text id=\"tempValue\" x=\"200\" y=\"345\" font-size=\"42\" fill=\"#e3f8ff\" font-family=\"monospace\" font-weight=\"700\">65.0°</text>\n        <text x=\"298\" y=\"343\" font-size=\"18\" fill=\"#72c8ff\" font-family=\"monospace\">C</text>\n        <g opacity=\".84\" fill=\"#5fb9ff\">\n          <rect x=\"354\" y=\"290\" width=\"26\" height=\"6\" rx=\"3\"/>\n          <rect x=\"354\" y=\"306\" width=\"26\" height=\"6\" rx=\"3\"/>\n          <rect x=\"354\" y=\"322\" width=\"26\" height=\"6\" rx=\"3\"/>\n          <rect x=\"354\" y=\"338\" width=\"26\" height=\"6\" rx=\"3\"/>\n        </g>\n        <circle cx=\"422\" cy=\"314\" r=\"28\" fill=\"#07111a\" stroke=\"#88d0ff\" stroke-width=\"4\"/>\n        <circle id=\"statusRingGlow\" cx=\"422\" cy=\"314\" r=\"34\" fill=\"none\" stroke=\"#2ab2ff\" stroke-opacity=\".26\" stroke-width=\"6\" filter=\"url(#softBlueGlow)\"/>\n        <path d=\"M422 286 A 28 28 0 1 1 421.9 286\" fill=\"none\" stroke=\"#263449\" stroke-width=\"9\" stroke-linecap=\"round\"/>\n        <path id=\"statusArc\" d=\"M422 286 A 28 28 0 1 1 421.9 286\" fill=\"none\" stroke=\"#59c84c\" stroke-width=\"9\" stroke-linecap=\"round\" stroke-dasharray=\"120 176\"/>\n      </g>\n\n      <g id=\"doorSection\">\n        <rect x=\"150\" y=\"446\" width=\"366\" height=\"438\" rx=\"20\" fill=\"#0b121b\" opacity=\".46\"/>\n        <rect x=\"186\" y=\"488\" width=\"300\" height=\"382\" rx=\"16\" fill=\"url(#steelPanel)\" stroke=\"#9eb4d6\" stroke-opacity=\".56\" stroke-width=\"2.4\"/>\n        <rect x=\"224\" y=\"542\" width=\"224\" height=\"274\" rx=\"16\" fill=\"url(#darkGlass)\" stroke=\"#92d1ff\" stroke-width=\"3\"/>\n        <rect id=\"doorGlowFrame\" x=\"224\" y=\"542\" width=\"224\" height=\"274\" rx=\"16\" fill=\"none\" stroke=\"#2aa5ff\" stroke-opacity=\".18\" stroke-width=\"10\" filter=\"url(#softBlueGlow)\"/>\n        <path d=\"M240 564 h46 v178 l-32 0 z\" fill=\"#ffffff\" opacity=\".10\"/>\n        <path d=\"M436 556 h-40 l-30 258 h28 z\" fill=\"#a4d8ff\" opacity=\".05\"/>\n        <g id=\"emptyBurner\">\n          <rect x=\"242\" y=\"560\" width=\"188\" height=\"240\" rx=\"12\" fill=\"#0a0f16\"/>\n          <rect x=\"242\" y=\"560\" width=\"188\" height=\"240\" rx=\"12\" fill=\"none\" stroke=\"#8ecfff\" stroke-opacity=\".08\" stroke-width=\"2\"/>\n          <g opacity=\".10\" stroke=\"#ddeaff\" stroke-width=\"1.4\">\n            <line x1=\"290\" y1=\"566\" x2=\"290\" y2=\"798\"/>\n            <line x1=\"336\" y1=\"566\" x2=\"336\" y2=\"798\"/>\n            <line x1=\"382\" y1=\"566\" x2=\"382\" y2=\"798\"/>\n          </g>\n          <rect x=\"260\" y=\"760\" width=\"150\" height=\"12\" rx=\"4\" fill=\"#1e2631\"/>\n          <g fill=\"#202933\">\n            <rect x=\"268\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"288\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"308\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"328\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"348\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"368\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"388\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n          </g>\n          <g id=\"combustionSlot\"></g>\n        </g>\n        <g fill=\"url(#steelFront)\" stroke=\"#90d1ff\" stroke-width=\"2.2\">\n          <rect x=\"170\" y=\"588\" width=\"14\" height=\"96\" rx=\"4\"/>\n          <rect x=\"170\" y=\"786\" width=\"14\" height=\"96\" rx=\"4\"/>\n        </g>\n        <g id=\"mainHandle\">\n          <rect x=\"478\" y=\"670\" width=\"30\" height=\"118\" rx=\"10\" fill=\"url(#steelFront)\" stroke=\"#91d0ff\" stroke-width=\"2.5\"/>\n          <rect x=\"468\" y=\"660\" width=\"14\" height=\"46\" rx=\"6\" fill=\"#9bd2ff\" opacity=\".74\"/>\n        </g>\n      </g>\n\n      <g id=\"drawerSection\">\n        <rect x=\"168\" y=\"922\" width=\"318\" height=\"150\" rx=\"12\" fill=\"url(#steelPanel)\" stroke=\"#a4b7d7\" stroke-opacity=\".56\" stroke-width=\"2.2\"/>\n        <rect x=\"250\" y=\"978\" width=\"154\" height=\"42\" rx=\"8\" fill=\"#081018\" stroke=\"#8fcfff\" stroke-opacity=\".55\" stroke-width=\"2.2\"/>\n        <g fill=\"url(#steelFront)\" stroke=\"#90d1ff\" stroke-width=\"2\">\n          <rect x=\"170\" y=\"976\" width=\"12\" height=\"94\" rx=\"4\"/>\n          <rect x=\"448\" y=\"962\" width=\"22\" height=\"70\" rx=\"7\"/>\n        </g>\n      </g>\n\n      <g id=\"stoveBase\">\n        <path d=\"M82 1088 H598 L598 1156 L566 1184 H114 L82 1156 Z\" fill=\"url(#steelFront)\" stroke=\"#8fd1ff\" stroke-opacity=\".82\" stroke-width=\"4\"/>\n        <rect x=\"130\" y=\"1180\" width=\"26\" height=\"18\" rx=\"4\" fill=\"#223248\"/>\n        <rect x=\"522\" y=\"1180\" width=\"26\" height=\"18\" rx=\"4\" fill=\"#223248\"/>\n      </g>\n\n      <g id=\"hopperGroup\">\n        <path d=\"M672 242 L1084 242 L1120 276 L1120 688 L988 834 L988 1060 L920 1098 L794 1098 L794 864 L672 726 Z\" fill=\"url(#hopperGrad)\" stroke=\"#dcecff\" stroke-opacity=\".84\" stroke-width=\"4\"/>\n        <path d=\"M672 242 L714 212 H1046 L1084 242 Z\" fill=\"url(#steelFront)\" stroke=\"#dcecff\" stroke-opacity=\".76\" stroke-width=\"4\"/>\n        <path d=\"M714 212 H1046 L1088 252 H756 Z\" fill=\"#495f7f\" opacity=\".74\"/>\n        <rect x=\"810\" y=\"202\" width=\"132\" height=\"20\" rx=\"8\" fill=\"#1d2836\" stroke=\"#b8d6ff\" stroke-width=\"2.4\"/>\n        <rect x=\"864\" y=\"244\" width=\"36\" height=\"38\" rx=\"4\" fill=\"#34485f\" stroke=\"#aacfff\" stroke-width=\"2\"/>\n        <rect x=\"894\" y=\"338\" width=\"58\" height=\"286\" rx=\"18\" fill=\"#070d13\" stroke=\"#8ecfff\" stroke-opacity=\".46\" stroke-width=\"2.2\"/>\n        <rect x=\"905\" y=\"352\" width=\"36\" height=\"258\" rx=\"14\" fill=\"#0f1620\"/>\n        <rect x=\"905\" y=\"352\" width=\"36\" height=\"258\" rx=\"14\" fill=\"none\" stroke=\"#9fd7ff\" stroke-opacity=\".10\" stroke-width=\"2\"/>\n        <path d=\"M766 706 H1098 L988 834 H794 Z\" fill=\"#162234\" opacity=\".84\"/>\n        <path d=\"M794 864 L988 864 L988 1060 L920 1098 L794 1098 Z\" fill=\"#122030\" opacity=\".86\"/>\n      </g>\n\n\n      <g id=\"connectionPipe\">\n        <rect x=\"596\" y=\"974\" width=\"164\" height=\"64\" rx=\"24\" fill=\"url(#motorGrad)\" stroke=\"#d7ebff\" stroke-opacity=\".62\" stroke-width=\"3\"/>\n        <rect x=\"612\" y=\"986\" width=\"132\" height=\"40\" rx=\"18\" fill=\"#12202e\" opacity=\".62\"/>\n        <rect x=\"580\" y=\"986\" width=\"20\" height=\"40\" rx=\"6\" fill=\"url(#steelFront)\" stroke=\"#9fd5ff\" stroke-opacity=\".46\" stroke-width=\"2\"/>\n        <rect x=\"744\" y=\"986\" width=\"18\" height=\"40\" rx=\"6\" fill=\"url(#steelFront)\" stroke=\"#9fd5ff\" stroke-opacity=\".46\" stroke-width=\"2\"/>\n        <ellipse cx=\"596\" cy=\"1006\" rx=\"16\" ry=\"26\" fill=\"url(#steelFront)\" stroke=\"#b9dcff\" stroke-opacity=\".72\" stroke-width=\"2.6\"/>\n      </g>\n\n      <g id=\"feedSystem\">\n        <rect x=\"760\" y=\"946\" width=\"140\" height=\"122\" rx=\"16\" fill=\"url(#motorGrad)\" stroke=\"#d7ebff\" stroke-opacity=\".64\" stroke-width=\"3\"/>\n        <rect x=\"900\" y=\"972\" width=\"80\" height=\"72\" rx=\"18\" fill=\"#12202e\" stroke=\"#9fd5ff\" stroke-opacity=\".44\" stroke-width=\"2.4\"/>\n        <rect x=\"978\" y=\"966\" width=\"84\" height=\"84\" rx=\"14\" fill=\"#1c2c40\" stroke=\"#cae6ff\" stroke-opacity=\".66\" stroke-width=\"3\"/>\n        <ellipse cx=\"1062\" cy=\"1008\" rx=\"28\" ry=\"42\" fill=\"url(#steelFront)\" stroke=\"#b9dcff\" stroke-width=\"3\"/>\n        <rect x=\"884\" y=\"1060\" width=\"16\" height=\"78\" rx=\"6\" fill=\"url(#steelFront)\"/>\n        <rect x=\"1020\" y=\"1062\" width=\"16\" height=\"76\" rx=\"6\" fill=\"url(#steelFront)\"/>\n        <rect x=\"834\" y=\"1060\" width=\"20\" height=\"56\" rx=\"6\" fill=\"#162331\" stroke=\"#99d1ff\" stroke-opacity=\".45\" stroke-width=\"2\"/>\n        <rect x=\"826\" y=\"1110\" width=\"36\" height=\"12\" rx=\"4\" fill=\"url(#steelFront)\"/>\n        <circle cx=\"786\" cy=\"970\" r=\"4\" fill=\"#e6f3ff\"/>\n        <circle cx=\"874\" cy=\"970\" r=\"4\" fill=\"#e6f3ff\"/>\n        <circle cx=\"786\" cy=\"1044\" r=\"4\" fill=\"#e6f3ff\"/>\n        <circle cx=\"874\" cy=\"1044\" r=\"4\" fill=\"#e6f3ff\"/>\n      </g>\n",
+  heatPump: "\n<defs>\n        <linearGradient id=\"bodyGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#dde5ef\"/>\n          <stop offset=\".14\" stop-color=\"#fbfdff\"/>\n          <stop offset=\".48\" stop-color=\"#c2ccda\"/>\n          <stop offset=\".78\" stop-color=\"#a7b3c4\"/>\n          <stop offset=\"1\" stop-color=\"#8f9cae\"/>\n        </linearGradient>\n        <linearGradient id=\"bodySideGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#eef4fb\"/>\n          <stop offset=\"1\" stop-color=\"#b5c1d1\"/>\n        </linearGradient>\n        <linearGradient id=\"darkPanel\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#0e1c2e\"/>\n          <stop offset=\"1\" stop-color=\"#02070f\"/>\n        </linearGradient>\n        <linearGradient id=\"blueFanGlow\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#23a8ff\"/>\n          <stop offset=\"1\" stop-color=\"#0069ff\"/>\n        </linearGradient>\n        <linearGradient id=\"bladeGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#143962\"/>\n          <stop offset=\".5\" stop-color=\"#07101b\"/>\n          <stop offset=\"1\" stop-color=\"#0f2c4d\"/>\n        </linearGradient>\n        <linearGradient id=\"footGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#1d2837\"/>\n          <stop offset=\".5\" stop-color=\"#5c6f8a\"/>\n          <stop offset=\"1\" stop-color=\"#1b2635\"/>\n        </linearGradient>\n        <radialGradient id=\"fanAura\" cx=\"50%\" cy=\"50%\" r=\"50%\">\n          <stop offset=\"0\" stop-color=\"#1b86ff\" stop-opacity=\".25\"/>\n          <stop offset=\".55\" stop-color=\"#0f6df5\" stop-opacity=\".16\"/>\n          <stop offset=\"1\" stop-color=\"#0f6df5\" stop-opacity=\"0\"/>\n        </radialGradient>\n        <filter id=\"blueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"5\"/></filter>\n      </defs>\n\n      <g id=\"aura\">\n        <path id=\"hpAuraOutline\" d=\"M126 152 H1128 Q1168 152 1168 192 V790 Q1168 828 1128 828 H126 Q86 828 86 790 V192 Q86 152 126 152 Z\" fill=\"none\" stroke=\"#2aa5ff\" stroke-opacity=\"0.12\" stroke-width=\"16\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"unitBody\">\n        <path d=\"M126 152 H1128 Q1168 152 1168 192 V790 Q1168 828 1128 828 H126 Q86 828 86 790 V192 Q86 152 126 152 Z\" fill=\"url(#bodyGrad)\" stroke=\"#f8fbff\" stroke-width=\"4\"/>\n        <rect x=\"86\" y=\"172\" width=\"1082\" height=\"22\" rx=\"8\" fill=\"#edf4fb\" opacity=\".82\"/>\n        <line x1=\"86\" y1=\"788\" x2=\"1168\" y2=\"788\" stroke=\"#8193ab\" stroke-opacity=\".56\" stroke-width=\"3\"/>\n        <path d=\"M814 152 V828\" stroke=\"#6a7890\" stroke-opacity=\".72\" stroke-width=\"5\"/>\n        <path d=\"M118 182 V798\" stroke=\"#6c7990\" stroke-opacity=\".40\" stroke-width=\"3\"/>\n        <path d=\"M1136 182 V798\" stroke=\"#6c7990\" stroke-opacity=\".40\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"fanSection\">\n        <circle cx=\"458\" cy=\"490\" r=\"272\" fill=\"#d7e0eb\" stroke=\"#8ea2ba\" stroke-width=\"4\"/>\n        <circle cx=\"458\" cy=\"490\" r=\"248\" fill=\"#07111b\" stroke=\"#cad9e8\" stroke-width=\"4\"/>\n        <circle id=\"fanGlowRing\" cx=\"458\" cy=\"490\" r=\"244\" fill=\"none\" stroke=\"#2191ff\" stroke-opacity=\"0.20\" stroke-width=\"10\" filter=\"url(#blueGlow)\"/>\n        <circle cx=\"458\" cy=\"490\" r=\"234\" fill=\"url(#fanAura)\"/>\n\n        <g id=\"bladeRotor\" class=\"ss-hp-still\" style=\"animation:none;\">\n          <g class=\"bladeSet\">\n            <path d=\"M458 490 C470 454 520 394 586 346 C613 362 629 380 640 400 C610 438 548 474 458 490 Z\" fill=\"url(#bladeGrad)\"/>\n            <path d=\"M472 482 C492 450 540 404 591 372\" fill=\"none\" stroke=\"#2191ff\" stroke-opacity=\".34\" stroke-width=\"8\" stroke-linecap=\"round\"/>\n          </g>\n          <g class=\"bladeSet\" transform=\"rotate(90 458 490)\">\n            <path d=\"M458 490 C470 454 520 394 586 346 C613 362 629 380 640 400 C610 438 548 474 458 490 Z\" fill=\"url(#bladeGrad)\"/>\n            <path d=\"M472 482 C492 450 540 404 591 372\" fill=\"none\" stroke=\"#2191ff\" stroke-opacity=\".34\" stroke-width=\"8\" stroke-linecap=\"round\"/>\n          </g>\n          <g class=\"bladeSet\" transform=\"rotate(180 458 490)\">\n            <path d=\"M458 490 C470 454 520 394 586 346 C613 362 629 380 640 400 C610 438 548 474 458 490 Z\" fill=\"url(#bladeGrad)\"/>\n            <path d=\"M472 482 C492 450 540 404 591 372\" fill=\"none\" stroke=\"#2191ff\" stroke-opacity=\".34\" stroke-width=\"8\" stroke-linecap=\"round\"/>\n          </g>\n          <g class=\"bladeSet\" transform=\"rotate(270 458 490)\">\n            <path d=\"M458 490 C470 454 520 394 586 346 C613 362 629 380 640 400 C610 438 548 474 458 490 Z\" fill=\"url(#bladeGrad)\"/>\n            <path d=\"M472 482 C492 450 540 404 591 372\" fill=\"none\" stroke=\"#2191ff\" stroke-opacity=\".34\" stroke-width=\"8\" stroke-linecap=\"round\"/>\n          </g>\n          <circle cx=\"458\" cy=\"490\" r=\"82\" fill=\"url(#bodyGrad)\" stroke=\"#eef6ff\" stroke-width=\"4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"58\" fill=\"url(#bodySideGrad)\" opacity=\".74\"/>\n        </g>\n\n        <g id=\"fanGrille\" stroke=\"#0c1622\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\">\n          <circle cx=\"458\" cy=\"490\" r=\"236\" stroke=\"#111e2d\" stroke-width=\"8\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"218\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"200\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"182\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"164\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"146\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"128\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"110\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"92\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <path d=\"M458 256 V724\" stroke=\"#0f1e30\" stroke-width=\"8\"/>\n          <path d=\"M224 490 H692\" stroke=\"#0f1e30\" stroke-width=\"8\"/>\n          <path d=\"M292 324 L624 656\" stroke=\"#0f1e30\" stroke-width=\"8\"/>\n          <path d=\"M624 324 L292 656\" stroke=\"#0f1e30\" stroke-width=\"8\"/>\n        </g>\n      </g>\n\n      <g id=\"displayBlock\">\n        <rect x=\"842\" y=\"286\" width=\"288\" height=\"170\" rx=\"18\" fill=\"#d8e1ec\" stroke=\"#6f8097\" stroke-width=\"3\"/>\n        <rect x=\"858\" y=\"302\" width=\"256\" height=\"138\" rx=\"14\" fill=\"url(#darkPanel)\" stroke=\"#7ed0ff\" stroke-opacity=\".46\" stroke-width=\"2.5\"/>\n        <path d=\"M866 310 H988 L956 432 H866 Z\" fill=\"#ffffff\" opacity=\".09\"/>\n        <text x=\"884\" y=\"334\" font-size=\"14\" fill=\"#7dbdff\" font-family=\"monospace\">POWER</text>\n        <text id=\"powerValueDisplay\" x=\"884\" y=\"378\" font-size=\"42\" fill=\"#eaf8ff\" font-family=\"monospace\" font-weight=\"700\">1.80 kW</text>\n        <text x=\"884\" y=\"404\" font-size=\"13\" fill=\"#7dbdff\" font-family=\"monospace\">FAN SPEED</text>\n        <text id=\"fanSpeedDisplay\" x=\"1090\" y=\"404\" font-size=\"13\" fill=\"#cfefff\" font-family=\"monospace\" text-anchor=\"end\">900 RPM</text>\n        <rect x=\"884\" y=\"414\" width=\"206\" height=\"12\" rx=\"6\" fill=\"#203244\"/>\n        <rect id=\"fanSpeedBar\" x=\"884\" y=\"414\" width=\"103\" height=\"12\" rx=\"6\" fill=\"#36a4ff\"/>\n        <rect x=\"884\" y=\"414\" width=\"206\" height=\"12\" rx=\"6\" fill=\"none\" stroke=\"#5caeff\" stroke-opacity=\".22\" stroke-width=\"1.5\"/>\n      </g>\n\n      <g id=\"ventSlots\" fill=\"#0a1118\" stroke=\"#7d8c9f\" stroke-width=\"2.5\">\n        <rect x=\"884\" y=\"552\" width=\"228\" height=\"32\" rx=\"16\"/>\n        <rect x=\"884\" y=\"620\" width=\"228\" height=\"32\" rx=\"16\"/>\n        <rect x=\"884\" y=\"688\" width=\"228\" height=\"32\" rx=\"16\"/>\n      </g>\n      <g id=\"ventMeshes\" fill=\"#141f2c\" opacity=\".82\">\n        <rect x=\"896\" y=\"560\" width=\"204\" height=\"16\" rx=\"8\"/>\n        <rect x=\"896\" y=\"628\" width=\"204\" height=\"16\" rx=\"8\"/>\n        <rect x=\"896\" y=\"696\" width=\"204\" height=\"16\" rx=\"8\"/>\n      </g>\n\n      <g id=\"screws\">\n        <circle cx=\"126\" cy=\"806\" r=\"10\" fill=\"#39495f\" stroke=\"#dce9f9\" stroke-width=\"2.2\"/>\n        <circle cx=\"126\" cy=\"806\" r=\"4\" fill=\"#08111a\"/>\n        <circle cx=\"850\" cy=\"806\" r=\"10\" fill=\"#39495f\" stroke=\"#dce9f9\" stroke-width=\"2.2\"/>\n        <circle cx=\"850\" cy=\"806\" r=\"4\" fill=\"#08111a\"/>\n        <circle cx=\"1124\" cy=\"806\" r=\"10\" fill=\"#39495f\" stroke=\"#dce9f9\" stroke-width=\"2.2\"/>\n        <circle cx=\"1124\" cy=\"806\" r=\"4\" fill=\"#08111a\"/>\n      </g>\n\n      <g id=\"feet\">\n        <path d=\"M200 826 H320 L296 892 H176 Z\" fill=\"url(#footGrad)\" stroke=\"#bde0ff\" stroke-width=\"3\"/>\n        <path d=\"M904 826 H1024 L1000 892 H880 Z\" fill=\"url(#footGrad)\" stroke=\"#bde0ff\" stroke-width=\"3\"/>\n        <rect x=\"174\" y=\"892\" width=\"126\" height=\"18\" rx=\"6\" fill=\"#2296ff\" opacity=\".82\" filter=\"url(#softGlow)\"/>\n        <rect x=\"878\" y=\"892\" width=\"126\" height=\"18\" rx=\"6\" fill=\"#2296ff\" opacity=\".82\" filter=\"url(#softGlow)\"/>\n      </g>\n",
+  gasBoiler: "\n<defs>\n        <linearGradient id=\"bodyGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#f8fbff\"/>\n          <stop offset=\".24\" stop-color=\"#eef2f7\"/>\n          <stop offset=\".58\" stop-color=\"#d7dde7\"/>\n          <stop offset=\"1\" stop-color=\"#c3cbd7\"/>\n        </linearGradient>\n        <linearGradient id=\"bodySide\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#cdd5e0\"/>\n          <stop offset=\".5\" stop-color=\"#eef4fb\"/>\n          <stop offset=\"1\" stop-color=\"#b6c0ce\"/>\n        </linearGradient>\n        <linearGradient id=\"metalGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#2b3748\"/>\n          <stop offset=\".3\" stop-color=\"#7f92ab\"/>\n          <stop offset=\".55\" stop-color=\"#e4edf8\"/>\n          <stop offset=\"1\" stop-color=\"#253344\"/>\n        </linearGradient>\n        <linearGradient id=\"darkScreen\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#07101b\"/>\n          <stop offset=\"1\" stop-color=\"#02070f\"/>\n        </linearGradient>\n        <linearGradient id=\"screenReflect\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#ffffff\" stop-opacity=\".15\"/>\n          <stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n        </linearGradient>\n        <linearGradient id=\"flameOuter\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#90f5ff\"/>\n          <stop offset=\".45\" stop-color=\"#19b8ff\"/>\n          <stop offset=\"1\" stop-color=\"#0056ff\"/>\n        </linearGradient>\n        <linearGradient id=\"flameInner\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#e9ffff\"/>\n          <stop offset=\"1\" stop-color=\"#3fd7ff\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-30%\" y=\"-30%\" width=\"160%\" height=\"160%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softGlow\" x=\"-30%\" y=\"-30%\" width=\"160%\" height=\"160%\"><feGaussianBlur stdDeviation=\"5\"/></filter>\n      </defs>\n\n      <g id=\"aura\">\n        <path id=\"gasAuraOutline\" d=\"M230 92 H874 Q940 92 940 158 V1138 Q940 1204 874 1204 H230 Q164 1204 164 1138 V158 Q164 92 230 92 Z\" fill=\"none\" stroke=\"#2ca7ff\" stroke-opacity=\"0.12\" stroke-width=\"18\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"flueTop\">\n        <rect x=\"495\" y=\"52\" width=\"136\" height=\"58\" rx=\"18\" fill=\"url(#metalGrad)\" stroke=\"#d4ebff\" stroke-width=\"4\"/>\n        <rect x=\"516\" y=\"28\" width=\"94\" height=\"36\" rx=\"12\" fill=\"url(#metalGrad)\" stroke=\"#d4ebff\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"boilerBody\">\n        <path d=\"M230 92 H874 Q940 92 940 158 V1138 Q940 1204 874 1204 H230 Q164 1204 164 1138 V158 Q164 92 230 92 Z\" fill=\"url(#bodyGrad)\" stroke=\"#f8fbff\" stroke-width=\"4\"/>\n        <path d=\"M180 154 Q180 106 228 106 H252 V1136 H228 Q180 1136 180 1088 Z\" fill=\"#f0f5fa\" opacity=\".72\"/>\n        <path d=\"M884 106 H904 Q924 106 932 122 Q940 138 940 164 V1128 Q940 1182 894 1194 L884 1196 Z\" fill=\"#bfc9d6\" opacity=\".72\"/>\n        <path d=\"M260 116 C352 108 680 104 848 120\" fill=\"none\" stroke=\"#ffffff\" stroke-opacity=\".42\" stroke-width=\"6\" stroke-linecap=\"round\"/>\n        <path d=\"M364 130 L620 858\" stroke=\"#ffffff\" stroke-opacity=\".18\" stroke-width=\"5\"/>\n        <line x1=\"164\" y1=\"988\" x2=\"940\" y2=\"988\" stroke=\"#8093ac\" stroke-opacity=\".5\" stroke-width=\"4\"/>\n      </g>\n\n      <g id=\"frontIcon\" transform=\"translate(-60 0)\" opacity=\"0.90\">\n        <g id=\"frontIconGlow\" opacity=\"0.32\">\n          <path d=\"M584 560 C578 606 566 642 546 674 C522 712 516 746 528 776 C544 816 578 838 620 834 C668 830 706 794 708 746 C710 706 690 674 658 634 C632 602 608 576 584 560 Z\" fill=\"#1fa6ff\" filter=\"url(#blueGlow)\"/>\n        </g>\n        <path d=\"M584 560 C578 606 566 642 546 674 C522 712 516 746 528 776 C544 816 578 838 620 834 C668 830 706 794 708 746 C710 706 690 674 658 634 C632 602 608 576 584 560 Z\" fill=\"url(#flameOuter)\" stroke=\"#88f5ff\" stroke-width=\"4\"/>\n        <path d=\"M592 600 C590 632 580 658 564 684 C546 712 544 738 554 760 C566 788 590 802 620 800 C652 798 678 772 680 744 C682 716 668 692 646 664 C628 642 610 620 592 600 Z\" fill=\"url(#flameInner)\" opacity=\".96\"/>\n        <path d=\"M586 658 C574 684 572 712 578 736 C586 716 598 694 614 678 C604 668 594 662 586 658 Z\" fill=\"#ffffff\" opacity=\".72\"/>\n      </g>\n\n      <g id=\"displayFrame\">\n        <rect x=\"428\" y=\"1040\" width=\"292\" height=\"114\" rx=\"18\" fill=\"#d9e4ef\" stroke=\"#4d627b\" stroke-width=\"3\"/>\n        <rect x=\"440\" y=\"1052\" width=\"268\" height=\"90\" rx=\"14\" fill=\"url(#darkScreen)\" stroke=\"#1eb5ff\" stroke-opacity=\".6\" stroke-width=\"2.6\"/>\n        <path d=\"M448 1060 H570 L548 1140 H448 Z\" fill=\"url(#screenReflect)\"/>\n\n        <line x1=\"528\" y1=\"1062\" x2=\"528\" y2=\"1132\" stroke=\"#13344e\" stroke-opacity=\".85\" stroke-width=\"2\"/>\n        <line x1=\"620\" y1=\"1062\" x2=\"620\" y2=\"1132\" stroke=\"#13344e\" stroke-opacity=\".85\" stroke-width=\"2\"/>\n\n        <g id=\"gasBarsGroup\">\n          <rect id=\"barLevel4\" x=\"456\" y=\"1068\" width=\"58\" height=\"10\" rx=\"5\" fill=\"#ff3434\" opacity=\"0.16\"/>\n          <rect id=\"barLevel3\" x=\"464\" y=\"1086\" width=\"50\" height=\"10\" rx=\"5\" fill=\"#ff982a\" opacity=\"0.16\"/>\n          <rect id=\"barLevel2\" x=\"472\" y=\"1104\" width=\"42\" height=\"10\" rx=\"5\" fill=\"#59d44e\" opacity=\"1\"/>\n          <rect id=\"barLevel1\" x=\"480\" y=\"1122\" width=\"34\" height=\"10\" rx=\"5\" fill=\"#31a8ff\" opacity=\"1\"/>\n        </g>\n\n        <g id=\"displayFlameGroup\" transform=\"translate(575 1132) scale(0.2857) translate(-596 -1154)\" opacity=\"1\">\n          <g id=\"displayFlameGlow\" opacity=\"0.27\">\n            <path d=\"M575 1122 C572 1110 572 1097 575 1082 C579 1062 587 1044 596 1028 C605 1044 613 1062 617 1082 C620 1097 620 1110 617 1122 C613 1138 605 1150 596 1154 C587 1150 579 1138 575 1122 Z\" fill=\"#18a8ff\" filter=\"url(#softGlow)\"/>\n          </g>\n          <path id=\"displayFlameOuter\" d=\"M575 1122 C572 1110 572 1097 575 1082 C579 1062 587 1044 596 1028 C605 1044 613 1062 617 1082 C620 1097 620 1110 617 1122 C613 1138 605 1150 596 1154 C587 1150 579 1138 575 1122 Z\" fill=\"url(#flameOuter)\"/>\n          <path id=\"displayFlameInner\" d=\"M581 1120 C579 1111 579 1100 581 1088 C584 1072 590 1058 596 1046 C602 1058 608 1072 611 1088 C613 1100 613 1111 611 1120 C608 1132 602 1141 596 1144 C590 1141 584 1132 581 1120 Z\" fill=\"url(#flameInner)\" opacity=\".94\"/>\n          <path d=\"M588 1099 C588 1087 591 1076 596 1066 C594 1081 594 1093 595 1104 C592 1102 590 1100 588 1099 Z\" fill=\"#ffffff\" opacity=\".62\"/>\n        </g>\n\n        <g id=\"tempGroup\">\n          <text x=\"640\" y=\"1080\" font-size=\"11\" fill=\"#76caff\" font-family=\"monospace\">TEMP</text>\n          <text id=\"tempValueDisplay\" x=\"640\" y=\"1124\" font-size=\"34\" fill=\"#eff9ff\" font-family=\"monospace\" font-weight=\"700\">65.0°</text>\n          <text x=\"694\" y=\"1122\" font-size=\"16\" fill=\"#7fd2ff\" font-family=\"monospace\">C</text>\n        </g>\n      </g>\n\n      <g id=\"bottomConnectors\">\n        <g transform=\"translate(296 1214)\">\n          <rect x=\"0\" y=\"0\" width=\"64\" height=\"74\" rx=\"10\" fill=\"url(#metalGrad)\" stroke=\"#d4ebff\" stroke-width=\"3\"/>\n          <rect x=\"8\" y=\"60\" width=\"48\" height=\"12\" rx=\"4\" fill=\"#1fb4ff\" opacity=\".7\" filter=\"url(#softGlow)\"/>\n        </g>\n        <g transform=\"translate(680 1214)\">\n          <rect x=\"0\" y=\"0\" width=\"64\" height=\"74\" rx=\"10\" fill=\"url(#metalGrad)\" stroke=\"#d4ebff\" stroke-width=\"3\"/>\n          <rect x=\"8\" y=\"60\" width=\"48\" height=\"12\" rx=\"4\" fill=\"#1fb4ff\" opacity=\".7\" filter=\"url(#softGlow)\"/>\n        </g>\n      </g>\n",
+  electricBoiler: "\n<defs>\n        <linearGradient id=\"bodyGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#f8fbff\"/>\n          <stop offset=\".24\" stop-color=\"#eef2f7\"/>\n          <stop offset=\".58\" stop-color=\"#d7dde7\"/>\n          <stop offset=\"1\" stop-color=\"#bcc7d5\"/>\n        </linearGradient>\n        <linearGradient id=\"bodyShade\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#d5dde8\"/>\n          <stop offset=\".5\" stop-color=\"#ffffff\"/>\n          <stop offset=\"1\" stop-color=\"#bac4d4\"/>\n        </linearGradient>\n        <linearGradient id=\"panelDark\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#111b2b\"/>\n          <stop offset=\"1\" stop-color=\"#060d16\"/>\n        </linearGradient>\n        <linearGradient id=\"metalGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#283546\"/>\n          <stop offset=\".25\" stop-color=\"#7c90ab\"/>\n          <stop offset=\".55\" stop-color=\"#f0f6ff\"/>\n          <stop offset=\"1\" stop-color=\"#2a3648\"/>\n        </linearGradient>\n        <linearGradient id=\"waterDropOuter\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#7ff7ff\"/>\n          <stop offset=\".4\" stop-color=\"#19b4ff\"/>\n          <stop offset=\"1\" stop-color=\"#0a4eff\"/>\n        </linearGradient>\n        <linearGradient id=\"waterDropInner\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#eefcff\"/>\n          <stop offset=\"1\" stop-color=\"#57d8ff\"/>\n        </linearGradient>\n        <linearGradient id=\"lightningGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#fff4a9\"/>\n          <stop offset=\".4\" stop-color=\"#ffd233\"/>\n          <stop offset=\"1\" stop-color=\"#ff9f00\"/>\n        </linearGradient>\n        <linearGradient id=\"ringHeat\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#ff3b1f\"/>\n          <stop offset=\".55\" stop-color=\"#ffb000\"/>\n          <stop offset=\"1\" stop-color=\"#ffe66a\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-40%\" y=\"-40%\" width=\"180%\" height=\"180%\"><feGaussianBlur stdDeviation=\"12\"/></filter>\n        <filter id=\"softGlow\" x=\"-40%\" y=\"-40%\" width=\"180%\" height=\"180%\"><feGaussianBlur stdDeviation=\"6\"/></filter>\n        <filter id=\"warmGlow\" x=\"-40%\" y=\"-40%\" width=\"180%\" height=\"180%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n      </defs>\n\n      <g id=\"aura\">\n        <path d=\"M236 132 H848 Q926 132 926 210 V1244 Q926 1322 848 1322 H236 Q158 1322 158 1244 V210 Q158 132 236 132 Z\" fill=\"none\" stroke=\"#28a6ff\" stroke-opacity=\".25\" stroke-width=\"20\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"bodyGroup\">\n        <path id=\"bodyShape\" d=\"M236 132 H848 Q926 132 926 210 V1244 Q926 1322 848 1322 H236 Q158 1322 158 1244 V210 Q158 132 236 132 Z\" fill=\"url(#bodyGrad)\" stroke=\"#f6fbff\" stroke-width=\"4\"/>\n        <path d=\"M176 220 Q176 160 232 160 H264 V1260 H230 Q176 1260 176 1206 Z\" fill=\"#ffffff\" opacity=\".42\"/>\n        <path d=\"M842 160 H876 Q906 160 918 180 Q930 200 930 232 V1228 Q930 1284 880 1300 L842 1308 Z\" fill=\"#b7c3d4\" opacity=\".55\"/>\n        <path d=\"M250 160 C390 148 670 146 834 162\" stroke=\"#ffffff\" stroke-opacity=\".46\" stroke-width=\"7\" fill=\"none\" stroke-linecap=\"round\"/>\n        <path d=\"M368 162 L626 938\" stroke=\"#ffffff\" stroke-opacity=\".16\" stroke-width=\"6\"/>\n        <line x1=\"158\" y1=\"1018\" x2=\"926\" y2=\"1018\" stroke=\"#6e8098\" stroke-opacity=\".55\" stroke-width=\"4\"/>\n      </g>\n\n      <g id=\"lightningGroup\" transform=\"translate(-5 -30)\">\n        <path id=\"lightningGlow\" d=\"M575 468 L639 468 L607 576 L692 576 L544 786 L582 642 L488 642 Z\" fill=\"#ffcb34\" opacity=\"0.25\" filter=\"url(#warmGlow)\"/>\n        <path id=\"lightningBolt\" d=\"M575 468 L639 468 L607 576 L692 576 L544 786 L582 642 L488 642 Z\" fill=\"url(#lightningGrad)\" stroke=\"#fff3b8\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"controlPanelGroup\">\n        <rect id=\"controlPanelFrame\" x=\"372\" y=\"780\" width=\"376\" height=\"332\" rx=\"28\" fill=\"#dce6ef\" stroke=\"#51657e\" stroke-width=\"3\"/>\n        <rect id=\"controlPanelInner\" x=\"388\" y=\"796\" width=\"344\" height=\"300\" rx=\"24\" fill=\"url(#panelDark)\" stroke=\"#6fd4ff\" stroke-opacity=\".55\" stroke-width=\"2.6\"/>\n        <path d=\"M400 806 H560 L520 1090 H400 Z\" fill=\"#ffffff\" opacity=\".10\"/>\n\n        <g id=\"powerDisplayGroup\">\n          <rect id=\"powerDisplayFrame\" x=\"448\" y=\"820\" width=\"224\" height=\"58\" rx=\"12\" fill=\"#0a1321\" stroke=\"#67c9ff\" stroke-opacity=\".45\" stroke-width=\"2\"/>\n          <text x=\"470\" y=\"844\" font-size=\"12\" fill=\"#75c9ff\" font-family=\"monospace\">POWER DRAW</text>\n          <text id=\"powerKwDisplay\" x=\"470\" y=\"868\" font-size=\"30\" fill=\"#eef9ff\" font-family=\"monospace\" font-weight=\"700\">3.20 kW</text>\n        </g>\n\n        <g id=\"ringGroup\">\n          <circle id=\"ringBg\" cx=\"560\" cy=\"960\" r=\"62\" fill=\"none\" stroke=\"#203043\" stroke-width=\"16\" stroke-linecap=\"round\" transform=\"rotate(-218.4 560 960)\" stroke-dasharray=\"281.35 389.56\"/>\n          <g id=\"powerRing\"></g>\n          <g id=\"tickMarks\" opacity=\".55\"></g>\n          <circle id=\"knobOuter\" cx=\"560\" cy=\"960\" r=\"48\" fill=\"#09111b\" stroke=\"#8dc8ff\" stroke-opacity=\".28\" stroke-width=\"3\"/>\n          <circle id=\"knobInner\" cx=\"560\" cy=\"960\" r=\"38\" fill=\"url(#metalGrad)\" stroke=\"#243548\" stroke-width=\"3\"/>\n          <path id=\"knobIndicator\" d=\"M560 960 L560 924\" stroke=\"#eaf8ff\" stroke-width=\"6\" stroke-linecap=\"round\" transform=\"rotate(0 560 960)\"/>\n          <circle id=\"knobHub\" cx=\"560\" cy=\"960\" r=\"9\" fill=\"#20354d\"/>\n          <text id=\"powerPercentText\" x=\"560\" y=\"968\" font-size=\"19\" fill=\"#d6f2ff\" font-family=\"monospace\" font-weight=\"700\" text-anchor=\"middle\">40%</text>\n        </g>\n\n        <g id=\"waterDisplayGroup\">\n          <rect id=\"waterDisplayFrame\" x=\"430\" y=\"1036\" width=\"260\" height=\"46\" rx=\"12\" fill=\"#0a1321\" stroke=\"#67c9ff\" stroke-opacity=\".45\" stroke-width=\"2\"/>\n<text x=\"526\" y=\"1048\" font-size=\"11\" fill=\"#75c9ff\" font-family=\"monospace\">WATER TEMP</text>\n          <text id=\"waterTempDisplay\" x=\"560\" y=\"1074\" font-size=\"28\" fill=\"#eef9ff\" font-family=\"monospace\" font-weight=\"700\" text-anchor=\"middle\">52.0°C</text>\n        </g>\n      </g>\n\n      <g id=\"connectorsGroup\">\n        <g id=\"leftConnector\" transform=\"translate(340 1320)\">\n          <rect x=\"0\" y=\"0\" width=\"70\" height=\"90\" rx=\"12\" fill=\"url(#metalGrad)\" stroke=\"#d4ebff\" stroke-width=\"3\"/>\n          <rect x=\"10\" y=\"74\" width=\"50\" height=\"12\" rx=\"4\" fill=\"#1fb4ff\" opacity=\".7\" filter=\"url(#softGlow)\"/>\n        </g>\n        <g id=\"rightConnector\" transform=\"translate(686 1320)\">\n          <rect x=\"0\" y=\"0\" width=\"76\" height=\"100\" rx=\"12\" fill=\"#b88b33\" stroke=\"#ffe3a4\" stroke-width=\"3\"/>\n          <rect x=\"10\" y=\"82\" width=\"56\" height=\"12\" rx=\"4\" fill=\"#1fb4ff\" opacity=\".7\" filter=\"url(#softGlow)\"/>\n        </g>\n      </g>\n",
+  fireplace: "\n<defs>\n        <linearGradient id=\"bodyGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#3a424d\"/>\n          <stop offset=\".18\" stop-color=\"#212933\"/>\n          <stop offset=\".48\" stop-color=\"#0b121a\"/>\n          <stop offset=\".76\" stop-color=\"#111923\"/>\n          <stop offset=\"1\" stop-color=\"#2f3742\"/>\n        </linearGradient>\n        <linearGradient id=\"bodySideGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#2b3440\"/>\n          <stop offset=\".22\" stop-color=\"#0f151d\"/>\n          <stop offset=\".5\" stop-color=\"#0a1017\"/>\n          <stop offset=\".78\" stop-color=\"#151d27\"/>\n          <stop offset=\"1\" stop-color=\"#303946\"/>\n        </linearGradient>\n        <linearGradient id=\"metalGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#5e6872\"/>\n          <stop offset=\".18\" stop-color=\"#9ca4ad\"/>\n          <stop offset=\".5\" stop-color=\"#2e3742\"/>\n          <stop offset=\".82\" stop-color=\"#0b1118\"/>\n          <stop offset=\"1\" stop-color=\"#3d4650\"/>\n        </linearGradient>\n        <linearGradient id=\"glassGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#404654\" stop-opacity=\".76\"/>\n          <stop offset=\".3\" stop-color=\"#1a2028\" stop-opacity=\".60\"/>\n          <stop offset=\".72\" stop-color=\"#090d12\" stop-opacity=\".84\"/>\n          <stop offset=\"1\" stop-color=\"#030507\" stop-opacity=\".95\"/>\n        </linearGradient>\n        <linearGradient id=\"displayGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#08131f\"/>\n          <stop offset=\"1\" stop-color=\"#02070d\"/>\n        </linearGradient>\n        <linearGradient id=\"screenShine\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#ffffff\" stop-opacity=\".10\"/>\n          <stop offset=\".6\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n          <stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\".04\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softGlow\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\"><feGaussianBlur stdDeviation=\"6\"/></filter>\n      <clipPath id=\"fireClip\"><rect x=\"400\" y=\"448\" width=\"400\" height=\"420\" rx=\"12\"/></clipPath></defs>\n\n      <g id=\"auraGroup\">\n        <path d=\"M350 162 H850 Q906 162 906 218 V1096 Q906 1154 850 1154 H350 Q294 1154 294 1096 V218 Q294 162 350 162 Z\" fill=\"none\" stroke=\"#2aa6ff\" stroke-opacity=\".28\" stroke-width=\"18\" filter=\"url(#blueGlow)\"/>\n        <ellipse cx=\"600\" cy=\"1172\" rx=\"330\" ry=\"34\" fill=\"#1f6dff\" fill-opacity=\".22\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"chimneyGroup\">\n        <rect x=\"512\" y=\"52\" width=\"176\" height=\"152\" rx=\"18\" fill=\"url(#bodySideGrad)\" stroke=\"#aeb7c1\" stroke-opacity=\".26\" stroke-width=\"3\"/>\n        <path d=\"M522 58 H678\" stroke=\"#45b9ff\" stroke-width=\"5\" stroke-linecap=\"round\" opacity=\".92\" filter=\"url(#softGlow)\"/>\n        <rect x=\"492\" y=\"202\" width=\"216\" height=\"26\" rx=\"10\" fill=\"#060a0f\" opacity=\".95\"/>\n      </g>\n\n      <g id=\"topCapGroup\">\n        <path d=\"M346 184 H854 L908 210 V286 H292 V210 Z\" fill=\"url(#metalGrad)\" stroke=\"#c2cad3\" stroke-opacity=\".28\" stroke-width=\"3\"/>\n        <path d=\"M354 190 H846\" stroke=\"#48b8ff\" stroke-width=\"4\" stroke-linecap=\"round\" opacity=\".92\" filter=\"url(#softGlow)\"/>\n        <path d=\"M344 282 H856\" stroke=\"#070c12\" stroke-width=\"10\" opacity=\".78\"/>\n      </g>\n\n      <g id=\"bodyGroup\">\n        <path d=\"M354 252 H846 Q900 252 900 306 V1092 Q900 1144 846 1144 H354 Q300 1144 300 1092 V306 Q300 252 354 252 Z\" fill=\"url(#bodyGrad)\" stroke=\"#c1c8d0\" stroke-opacity=\".25\" stroke-width=\"3\"/>\n        <path d=\"M326 304 V1080\" stroke=\"#3d4857\" stroke-opacity=\".26\" stroke-width=\"2\"/>\n        <path d=\"M874 304 V1080\" stroke=\"#0d131c\" stroke-opacity=\".44\" stroke-width=\"2\"/>\n        <path d=\"M318 312 C338 280 356 268 380 266 H820 C858 266 882 284 892 308\" fill=\"none\" stroke=\"#0e151d\" stroke-width=\"10\" opacity=\".64\"/>\n      </g>\n\n      <g id=\"displayGroup\">\n        <rect x=\"528\" y=\"298\" width=\"212\" height=\"68\" rx=\"12\" fill=\"#181d24\" stroke=\"#9ca6b3\" stroke-opacity=\".28\" stroke-width=\"3\"/>\n        <rect x=\"536\" y=\"306\" width=\"196\" height=\"52\" rx=\"10\" fill=\"url(#displayGrad)\" stroke=\"#44b8ff\" stroke-opacity=\".56\" stroke-width=\"2\"/>\n        <text x=\"556\" y=\"326\" font-size=\"11\" font-family=\"monospace\" fill=\"#73ddff\">STOVE TEMP</text>\n        <text id=\"stoveTempDisplay\" x=\"556\" y=\"350\" font-size=\"30\" font-family=\"monospace\" font-weight=\"700\" fill=\"#eef8ff\">65.0°C</text>\n        <g id=\"displayBars\" transform=\"translate(666 316)\">\n          <rect x=\"0\" y=\"18\" width=\"10\" height=\"14\" rx=\"2\" fill=\"#19b8ff\" id=\"displayBar1\" opacity=\".22\"/>\n          <rect x=\"18\" y=\"10\" width=\"10\" height=\"22\" rx=\"2\" fill=\"#28c0ff\" id=\"displayBar2\" opacity=\".22\"/>\n          <rect x=\"36\" y=\"2\" width=\"10\" height=\"30\" rx=\"2\" fill=\"#55d4ff\" id=\"displayBar3\" opacity=\".22\"/>\n          <circle cx=\"70\" cy=\"8\" r=\"3\" fill=\"#44b8ff\"/>\n          <circle cx=\"70\" cy=\"22\" r=\"3\" fill=\"#2875c9\"/>\n        </g>\n      </g>\n\n      <g id=\"windowOuterGroup\">\n        <rect x=\"346\" y=\"394\" width=\"508\" height=\"528\" rx=\"44\" fill=\"#0c1218\" stroke=\"#5d6771\" stroke-width=\"4\"/>\n        <rect x=\"376\" y=\"424\" width=\"448\" height=\"468\" rx=\"30\" fill=\"#060a0d\" stroke=\"#1a222c\" stroke-width=\"4\"/>\n        <rect x=\"400\" y=\"448\" width=\"400\" height=\"420\" rx=\"12\" fill=\"url(#glassGrad)\" stroke=\"#5d1f09\" stroke-opacity=\".20\" stroke-width=\"3\"/>\n        <g id=\"combustionSlot\"></g>\n        <rect x=\"392\" y=\"440\" width=\"416\" height=\"436\" rx=\"16\" fill=\"none\" stroke=\"#1a2129\" stroke-width=\"12\"/>\n        <path d=\"M430 464 H612 L472 860 H430 Z\" fill=\"#ffffff\" opacity=\".10\"/>\n        <path d=\"M676 458 C730 516 754 580 760 652\" fill=\"none\" stroke=\"#ffffff\" stroke-opacity=\".05\" stroke-width=\"18\" stroke-linecap=\"round\"/>\n        <path d=\"M414 460 H786\" stroke=\"#8a2d0d\" stroke-opacity=\".22\" stroke-width=\"4\" stroke-linecap=\"round\"/>\n      </g>\n\n      <g id=\"doorHandleGroup\">\n        <rect x=\"844\" y=\"596\" width=\"14\" height=\"114\" rx=\"7\" fill=\"#090d12\" opacity=\".88\"/>\n        <rect x=\"858\" y=\"584\" width=\"32\" height=\"174\" rx=\"10\" fill=\"url(#metalGrad)\" stroke=\"#d4dce6\" stroke-opacity=\".26\" stroke-width=\"2\"/>\n      </g>\n\n      <g id=\"baseGroup\">\n        <path d=\"M316 1102 H884 L902 1120 V1224 Q902 1238 888 1238 H312 Q298 1238 298 1224 V1120 Z\" fill=\"url(#bodySideGrad)\" stroke=\"#aab3be\" stroke-opacity=\".22\" stroke-width=\"3\"/>\n        <path d=\"M360 1238 H474 L456 1198 H378 Z\" fill=\"#02060a\"/>\n        <path d=\"M726 1238 H840 L824 1198 H744 Z\" fill=\"#02060a\"/>\n      </g>\n"
+});
+
+
 /* Modern wood / coal boiler adapted from the user's stove SVG v3.
  * Animation uses Warmwasser-style ss-fire and ss-embers keyframes (MIT LICENSE).
  * Pure SVG visualization; no Home Assistant control services.
  */
 const HASSStudioSolidFuel=(()=>{
-  const BOILER_SVG="\n      <defs>\n        <linearGradient id=\"bodyFront\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#344864\"/>\n          <stop offset=\".14\" stop-color=\"#60759a\"/>\n          <stop offset=\".50\" stop-color=\"#101926\"/>\n          <stop offset=\".86\" stop-color=\"#4f668a\"/>\n          <stop offset=\"1\" stop-color=\"#2b3d57\"/>\n        </linearGradient>\n        <linearGradient id=\"bodyPanel\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#364960\"/>\n          <stop offset=\"1\" stop-color=\"#121b27\"/>\n        </linearGradient>\n        <linearGradient id=\"metalDark\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#0f1723\"/>\n          <stop offset=\"1\" stop-color=\"#05090f\"/>\n        </linearGradient>\n        <linearGradient id=\"sideBevel\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#152338\"/>\n          <stop offset=\".5\" stop-color=\"#4f6790\"/>\n          <stop offset=\"1\" stop-color=\"#19283e\"/>\n        </linearGradient>\n        <linearGradient id=\"screenGlass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#0d223a\"/>\n          <stop offset=\"1\" stop-color=\"#030811\"/>\n        </linearGradient>\n        <linearGradient id=\"screenHighlight\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#d5eeff\" stop-opacity=\".15\"/>\n          <stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n        </linearGradient>\n        <linearGradient id=\"doorGlass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#202834\"/>\n          <stop offset=\".55\" stop-color=\"#0f1620\"/>\n          <stop offset=\"1\" stop-color=\"#070c13\"/>\n        </linearGradient>\n        <linearGradient id=\"doorInnerFrame\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#202a39\"/>\n          <stop offset=\".5\" stop-color=\"#556882\"/>\n          <stop offset=\"1\" stop-color=\"#1b2531\"/>\n        </linearGradient>\n        <linearGradient id=\"grateGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#2a313b\"/>\n          <stop offset=\"1\" stop-color=\"#11161d\"/>\n        </linearGradient>\n        <linearGradient id=\"displayAccent\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#74c7ff\"/>\n          <stop offset=\"1\" stop-color=\"#35f0db\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softBlueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"6\"/></filter>\n      <clipPath id=\"solidFireClip\"><rect x=\"420\" y=\"586\" width=\"180\" height=\"210\" rx=\"12\"/></clipPath></defs>\n\n      <g id=\"outerAura\"><path d=\"M270 210 L754 210 L792 248 L792 1146 L754 1180 L270 1180 L232 1146 L232 248 Z\" fill=\"none\" stroke=\"#1a95ff\" stroke-opacity=\".26\" stroke-width=\"16\" filter=\"url(#blueGlow)\"/></g>\n\n      <g id=\"chimney\">\n        <rect x=\"446\" y=\"84\" width=\"132\" height=\"140\" rx=\"16\" fill=\"url(#bodyFront)\" stroke=\"#90d1ff\" stroke-opacity=\".95\" stroke-width=\"4\"/>\n        <rect x=\"438\" y=\"216\" width=\"148\" height=\"18\" rx=\"3\" fill=\"#dcecff\" opacity=\".80\"/>\n      </g>\n\n      <g id=\"stoveBody\">\n        <path d=\"M270 210 L754 210 L792 248 L792 1146 L754 1180 L270 1180 L232 1146 L232 248 Z\" fill=\"url(#bodyFront)\" stroke=\"#dcecff\" stroke-opacity=\".86\" stroke-width=\"4\"/>\n        <path d=\"M232 248 L270 210 V1180 L232 1146 Z\" fill=\"url(#sideBevel)\" opacity=\".70\"/>\n        <path d=\"M754 210 L792 248 V1146 L754 1180 Z\" fill=\"url(#sideBevel)\" opacity=\".50\"/>\n        <rect x=\"262\" y=\"220\" width=\"500\" height=\"15\" rx=\"2\" fill=\"#f1f6ff\" opacity=\".86\"/>\n        <line x1=\"364\" y1=\"220\" x2=\"364\" y2=\"646\" stroke=\"#0a111a\" stroke-opacity=\".50\" stroke-width=\"3\"/>\n        <line x1=\"660\" y1=\"220\" x2=\"660\" y2=\"646\" stroke=\"#0a111a\" stroke-opacity=\".50\" stroke-width=\"3\"/>\n        <line x1=\"262\" y1=\"646\" x2=\"762\" y2=\"646\" stroke=\"#d8e8ff\" stroke-opacity=\".24\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"displayGroup\">\n        <rect x=\"416\" y=\"294\" width=\"266\" height=\"150\" rx=\"16\" fill=\"#070f18\" stroke=\"#8fd1ff\" stroke-width=\"3\"/>\n        <rect x=\"424\" y=\"302\" width=\"250\" height=\"134\" rx=\"14\" fill=\"url(#screenGlass)\"/>\n        <path d=\"M430 308 H560 L525 430 H430 Z\" fill=\"url(#screenHighlight)\"/>\n        <text x=\"446\" y=\"340\" font-size=\"18\" fill=\"#89cfff\" font-family=\"monospace\">TEMP</text>\n        <text id=\"tempValue\" x=\"446\" y=\"396\" font-size=\"56\" font-weight=\"700\" fill=\"#e0f8ff\" font-family=\"monospace\">__TEMP__</text>\n        <text x=\"560\" y=\"394\" font-size=\"20\" fill=\"#7bd1ff\" font-family=\"monospace\">C</text>\n        <text x=\"446\" y=\"424\" font-size=\"18\" fill=\"#58bcff\" font-family=\"monospace\">__FUEL__</text>\n        <circle cx=\"596\" cy=\"370\" r=\"38\" fill=\"#08111a\" stroke=\"#9ed9ff\" stroke-width=\"5\"/>\n        <path d=\"M596 332 A 38 38 0 1 1 595.9 332\" fill=\"none\" stroke=\"#233043\" stroke-width=\"11\" stroke-linecap=\"round\"/>\n        <path id=\"dialArc\" d=\"M596 332 A 38 38 0 1 1 595.9 332\" fill=\"none\" stroke=\"__DIAL_COLOR__\" stroke-width=\"11\" stroke-linecap=\"round\" stroke-dasharray=\"__DIAL_DASH__\"/>\n        <circle cx=\"596\" cy=\"370\" r=\"11\" fill=\"#08111a\"/>\n        <circle cx=\"702\" cy=\"332\" r=\"14\" fill=\"#07111a\" stroke=\"#7fc6ff\" stroke-width=\"3\"/>\n        <circle cx=\"702\" cy=\"370\" r=\"14\" fill=\"#07111a\" stroke=\"#7fc6ff\" stroke-width=\"3\"/>\n        <circle cx=\"702\" cy=\"408\" r=\"14\" fill=\"#07111a\" stroke=\"#7fc6ff\" stroke-width=\"3\"/>\n        <circle cx=\"702\" cy=\"332\" r=\"4\" fill=\"#7fc6ff\"/>\n        <path d=\"M696 371 h12 M702 365 v12\" stroke=\"#7fc6ff\" stroke-width=\"2\" stroke-linecap=\"round\"/>\n        <rect x=\"696\" y=\"402\" width=\"12\" height=\"12\" rx=\"2\" fill=\"none\" stroke=\"#7fc6ff\" stroke-width=\"2\"/>\n      </g>\n\n      <g id=\"fireSection\">\n        <rect x=\"322\" y=\"500\" width=\"380\" height=\"470\" rx=\"18\" fill=\"#0a1119\" opacity=\".52\"/>\n        <rect x=\"296\" y=\"468\" width=\"432\" height=\"500\" rx=\"6\" fill=\"#081019\" opacity=\".26\"/>\n        <rect x=\"350\" y=\"520\" width=\"320\" height=\"420\" rx=\"16\" fill=\"url(#bodyPanel)\" stroke=\"#9bb1d3\" stroke-opacity=\".58\" stroke-width=\"2.2\"/>\n        <rect x=\"390\" y=\"556\" width=\"240\" height=\"338\" rx=\"22\" fill=\"url(#doorGlass)\" stroke=\"#8fcfff\" stroke-width=\"3.2\"/>\n        <rect id=\"doorGlowFrame\" x=\"390\" y=\"556\" width=\"240\" height=\"338\" rx=\"22\" fill=\"none\" stroke=\"#23a4ff\" stroke-opacity=\".22\" stroke-width=\"10\" filter=\"url(#softBlueGlow)\"/>\n        <path d=\"M408 582 h56 v224 l-42 0 z\" fill=\"#ffffff\" opacity=\".11\"/>\n        <path d=\"M612 570 h-48 l-34 320 h34 z\" fill=\"#9dd5ff\" opacity=\".05\"/>\n\n        <!-- empty combustion chamber -->\n        <g id=\"emptyChamber\">\n          <rect x=\"408\" y=\"575\" width=\"204\" height=\"300\" rx=\"18\" fill=\"#0d131b\" stroke=\"url(#doorInnerFrame)\" stroke-width=\"2\"/>\n          <rect x=\"420\" y=\"586\" width=\"180\" height=\"210\" rx=\"12\" fill=\"#0a0f16\"/>\n          <rect x=\"420\" y=\"586\" width=\"180\" height=\"210\" rx=\"12\" fill=\"none\" stroke=\"#8ecfff\" stroke-opacity=\".08\" stroke-width=\"2\"/>\n          <g opacity=\".12\" stroke=\"#dbeaff\" stroke-width=\"1.5\">\n            <line x1=\"452\" y1=\"590\" x2=\"452\" y2=\"792\"/>\n            <line x1=\"512\" y1=\"590\" x2=\"512\" y2=\"792\"/>\n            <line x1=\"572\" y1=\"590\" x2=\"572\" y2=\"792\"/>\n          </g>\n          <g id=\"grate\">\n            <rect x=\"432\" y=\"804\" width=\"156\" height=\"14\" rx=\"4\" fill=\"url(#grateGrad)\"/>\n            <g fill=\"url(#grateGrad)\">\n              <rect x=\"438\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"458\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"478\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"498\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"518\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"538\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"558\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n              <rect x=\"578\" y=\"784\" width=\"8\" height=\"30\" rx=\"2\"/>\n            </g>\n          </g>\n          <path d=\"M430 835 C468 825 554 825 590 835\" fill=\"none\" stroke=\"#9ccfff\" stroke-opacity=\".07\" stroke-width=\"10\" stroke-linecap=\"round\"/>\n        </g>\n\n        __COMBUSTION__\n        <g id=\"hinges\" fill=\"url(#bodyFront)\" stroke=\"#8fcfff\" stroke-width=\"2.2\">\n          <rect x=\"372\" y=\"606\" width=\"16\" height=\"98\" rx=\"4\"/>\n          <rect x=\"372\" y=\"804\" width=\"16\" height=\"98\" rx=\"4\"/>\n        </g>\n        <g id=\"handle\">\n          <rect x=\"650\" y=\"756\" width=\"32\" height=\"104\" rx=\"10\" fill=\"url(#bodyFront)\" stroke=\"#91d0ff\" stroke-width=\"2.5\"/>\n          <rect x=\"642\" y=\"746\" width=\"14\" height=\"44\" rx=\"6\" fill=\"#7ec9ff\" opacity=\".72\"/>\n        </g>\n      </g>\n\n      <g id=\"drawer\">\n        <rect x=\"366\" y=\"1010\" width=\"292\" height=\"130\" rx=\"10\" fill=\"url(#bodyPanel)\" stroke=\"#a4b7d7\" stroke-opacity=\".60\" stroke-width=\"2.2\"/>\n        <rect x=\"472\" y=\"1064\" width=\"80\" height=\"26\" rx=\"4\" fill=\"#0b1118\" stroke=\"#91cfff\" stroke-width=\"2\"/>\n      </g>\n\n      <g id=\"base\">\n        <path d=\"M238 1162 H786 L788 1236 L754 1266 H270 L236 1236 Z\" fill=\"url(#bodyFront)\" stroke=\"#8fd2ff\" stroke-opacity=\".88\" stroke-width=\"4\"/>\n        <path d=\"M236 1236 L270 1266 V1162 H238 Z\" fill=\"#40699f\" opacity=\".62\"/>\n        <path d=\"M786 1162 L788 1236 L754 1266 V1162 Z\" fill=\"#2f4a72\" opacity=\".58\"/>\n        <ellipse cx=\"284\" cy=\"1298\" rx=\"28\" ry=\"14\" fill=\"url(#bodyFront)\"/>\n        <rect x=\"256\" y=\"1248\" width=\"56\" height=\"54\" rx=\"8\" fill=\"url(#bodyFront)\"/>\n        <ellipse cx=\"740\" cy=\"1298\" rx=\"28\" ry=\"14\" fill=\"url(#bodyFront)\"/>\n        <rect x=\"712\" y=\"1248\" width=\"56\" height=\"54\" rx=\"8\" fill=\"url(#bodyFront)\"/>\n      </g>\n    ";
+  // Editable artwork: src/icons/solid-fuel-stove.svg
   const clamp=(v,a,b,d)=>Number.isFinite(Number(v))?Math.max(a,Math.min(b,Number(v))):d;
   const safe=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const raw=(h,e)=>e?h?.states?.[e]:null;
-  const temperature=(h,e)=>{
-    const item=raw(h,e),v=item?.state,u=item?.attributes?.unit_of_measurement;
-    if(v==null||String(v).trim()===''||!Number.isFinite(Number(v))||(u&&!['°C','C','°F','F'].includes(u)))return null;
-    const t=(u==='°F'||u==='F')?(Number(v)-32)*5/9:Number(v);
-    return t>=-40&&t<=150?t:null;
-  };
-  const resolveState=(node,h)=>{
-    if(['burning','embers','off'].includes(node.solid_state))return node.solid_state;
-    const entity=raw(h,node.burner_entity);
-    if(entity){
-      const s=String(entity.state).toLowerCase();
-      if(['on','burning','active','running','heating','fire'].includes(s))return 'burning';
-      if(['embers','smoldering','cooling','glowing'].includes(s))return 'embers';
-      // An explicit off/unknown state is not overridden by a hot water reading.
-      return 'off';
-    }
-    const t=temperature(h,node.entity),upper=clamp(node.burner_on_temp,20,90,35);
-    const lower=Math.min(upper-.5,clamp(node.burner_off_temp,10,89,32));
-    return t===null?'off':t>=upper?'burning':t>=lower?'embers':'off';
-  };
+  const temperature=HASSStudioHA.temperature;
+  const resolveState=HASSStudioAnimation.combustion;
   // Geometry and three nested paths follow the original Warmwasser flame renderer.
   const flame=(x,y,w,ht,speed)=>{
     const d=(r,h)=>'M'+(-r)+' 0C'+(-r-2)+' '+(-h*.45)+' '+(-r*.15)+' '+(-h*.6)+' '+(r*.1)+' '+(-h)+
@@ -1571,19 +1696,26 @@ const HASSStudioSolidFuel=(()=>{
     const level=t===null?0:(t-20)/75,arc=t===null?0:(52+level*172),hue=120-level*92;
     const intensity=clamp(node.solid_glow,0,100,78)/100;
     const prefix='sssolid'+String(node.id||'').replace(/[^a-z0-9]/gi,'').slice(0,24);
-    const svg=BOILER_SVG.replace('__TEMP__',reading===null?'—':safe(reading.toFixed(1)+'°'))
-      .replace('__FUEL__',fuel==='wood'?'DREWNO':'WĘGIEL')
-      .replace('__DIAL_COLOR__',reading===null?'#586779':'hsl('+hue.toFixed(1)+' 90% 48%)')
-      .replace('__DIAL_DASH__',arc.toFixed(1)+' 240')
-      .replace('__COMBUSTION__',combustion(fuel,mode,intensity))
-      .replace(/(\bid=")([^"]+)(")/g,(_,a,id,z)=>a+prefix+id+z)
-      .replace(/url\(#([^)]+)\)/g,(_,key)=>'url(#'+prefix+key+')');
+    const svg = HASSStudioSvg.namespaceIds(
+      HASSStudioSvg.inject(
+        HASSStudioSvg.apply(HASSStudioIconTemplates.solidFuel, {
+          tempValue: { text: reading === null ? '—' : reading.toFixed(1) + '°' },
+          fuelLabel: { text: fuel === 'wood' ? 'DREWNO' : 'WĘGIEL' },
+          dialArc: {
+            stroke: reading === null ? '#586779' : 'hsl(' + hue.toFixed(1) + ' 90% 48%)',
+            'stroke-dasharray': arc.toFixed(1) + ' 240'
+          }
+        }),
+        { combustionSlot: combustion(fuel, mode, intensity) }
+      ),
+      prefix
+    );
     const sx=clamp(node.width_scale,.5,2.4,1),sy=clamp(node.height_scale,.5,2.4,1);
     // Independent width/height are applied only to this SVG. The outer node's
     // proportional scale still multiplies both axes in the Custom canvas.
     return '<g class="ss-solid-boiler" data-combustion="'+mode+'">'+
-      '<g class="ss-solid-boiler-dimensions" transform="translate(66 53) scale('+sx+' '+sy+') translate(-66 -53)">'+
-      '<g transform="translate(22 -104) scale(.157 .258) translate(-232 -84)">'+svg+'</g></g></g>';
+      '<g class="ss-solid-boiler-dimensions" transform="translate(66 53) scale('+sx+' '+sy+') translate(-60 -43)">'+
+      '<g transform="translate(22 -104) scale(.2 .2) translate(-232 -84)">'+svg+'</g></g></g>';
   };
   const styles='<style>@media(prefers-reduced-motion:reduce){.ss-solid-boiler .ss-fire,.ss-solid-boiler .ss-embers{animation:none!important}}</style>';
   return {render,styles,resolveState,combustion,temperature,flame};
@@ -1595,7 +1727,7 @@ const HASSStudioSolidFuel=(()=>{
  * Read-only SVG rendering: no Home Assistant service calls.
  */
 const HASSStudioPellet = (() => {
-  const BOILER_SVG = "\n      <defs>\n        <linearGradient id=\"steelFront\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#3c5270\"/>\n          <stop offset=\".16\" stop-color=\"#7c96bb\"/>\n          <stop offset=\".5\" stop-color=\"#121a27\"/>\n          <stop offset=\".84\" stop-color=\"#4e678d\"/>\n          <stop offset=\"1\" stop-color=\"#2c3f5b\"/>\n        </linearGradient>\n        <linearGradient id=\"steelPanel\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#364a61\"/>\n          <stop offset=\"1\" stop-color=\"#111925\"/>\n        </linearGradient>\n        <linearGradient id=\"edgeGlowGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#dbe9ff\"/>\n          <stop offset=\"1\" stop-color=\"#8ecfff\"/>\n        </linearGradient>\n        <linearGradient id=\"darkGlass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#202a35\"/>\n          <stop offset=\"1\" stop-color=\"#070c13\"/>\n        </linearGradient>\n        <linearGradient id=\"screenGlass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#0a233a\"/>\n          <stop offset=\"1\" stop-color=\"#02070f\"/>\n        </linearGradient>\n        <linearGradient id=\"screenHighlight\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#ffffff\" stop-opacity=\".18\"/>\n          <stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n        </linearGradient>\n        <linearGradient id=\"hopperGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#425878\"/>\n          <stop offset=\"1\" stop-color=\"#111926\"/>\n        </linearGradient>\n        <linearGradient id=\"motorGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#25384f\"/>\n          <stop offset=\".5\" stop-color=\"#59739b\"/>\n          <stop offset=\"1\" stop-color=\"#22354a\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softBlueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"6\"/></filter>\n      <clipPath id=\"pelletBurnerClip\"><rect x=\"242\" y=\"560\" width=\"188\" height=\"240\" rx=\"12\"/></clipPath></defs>\n\n      <g id=\"aura\">\n        <path d=\"M120 210 L560 210 L596 246 L596 1106 L560 1140 L120 1140 L84 1106 L84 246 Z\" fill=\"none\" stroke=\"#2aa5ff\" stroke-opacity=\".22\" stroke-width=\"16\" filter=\"url(#blueGlow)\"/>\n        <path d=\"M672 242 L1084 242 L1120 276 L1120 688 L988 834 L988 1060 L920 1098 L794 1098 L794 864 L672 726 Z\" fill=\"none\" stroke=\"#2aa5ff\" stroke-opacity=\".18\" stroke-width=\"14\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"chimney\">\n        <rect x=\"280\" y=\"82\" width=\"126\" height=\"132\" rx=\"16\" fill=\"url(#steelFront)\" stroke=\"#dcecff\" stroke-opacity=\".85\" stroke-width=\"4\"/>\n        <line x1=\"280\" y1=\"150\" x2=\"406\" y2=\"150\" stroke=\"#edf5ff\" stroke-opacity=\".66\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"stoveBody\">\n        <path d=\"M120 210 L560 210 L596 246 L596 1106 L560 1140 L120 1140 L84 1106 L84 246 Z\" fill=\"url(#steelFront)\" stroke=\"#dcecff\" stroke-opacity=\".88\" stroke-width=\"4\"/>\n        <path d=\"M84 246 L120 210 V1140 L84 1106 Z\" fill=\"#40699f\" opacity=\".48\"/>\n        <path d=\"M560 210 L596 246 V1106 L560 1140 Z\" fill=\"#2a4263\" opacity=\".56\"/>\n        <rect x=\"114\" y=\"220\" width=\"446\" height=\"16\" rx=\"3\" fill=\"#eef6ff\" opacity=\".82\"/>\n        <line x1=\"180\" y1=\"220\" x2=\"180\" y2=\"520\" stroke=\"#0a121b\" stroke-opacity=\".42\" stroke-width=\"3\"/>\n        <line x1=\"534\" y1=\"220\" x2=\"534\" y2=\"1140\" stroke=\"#0a121b\" stroke-opacity=\".28\" stroke-width=\"3\"/>\n        <line x1=\"114\" y1=\"392\" x2=\"560\" y2=\"392\" stroke=\"#d6e8ff\" stroke-opacity=\".18\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"displayPanel\">\n        <rect x=\"164\" y=\"262\" width=\"316\" height=\"106\" rx=\"12\" fill=\"#061018\" stroke=\"#8fd1ff\" stroke-width=\"3\"/>\n        <rect x=\"174\" y=\"272\" width=\"296\" height=\"86\" rx=\"10\" fill=\"url(#screenGlass)\"/>\n        <path d=\"M180 278 H318 L286 354 H180 Z\" fill=\"url(#screenHighlight)\"/>\n        <text x=\"200\" y=\"305\" font-size=\"14\" fill=\"#7cc8ff\" font-family=\"monospace\">TEMP</text>\n        <text id=\"tempValue\" x=\"200\" y=\"345\" font-size=\"42\" fill=\"#e3f8ff\" font-family=\"monospace\" font-weight=\"700\">__PELLET_TEMP__</text>\n        <text x=\"298\" y=\"343\" font-size=\"18\" fill=\"#72c8ff\" font-family=\"monospace\">C</text>\n        <g opacity=\".84\" fill=\"#5fb9ff\">\n          <rect x=\"354\" y=\"290\" width=\"26\" height=\"6\" rx=\"3\"/>\n          <rect x=\"354\" y=\"306\" width=\"26\" height=\"6\" rx=\"3\"/>\n          <rect x=\"354\" y=\"322\" width=\"26\" height=\"6\" rx=\"3\"/>\n          <rect x=\"354\" y=\"338\" width=\"26\" height=\"6\" rx=\"3\"/>\n        </g>\n        <circle cx=\"422\" cy=\"314\" r=\"28\" fill=\"#07111a\" stroke=\"#88d0ff\" stroke-width=\"4\"/>\n        <circle id=\"statusRingGlow\" cx=\"422\" cy=\"314\" r=\"34\" fill=\"none\" stroke=\"#2ab2ff\" stroke-opacity=\".26\" stroke-width=\"6\" filter=\"url(#softBlueGlow)\"/>\n        <path d=\"M422 286 A 28 28 0 1 1 421.9 286\" fill=\"none\" stroke=\"#263449\" stroke-width=\"9\" stroke-linecap=\"round\"/>\n        <path id=\"statusArc\" d=\"M422 286 A 28 28 0 1 1 421.9 286\" fill=\"none\" stroke=\"__PELLET_RING_COLOR__\" stroke-width=\"9\" stroke-linecap=\"round\" stroke-dasharray=\"__PELLET_RING_DASH__\"/>\n      </g>\n\n      <g id=\"doorSection\">\n        <rect x=\"150\" y=\"446\" width=\"366\" height=\"438\" rx=\"20\" fill=\"#0b121b\" opacity=\".46\"/>\n        <rect x=\"186\" y=\"488\" width=\"300\" height=\"382\" rx=\"16\" fill=\"url(#steelPanel)\" stroke=\"#9eb4d6\" stroke-opacity=\".56\" stroke-width=\"2.4\"/>\n        <rect x=\"224\" y=\"542\" width=\"224\" height=\"274\" rx=\"16\" fill=\"url(#darkGlass)\" stroke=\"#92d1ff\" stroke-width=\"3\"/>\n        <rect id=\"doorGlowFrame\" x=\"224\" y=\"542\" width=\"224\" height=\"274\" rx=\"16\" fill=\"none\" stroke=\"#2aa5ff\" stroke-opacity=\".18\" stroke-width=\"10\" filter=\"url(#softBlueGlow)\"/>\n        <path d=\"M240 564 h46 v178 l-32 0 z\" fill=\"#ffffff\" opacity=\".10\"/>\n        <path d=\"M436 556 h-40 l-30 258 h28 z\" fill=\"#a4d8ff\" opacity=\".05\"/>\n        <g id=\"emptyBurner\">\n          <rect x=\"242\" y=\"560\" width=\"188\" height=\"240\" rx=\"12\" fill=\"#0a0f16\"/>\n          <rect x=\"242\" y=\"560\" width=\"188\" height=\"240\" rx=\"12\" fill=\"none\" stroke=\"#8ecfff\" stroke-opacity=\".08\" stroke-width=\"2\"/>\n          <g opacity=\".10\" stroke=\"#ddeaff\" stroke-width=\"1.4\">\n            <line x1=\"290\" y1=\"566\" x2=\"290\" y2=\"798\"/>\n            <line x1=\"336\" y1=\"566\" x2=\"336\" y2=\"798\"/>\n            <line x1=\"382\" y1=\"566\" x2=\"382\" y2=\"798\"/>\n          </g>\n          <rect x=\"260\" y=\"760\" width=\"150\" height=\"12\" rx=\"4\" fill=\"#1e2631\"/>\n          <g fill=\"#202933\">\n            <rect x=\"268\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"288\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"308\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"328\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"348\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"368\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n            <rect x=\"388\" y=\"742\" width=\"8\" height=\"28\" rx=\"2\"/>\n          </g>\n          __PELLET_FIRE__\n        </g>\n        <g fill=\"url(#steelFront)\" stroke=\"#90d1ff\" stroke-width=\"2.2\">\n          <rect x=\"170\" y=\"588\" width=\"14\" height=\"96\" rx=\"4\"/>\n          <rect x=\"170\" y=\"786\" width=\"14\" height=\"96\" rx=\"4\"/>\n        </g>\n        <g id=\"mainHandle\">\n          <rect x=\"478\" y=\"670\" width=\"30\" height=\"118\" rx=\"10\" fill=\"url(#steelFront)\" stroke=\"#91d0ff\" stroke-width=\"2.5\"/>\n          <rect x=\"468\" y=\"660\" width=\"14\" height=\"46\" rx=\"6\" fill=\"#9bd2ff\" opacity=\".74\"/>\n        </g>\n      </g>\n\n      <g id=\"drawerSection\">\n        <rect x=\"168\" y=\"922\" width=\"318\" height=\"150\" rx=\"12\" fill=\"url(#steelPanel)\" stroke=\"#a4b7d7\" stroke-opacity=\".56\" stroke-width=\"2.2\"/>\n        <rect x=\"250\" y=\"978\" width=\"154\" height=\"42\" rx=\"8\" fill=\"#081018\" stroke=\"#8fcfff\" stroke-opacity=\".55\" stroke-width=\"2.2\"/>\n        <g fill=\"url(#steelFront)\" stroke=\"#90d1ff\" stroke-width=\"2\">\n          <rect x=\"170\" y=\"976\" width=\"12\" height=\"94\" rx=\"4\"/>\n          <rect x=\"448\" y=\"962\" width=\"22\" height=\"70\" rx=\"7\"/>\n        </g>\n      </g>\n\n      <g id=\"stoveBase\">\n        <path d=\"M82 1088 H598 L598 1156 L566 1184 H114 L82 1156 Z\" fill=\"url(#steelFront)\" stroke=\"#8fd1ff\" stroke-opacity=\".82\" stroke-width=\"4\"/>\n        <rect x=\"130\" y=\"1180\" width=\"26\" height=\"18\" rx=\"4\" fill=\"#223248\"/>\n        <rect x=\"522\" y=\"1180\" width=\"26\" height=\"18\" rx=\"4\" fill=\"#223248\"/>\n      </g>\n\n      <g id=\"hopperGroup\">\n        <path d=\"M672 242 L1084 242 L1120 276 L1120 688 L988 834 L988 1060 L920 1098 L794 1098 L794 864 L672 726 Z\" fill=\"url(#hopperGrad)\" stroke=\"#dcecff\" stroke-opacity=\".84\" stroke-width=\"4\"/>\n        <path d=\"M672 242 L714 212 H1046 L1084 242 Z\" fill=\"url(#steelFront)\" stroke=\"#dcecff\" stroke-opacity=\".76\" stroke-width=\"4\"/>\n        <path d=\"M714 212 H1046 L1088 252 H756 Z\" fill=\"#495f7f\" opacity=\".74\"/>\n        <rect x=\"810\" y=\"202\" width=\"132\" height=\"20\" rx=\"8\" fill=\"#1d2836\" stroke=\"#b8d6ff\" stroke-width=\"2.4\"/>\n        <rect x=\"864\" y=\"244\" width=\"36\" height=\"38\" rx=\"4\" fill=\"#34485f\" stroke=\"#aacfff\" stroke-width=\"2\"/>\n        <rect x=\"894\" y=\"338\" width=\"58\" height=\"286\" rx=\"18\" fill=\"#070d13\" stroke=\"#8ecfff\" stroke-opacity=\".46\" stroke-width=\"2.2\"/>\n        <rect x=\"905\" y=\"352\" width=\"36\" height=\"258\" rx=\"14\" fill=\"#0f1620\"/>\n        <rect x=\"905\" y=\"352\" width=\"36\" height=\"258\" rx=\"14\" fill=\"none\" stroke=\"#9fd7ff\" stroke-opacity=\".10\" stroke-width=\"2\"/>\n        <path d=\"M766 706 H1098 L988 834 H794 Z\" fill=\"#162234\" opacity=\".84\"/>\n        <path d=\"M794 864 L988 864 L988 1060 L920 1098 L794 1098 Z\" fill=\"#122030\" opacity=\".86\"/>\n      </g>\n\n\n      <g id=\"connectionPipe\">\n        <rect x=\"596\" y=\"974\" width=\"164\" height=\"64\" rx=\"24\" fill=\"url(#motorGrad)\" stroke=\"#d7ebff\" stroke-opacity=\".62\" stroke-width=\"3\"/>\n        <rect x=\"612\" y=\"986\" width=\"132\" height=\"40\" rx=\"18\" fill=\"#12202e\" opacity=\".62\"/>\n        <rect x=\"580\" y=\"986\" width=\"20\" height=\"40\" rx=\"6\" fill=\"url(#steelFront)\" stroke=\"#9fd5ff\" stroke-opacity=\".46\" stroke-width=\"2\"/>\n        <rect x=\"744\" y=\"986\" width=\"18\" height=\"40\" rx=\"6\" fill=\"url(#steelFront)\" stroke=\"#9fd5ff\" stroke-opacity=\".46\" stroke-width=\"2\"/>\n        <ellipse cx=\"596\" cy=\"1006\" rx=\"16\" ry=\"26\" fill=\"url(#steelFront)\" stroke=\"#b9dcff\" stroke-opacity=\".72\" stroke-width=\"2.6\"/>\n      </g>\n\n      <g id=\"feedSystem\">\n        <rect x=\"760\" y=\"946\" width=\"140\" height=\"122\" rx=\"16\" fill=\"url(#motorGrad)\" stroke=\"#d7ebff\" stroke-opacity=\".64\" stroke-width=\"3\"/>\n        <rect x=\"900\" y=\"972\" width=\"80\" height=\"72\" rx=\"18\" fill=\"#12202e\" stroke=\"#9fd5ff\" stroke-opacity=\".44\" stroke-width=\"2.4\"/>\n        <rect x=\"978\" y=\"966\" width=\"84\" height=\"84\" rx=\"14\" fill=\"#1c2c40\" stroke=\"#cae6ff\" stroke-opacity=\".66\" stroke-width=\"3\"/>\n        <ellipse cx=\"1062\" cy=\"1008\" rx=\"28\" ry=\"42\" fill=\"url(#steelFront)\" stroke=\"#b9dcff\" stroke-width=\"3\"/>\n        <rect x=\"884\" y=\"1060\" width=\"16\" height=\"78\" rx=\"6\" fill=\"url(#steelFront)\"/>\n        <rect x=\"1020\" y=\"1062\" width=\"16\" height=\"76\" rx=\"6\" fill=\"url(#steelFront)\"/>\n        <rect x=\"834\" y=\"1060\" width=\"20\" height=\"56\" rx=\"6\" fill=\"#162331\" stroke=\"#99d1ff\" stroke-opacity=\".45\" stroke-width=\"2\"/>\n        <rect x=\"826\" y=\"1110\" width=\"36\" height=\"12\" rx=\"4\" fill=\"url(#steelFront)\"/>\n        <circle cx=\"786\" cy=\"970\" r=\"4\" fill=\"#e6f3ff\"/>\n        <circle cx=\"874\" cy=\"970\" r=\"4\" fill=\"#e6f3ff\"/>\n        <circle cx=\"786\" cy=\"1044\" r=\"4\" fill=\"#e6f3ff\"/>\n        <circle cx=\"874\" cy=\"1044\" r=\"4\" fill=\"#e6f3ff\"/>\n      </g>\n    ";
+  // Source artwork: src/icons/pellet-stove.svg
   const clamp=(v,min,max,def)=>Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):def;
   const escapeHtml=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const baseBounds={x:4,y:-110,width:186,height:312,labelY:220,centerX:97,centerY:46};
@@ -1634,16 +1766,21 @@ const HASSStudioPellet = (() => {
     const arc=t===null?0:(46+amount*118),hue=118-amount*95;
     const glow=clamp(node.solid_glow,0,100,76)/100;
     const prefix='sspellet'+String(node.id||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24);
-    const image=BOILER_SVG.replace('__PELLET_TEMP__',actual===null?'—':escapeHtml(actual.toFixed(1)+'°'))
-      .replace('__PELLET_RING_COLOR__',actual===null?'#586779':'hsl('+hue.toFixed(1)+' 88% 48%)')
-      .replace('__PELLET_RING_DASH__',arc.toFixed(1)+' 176')
-      .replace('__PELLET_FIRE__',combustion(mode,glow))
-      .replace(/(\bid=")([^"]+)(")/g,(_,a,id,c)=>a+prefix+id+c)
-      .replace(/url\(#([^)]+)\)/g,(_,id)=>'url(#'+prefix+id+')');
+    const image = HASSStudioSvg.namespaceIds(
+      HASSStudioSvg.inject(
+        HASSStudioSvg.apply(HASSStudioIconTemplates.pellet, {
+          tempValue: { text: actual === null ? '—' : actual.toFixed(1) + '°' },
+          statusArc: {
+            stroke: actual === null ? '#586779' : 'hsl(' + hue.toFixed(1) + ' 88% 48%)',
+            'stroke-dasharray': arc.toFixed(1) + ' 176'
+          }
+        }), { combustionSlot: combustion(mode, glow) }
+      ), prefix
+    );
     const {sx,sy}=geometry(node);
     return '<g class="ss-modern-pellet" data-combustion="'+mode+'">'+
       '<g class="ss-pellet-dimensions" transform="translate(97 46) scale('+sx+' '+sy+') translate(-97 -46)">'+
-      '<g transform="translate(12 -104) scale(.164 .265) translate(-84 -82)">'+image+'</g></g></g>';
+      '<g transform="translate(12 -84) scale(.2 .2) translate(-84 -82)">'+image+'</g></g></g>';
   };
   const styles='<style>@media(prefers-reduced-motion:reduce){.ss-modern-pellet .ss-fire,.ss-modern-pellet .ss-embers{animation:none!important}}</style>';
   return {render,styles,geometry,combustion};
@@ -1655,24 +1792,10 @@ const HASSStudioPellet = (() => {
  * No polling, external assets, HA service calls, setInterval or requestAnimationFrame.
  */
 const HASSStudioHeatPump = (()=>{
-  const SVG_TEMPLATE="\n      <defs>\n        <linearGradient id=\"bodyGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#dde5ef\"/>\n          <stop offset=\".14\" stop-color=\"#fbfdff\"/>\n          <stop offset=\".48\" stop-color=\"#c2ccda\"/>\n          <stop offset=\".78\" stop-color=\"#a7b3c4\"/>\n          <stop offset=\"1\" stop-color=\"#8f9cae\"/>\n        </linearGradient>\n        <linearGradient id=\"bodySideGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#eef4fb\"/>\n          <stop offset=\"1\" stop-color=\"#b5c1d1\"/>\n        </linearGradient>\n        <linearGradient id=\"darkPanel\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#0e1c2e\"/>\n          <stop offset=\"1\" stop-color=\"#02070f\"/>\n        </linearGradient>\n        <linearGradient id=\"blueFanGlow\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#23a8ff\"/>\n          <stop offset=\"1\" stop-color=\"#0069ff\"/>\n        </linearGradient>\n        <linearGradient id=\"bladeGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#143962\"/>\n          <stop offset=\".5\" stop-color=\"#07101b\"/>\n          <stop offset=\"1\" stop-color=\"#0f2c4d\"/>\n        </linearGradient>\n        <linearGradient id=\"footGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#1d2837\"/>\n          <stop offset=\".5\" stop-color=\"#5c6f8a\"/>\n          <stop offset=\"1\" stop-color=\"#1b2635\"/>\n        </linearGradient>\n        <radialGradient id=\"fanAura\" cx=\"50%\" cy=\"50%\" r=\"50%\">\n          <stop offset=\"0\" stop-color=\"#1b86ff\" stop-opacity=\".25\"/>\n          <stop offset=\".55\" stop-color=\"#0f6df5\" stop-opacity=\".16\"/>\n          <stop offset=\"1\" stop-color=\"#0f6df5\" stop-opacity=\"0\"/>\n        </radialGradient>\n        <filter id=\"blueGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softGlow\" x=\"-25%\" y=\"-25%\" width=\"150%\" height=\"150%\"><feGaussianBlur stdDeviation=\"5\"/></filter>\n      </defs>\n\n      <g id=\"aura\">\n        <path d=\"M126 152 H1128 Q1168 152 1168 192 V790 Q1168 828 1128 828 H126 Q86 828 86 790 V192 Q86 152 126 152 Z\" fill=\"none\" stroke=\"#2aa5ff\" stroke-opacity=\"__HP_GLOW_AURA__\" stroke-width=\"16\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"unitBody\">\n        <path d=\"M126 152 H1128 Q1168 152 1168 192 V790 Q1168 828 1128 828 H126 Q86 828 86 790 V192 Q86 152 126 152 Z\" fill=\"url(#bodyGrad)\" stroke=\"#f8fbff\" stroke-width=\"4\"/>\n        <rect x=\"86\" y=\"172\" width=\"1082\" height=\"22\" rx=\"8\" fill=\"#edf4fb\" opacity=\".82\"/>\n        <line x1=\"86\" y1=\"788\" x2=\"1168\" y2=\"788\" stroke=\"#8193ab\" stroke-opacity=\".56\" stroke-width=\"3\"/>\n        <path d=\"M814 152 V828\" stroke=\"#6a7890\" stroke-opacity=\".72\" stroke-width=\"5\"/>\n        <path d=\"M118 182 V798\" stroke=\"#6c7990\" stroke-opacity=\".40\" stroke-width=\"3\"/>\n        <path d=\"M1136 182 V798\" stroke=\"#6c7990\" stroke-opacity=\".40\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"fanSection\">\n        <circle cx=\"458\" cy=\"490\" r=\"272\" fill=\"#d7e0eb\" stroke=\"#8ea2ba\" stroke-width=\"4\"/>\n        <circle cx=\"458\" cy=\"490\" r=\"248\" fill=\"#07111b\" stroke=\"#cad9e8\" stroke-width=\"4\"/>\n        <circle id=\"fanGlowRing\" cx=\"458\" cy=\"490\" r=\"244\" fill=\"none\" stroke=\"#2191ff\" stroke-opacity=\"__HP_GLOW__\" stroke-width=\"10\" filter=\"url(#blueGlow)\"/>\n        <circle cx=\"458\" cy=\"490\" r=\"234\" fill=\"url(#fanAura)\"/>\n\n        <g id=\"bladeRotor\" class=\"__HP_ROTOR_CLASS__\" style=\"__HP_ROTOR_STYLE__\">\n          <g class=\"bladeSet\">\n            <path d=\"M458 490 C470 454 520 394 586 346 C613 362 629 380 640 400 C610 438 548 474 458 490 Z\" fill=\"url(#bladeGrad)\"/>\n            <path d=\"M472 482 C492 450 540 404 591 372\" fill=\"none\" stroke=\"#2191ff\" stroke-opacity=\".34\" stroke-width=\"8\" stroke-linecap=\"round\"/>\n          </g>\n          <g class=\"bladeSet\" transform=\"rotate(90 458 490)\">\n            <path d=\"M458 490 C470 454 520 394 586 346 C613 362 629 380 640 400 C610 438 548 474 458 490 Z\" fill=\"url(#bladeGrad)\"/>\n            <path d=\"M472 482 C492 450 540 404 591 372\" fill=\"none\" stroke=\"#2191ff\" stroke-opacity=\".34\" stroke-width=\"8\" stroke-linecap=\"round\"/>\n          </g>\n          <g class=\"bladeSet\" transform=\"rotate(180 458 490)\">\n            <path d=\"M458 490 C470 454 520 394 586 346 C613 362 629 380 640 400 C610 438 548 474 458 490 Z\" fill=\"url(#bladeGrad)\"/>\n            <path d=\"M472 482 C492 450 540 404 591 372\" fill=\"none\" stroke=\"#2191ff\" stroke-opacity=\".34\" stroke-width=\"8\" stroke-linecap=\"round\"/>\n          </g>\n          <g class=\"bladeSet\" transform=\"rotate(270 458 490)\">\n            <path d=\"M458 490 C470 454 520 394 586 346 C613 362 629 380 640 400 C610 438 548 474 458 490 Z\" fill=\"url(#bladeGrad)\"/>\n            <path d=\"M472 482 C492 450 540 404 591 372\" fill=\"none\" stroke=\"#2191ff\" stroke-opacity=\".34\" stroke-width=\"8\" stroke-linecap=\"round\"/>\n          </g>\n          <circle cx=\"458\" cy=\"490\" r=\"82\" fill=\"url(#bodyGrad)\" stroke=\"#eef6ff\" stroke-width=\"4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"58\" fill=\"url(#bodySideGrad)\" opacity=\".74\"/>\n        </g>\n\n        <g id=\"fanGrille\" stroke=\"#0c1622\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\">\n          <circle cx=\"458\" cy=\"490\" r=\"236\" stroke=\"#111e2d\" stroke-width=\"8\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"218\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"200\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"182\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"164\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"146\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"128\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"110\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <circle cx=\"458\" cy=\"490\" r=\"92\" stroke=\"#36485e\" stroke-width=\"2.4\"/>\n          <path d=\"M458 256 V724\" stroke=\"#0f1e30\" stroke-width=\"8\"/>\n          <path d=\"M224 490 H692\" stroke=\"#0f1e30\" stroke-width=\"8\"/>\n          <path d=\"M292 324 L624 656\" stroke=\"#0f1e30\" stroke-width=\"8\"/>\n          <path d=\"M624 324 L292 656\" stroke=\"#0f1e30\" stroke-width=\"8\"/>\n        </g>\n      </g>\n\n      <g id=\"displayBlock\">\n        <rect x=\"842\" y=\"286\" width=\"288\" height=\"170\" rx=\"18\" fill=\"#d8e1ec\" stroke=\"#6f8097\" stroke-width=\"3\"/>\n        <rect x=\"858\" y=\"302\" width=\"256\" height=\"138\" rx=\"14\" fill=\"url(#darkPanel)\" stroke=\"#7ed0ff\" stroke-opacity=\".46\" stroke-width=\"2.5\"/>\n        <path d=\"M866 310 H988 L956 432 H866 Z\" fill=\"#ffffff\" opacity=\".09\"/>\n        <text x=\"884\" y=\"334\" font-size=\"14\" fill=\"#7dbdff\" font-family=\"monospace\">POWER</text>\n        <text id=\"powerValueDisplay\" x=\"884\" y=\"378\" font-size=\"42\" fill=\"#eaf8ff\" font-family=\"monospace\" font-weight=\"700\">__HP_POWER__</text>\n        <text x=\"884\" y=\"404\" font-size=\"13\" fill=\"#7dbdff\" font-family=\"monospace\">FAN SPEED</text>\n        <text id=\"fanSpeedDisplay\" x=\"1090\" y=\"404\" font-size=\"13\" fill=\"#cfefff\" font-family=\"monospace\" text-anchor=\"end\">__HP_SPEED__</text>\n        <rect x=\"884\" y=\"414\" width=\"206\" height=\"12\" rx=\"6\" fill=\"#203244\"/>\n        <rect id=\"fanSpeedBar\" x=\"884\" y=\"414\" width=\"__HP_BAR__\" height=\"12\" rx=\"6\" fill=\"#36a4ff\"/>\n        <rect x=\"884\" y=\"414\" width=\"206\" height=\"12\" rx=\"6\" fill=\"none\" stroke=\"#5caeff\" stroke-opacity=\".22\" stroke-width=\"1.5\"/>\n      </g>\n\n      <g id=\"ventSlots\" fill=\"#0a1118\" stroke=\"#7d8c9f\" stroke-width=\"2.5\">\n        <rect x=\"884\" y=\"552\" width=\"228\" height=\"32\" rx=\"16\"/>\n        <rect x=\"884\" y=\"620\" width=\"228\" height=\"32\" rx=\"16\"/>\n        <rect x=\"884\" y=\"688\" width=\"228\" height=\"32\" rx=\"16\"/>\n      </g>\n      <g id=\"ventMeshes\" fill=\"#141f2c\" opacity=\".82\">\n        <rect x=\"896\" y=\"560\" width=\"204\" height=\"16\" rx=\"8\"/>\n        <rect x=\"896\" y=\"628\" width=\"204\" height=\"16\" rx=\"8\"/>\n        <rect x=\"896\" y=\"696\" width=\"204\" height=\"16\" rx=\"8\"/>\n      </g>\n\n      <g id=\"screws\">\n        <circle cx=\"126\" cy=\"806\" r=\"10\" fill=\"#39495f\" stroke=\"#dce9f9\" stroke-width=\"2.2\"/>\n        <circle cx=\"126\" cy=\"806\" r=\"4\" fill=\"#08111a\"/>\n        <circle cx=\"850\" cy=\"806\" r=\"10\" fill=\"#39495f\" stroke=\"#dce9f9\" stroke-width=\"2.2\"/>\n        <circle cx=\"850\" cy=\"806\" r=\"4\" fill=\"#08111a\"/>\n        <circle cx=\"1124\" cy=\"806\" r=\"10\" fill=\"#39495f\" stroke=\"#dce9f9\" stroke-width=\"2.2\"/>\n        <circle cx=\"1124\" cy=\"806\" r=\"4\" fill=\"#08111a\"/>\n      </g>\n\n      <g id=\"feet\">\n        <path d=\"M200 826 H320 L296 892 H176 Z\" fill=\"url(#footGrad)\" stroke=\"#bde0ff\" stroke-width=\"3\"/>\n        <path d=\"M904 826 H1024 L1000 892 H880 Z\" fill=\"url(#footGrad)\" stroke=\"#bde0ff\" stroke-width=\"3\"/>\n        <rect x=\"174\" y=\"892\" width=\"126\" height=\"18\" rx=\"6\" fill=\"#2296ff\" opacity=\".82\" filter=\"url(#softGlow)\"/>\n        <rect x=\"878\" y=\"892\" width=\"126\" height=\"18\" rx=\"6\" fill=\"#2296ff\" opacity=\".82\" filter=\"url(#softGlow)\"/>\n      </g>\n    ";
+  // Source artwork: src/icons/heat-pump-stove.svg
   const clamp=(v,lo,hi,fallback)=>Number.isFinite(Number(v))?Math.max(lo,Math.min(hi,Number(v))):fallback;
-  const finiteReading=(h,id)=>{
-    const item=id&&h?.states?.[id];
-    if(!item || typeof item.state!=='string'&&typeof item.state!=='number')return null;
-    const value=String(item.state).trim();
-    if(!value||!Number.isFinite(Number(value)))return null;
-    return {value:Number(value),unit:String(item.attributes?.unit_of_measurement||'').trim()};
-  };
-  const power=(h,id)=>{
-    const reading=finiteReading(h,id);
-    if(!reading||reading.value<0)return null;
-    let kw;
-    if(reading.unit==='W')kw=reading.value/1000;
-    else if(reading.unit==='kW')kw=reading.value;
-    else return null; // Do not silently interpret energy (kWh), current (A) or unlabeled values.
-    return Number.isFinite(kw)?kw:null;
-  };
+  const finiteReading=HASSStudioHA.reading;
+  const power=HASSStudioHA.powerKw;
   const fan=(h,id,maxRpm=1800)=>{
     const reading=finiteReading(h,id);
     if(!reading||reading.value<0)return null;
@@ -1710,18 +1833,19 @@ const HASSStudioHeatPump = (()=>{
     const sx=geometry(node).sx,sy=geometry(node).sy;
     // The prefix prevents collisions between multiple SVG instances on a single HA dashboard.
     const prefix='sshp'+String(node.id||'heatpump').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,28);
-    const image=SVG_TEMPLATE.replace('__HP_POWER__',kwLabel)
-      .replace('__HP_SPEED__',percentLabel)
-      .replace('__HP_BAR__',(206*pct/100).toFixed(1))
-      .replace('__HP_GLOW__',glow)
-      .replace('__HP_GLOW_AURA__',aura)
-      .replace('__HP_ROTOR_CLASS__',powered?'ss-hp-rotating':'ss-hp-still')
-      .replace('__HP_ROTOR_STYLE__',rotorStyle)
-      .replace(/(\bid=")([^"]+)(")/g,(_,a,id,c)=>a+prefix+id+c)
-      .replace(/url\(#([^)]+)\)/g,(_,id)=>'url(#'+prefix+id+')');
+    const image = HASSStudioSvg.namespaceIds(
+      HASSStudioSvg.apply(HASSStudioIconTemplates.heatPump, {
+        hpAuraOutline: { 'stroke-opacity': aura },
+        fanGlowRing: { 'stroke-opacity': glow },
+        bladeRotor: { class: powered ? 'ss-hp-rotating' : 'ss-hp-still', style: rotorStyle },
+        powerValueDisplay: { text: kwLabel },
+        fanSpeedDisplay: { text: percentLabel },
+        fanSpeedBar: { width: (206 * pct / 100).toFixed(1) }
+      }), prefix
+    );
     return '<g class="ss-modern-heat-pump" data-fan="'+(speed===null?'unknown':pct.toFixed(1))+'" data-power="'+(kw===null?'unknown':kw.toFixed(2))+'">'+
       '<g class="ss-hp-dimensions" transform="translate(108.32 9.96) scale('+sx+' '+sy+') translate(-108.32 -9.96)">'+
-      '<g transform="translate(8 -75) scale(.16 .16)">'+image+'</g></g></g>';
+      '<g transform="translate(45 -45) scale(.1 .1)">'+image+'</g></g></g>';
   };
   const styles='<style>'+
     '@keyframes ssHPSpin{to{transform:rotate(360deg)}}'+
@@ -1737,32 +1861,13 @@ const HASSStudioHeatPump = (()=>{
  * No background timer, HA service action or speculative gas consumption values.
  */
 const HASSStudioGasBoiler=(()=>{
-  const SVG_TEMPLATE="\n      <defs>\n        <linearGradient id=\"bodyGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#f8fbff\"/>\n          <stop offset=\".24\" stop-color=\"#eef2f7\"/>\n          <stop offset=\".58\" stop-color=\"#d7dde7\"/>\n          <stop offset=\"1\" stop-color=\"#c3cbd7\"/>\n        </linearGradient>\n        <linearGradient id=\"bodySide\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#cdd5e0\"/>\n          <stop offset=\".5\" stop-color=\"#eef4fb\"/>\n          <stop offset=\"1\" stop-color=\"#b6c0ce\"/>\n        </linearGradient>\n        <linearGradient id=\"metalGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#2b3748\"/>\n          <stop offset=\".3\" stop-color=\"#7f92ab\"/>\n          <stop offset=\".55\" stop-color=\"#e4edf8\"/>\n          <stop offset=\"1\" stop-color=\"#253344\"/>\n        </linearGradient>\n        <linearGradient id=\"darkScreen\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#07101b\"/>\n          <stop offset=\"1\" stop-color=\"#02070f\"/>\n        </linearGradient>\n        <linearGradient id=\"screenReflect\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#ffffff\" stop-opacity=\".15\"/>\n          <stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n        </linearGradient>\n        <linearGradient id=\"flameOuter\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#90f5ff\"/>\n          <stop offset=\".45\" stop-color=\"#19b8ff\"/>\n          <stop offset=\"1\" stop-color=\"#0056ff\"/>\n        </linearGradient>\n        <linearGradient id=\"flameInner\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#e9ffff\"/>\n          <stop offset=\"1\" stop-color=\"#3fd7ff\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-30%\" y=\"-30%\" width=\"160%\" height=\"160%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softGlow\" x=\"-30%\" y=\"-30%\" width=\"160%\" height=\"160%\"><feGaussianBlur stdDeviation=\"5\"/></filter>\n      </defs>\n\n      <g id=\"aura\">\n        <path d=\"M230 92 H874 Q940 92 940 158 V1138 Q940 1204 874 1204 H230 Q164 1204 164 1138 V158 Q164 92 230 92 Z\" fill=\"none\" stroke=\"#2ca7ff\" stroke-opacity=\"__GAS_AURA__\" stroke-width=\"18\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"flueTop\">\n        <rect x=\"495\" y=\"52\" width=\"136\" height=\"58\" rx=\"18\" fill=\"url(#metalGrad)\" stroke=\"#d4ebff\" stroke-width=\"4\"/>\n        <rect x=\"516\" y=\"28\" width=\"94\" height=\"36\" rx=\"12\" fill=\"url(#metalGrad)\" stroke=\"#d4ebff\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"boilerBody\">\n        <path d=\"M230 92 H874 Q940 92 940 158 V1138 Q940 1204 874 1204 H230 Q164 1204 164 1138 V158 Q164 92 230 92 Z\" fill=\"url(#bodyGrad)\" stroke=\"#f8fbff\" stroke-width=\"4\"/>\n        <path d=\"M180 154 Q180 106 228 106 H252 V1136 H228 Q180 1136 180 1088 Z\" fill=\"#f0f5fa\" opacity=\".72\"/>\n        <path d=\"M884 106 H904 Q924 106 932 122 Q940 138 940 164 V1128 Q940 1182 894 1194 L884 1196 Z\" fill=\"#bfc9d6\" opacity=\".72\"/>\n        <path d=\"M260 116 C352 108 680 104 848 120\" fill=\"none\" stroke=\"#ffffff\" stroke-opacity=\".42\" stroke-width=\"6\" stroke-linecap=\"round\"/>\n        <path d=\"M364 130 L620 858\" stroke=\"#ffffff\" stroke-opacity=\".18\" stroke-width=\"5\"/>\n        <line x1=\"164\" y1=\"988\" x2=\"940\" y2=\"988\" stroke=\"#8093ac\" stroke-opacity=\".5\" stroke-width=\"4\"/>\n      </g>\n\n      <g id=\"frontIcon\" transform=\"translate(-30 0)\" opacity=\"__GAS_FRONT_OPACITY__\">\n        <g id=\"frontIconGlow\" opacity=\"__GAS_FRONT_GLOW__\">\n          <path d=\"M584 560 C578 606 566 642 546 674 C522 712 516 746 528 776 C544 816 578 838 620 834 C668 830 706 794 708 746 C710 706 690 674 658 634 C632 602 608 576 584 560 Z\" fill=\"#1fa6ff\" filter=\"url(#blueGlow)\"/>\n        </g>\n        <path d=\"M584 560 C578 606 566 642 546 674 C522 712 516 746 528 776 C544 816 578 838 620 834 C668 830 706 794 708 746 C710 706 690 674 658 634 C632 602 608 576 584 560 Z\" fill=\"url(#flameOuter)\" stroke=\"#88f5ff\" stroke-width=\"4\"/>\n        <path d=\"M592 600 C590 632 580 658 564 684 C546 712 544 738 554 760 C566 788 590 802 620 800 C652 798 678 772 680 744 C682 716 668 692 646 664 C628 642 610 620 592 600 Z\" fill=\"url(#flameInner)\" opacity=\".96\"/>\n        <path d=\"M586 658 C574 684 572 712 578 736 C586 716 598 694 614 678 C604 668 594 662 586 658 Z\" fill=\"#ffffff\" opacity=\".72\"/>\n      </g>\n\n      <g id=\"displayFrame\">\n        <rect x=\"428\" y=\"1040\" width=\"292\" height=\"114\" rx=\"18\" fill=\"#d9e4ef\" stroke=\"#4d627b\" stroke-width=\"3\"/>\n        <rect x=\"440\" y=\"1052\" width=\"268\" height=\"90\" rx=\"14\" fill=\"url(#darkScreen)\" stroke=\"#1eb5ff\" stroke-opacity=\".6\" stroke-width=\"2.6\"/>\n        <path d=\"M448 1060 H570 L548 1140 H448 Z\" fill=\"url(#screenReflect)\"/>\n\n        <line x1=\"528\" y1=\"1062\" x2=\"528\" y2=\"1132\" stroke=\"#13344e\" stroke-opacity=\".85\" stroke-width=\"2\"/>\n        <line x1=\"620\" y1=\"1062\" x2=\"620\" y2=\"1132\" stroke=\"#13344e\" stroke-opacity=\".85\" stroke-width=\"2\"/>\n\n        <g id=\"gasBarsGroup\">\n          <rect id=\"barLevel4\" x=\"456\" y=\"1068\" width=\"58\" height=\"10\" rx=\"5\" fill=\"#ff3434\" opacity=\"__GAS_BAR_4__\"/>\n          <rect id=\"barLevel3\" x=\"464\" y=\"1086\" width=\"50\" height=\"10\" rx=\"5\" fill=\"#ff982a\" opacity=\"__GAS_BAR_3__\"/>\n          <rect id=\"barLevel2\" x=\"472\" y=\"1104\" width=\"42\" height=\"10\" rx=\"5\" fill=\"#59d44e\" opacity=\"__GAS_BAR_2__\"/>\n          <rect id=\"barLevel1\" x=\"480\" y=\"1122\" width=\"34\" height=\"10\" rx=\"5\" fill=\"#31a8ff\" opacity=\"__GAS_BAR_1__\"/>\n        </g>\n\n        <g id=\"displayFlameGroup\" transform=\"__GAS_FLAME_TRANSFORM__\" opacity=\"__GAS_FLAME_OPACITY__\">\n          <g id=\"displayFlameGlow\" opacity=\"__GAS_FLAME_GLOW__\">\n            <path d=\"M575 1122 C572 1110 572 1097 575 1082 C579 1062 587 1044 596 1028 C605 1044 613 1062 617 1082 C620 1097 620 1110 617 1122 C613 1138 605 1150 596 1154 C587 1150 579 1138 575 1122 Z\" fill=\"#18a8ff\" filter=\"url(#softGlow)\"/>\n          </g>\n          <path id=\"displayFlameOuter\" d=\"M575 1122 C572 1110 572 1097 575 1082 C579 1062 587 1044 596 1028 C605 1044 613 1062 617 1082 C620 1097 620 1110 617 1122 C613 1138 605 1150 596 1154 C587 1150 579 1138 575 1122 Z\" fill=\"url(#flameOuter)\"/>\n          <path id=\"displayFlameInner\" d=\"M581 1120 C579 1111 579 1100 581 1088 C584 1072 590 1058 596 1046 C602 1058 608 1072 611 1088 C613 1100 613 1111 611 1120 C608 1132 602 1141 596 1144 C590 1141 584 1132 581 1120 Z\" fill=\"url(#flameInner)\" opacity=\".94\"/>\n          <path d=\"M588 1099 C588 1087 591 1076 596 1066 C594 1081 594 1093 595 1104 C592 1102 590 1100 588 1099 Z\" fill=\"#ffffff\" opacity=\".62\"/>\n        </g>\n\n        <g id=\"tempGroup\">\n          <text x=\"640\" y=\"1080\" font-size=\"11\" fill=\"#76caff\" font-family=\"monospace\">TEMP</text>\n          <text id=\"tempValueDisplay\" x=\"640\" y=\"1124\" font-size=\"34\" fill=\"#eff9ff\" font-family=\"monospace\" font-weight=\"700\">__GAS_TEMP__</text>\n          <text x=\"694\" y=\"1122\" font-size=\"16\" fill=\"#7fd2ff\" font-family=\"monospace\">C</text>\n        </g>\n      </g>\n\n      <g id=\"bottomConnectors\">\n        <g transform=\"translate(296 1214)\">\n          <rect x=\"0\" y=\"0\" width=\"64\" height=\"74\" rx=\"10\" fill=\"url(#metalGrad)\" stroke=\"#d4ebff\" stroke-width=\"3\"/>\n          <rect x=\"8\" y=\"60\" width=\"48\" height=\"12\" rx=\"4\" fill=\"#1fb4ff\" opacity=\".7\" filter=\"url(#softGlow)\"/>\n        </g>\n        <g transform=\"translate(680 1214)\">\n          <rect x=\"0\" y=\"0\" width=\"64\" height=\"74\" rx=\"10\" fill=\"url(#metalGrad)\" stroke=\"#d4ebff\" stroke-width=\"3\"/>\n          <rect x=\"8\" y=\"60\" width=\"48\" height=\"12\" rx=\"4\" fill=\"#1fb4ff\" opacity=\".7\" filter=\"url(#softGlow)\"/>\n        </g>\n      </g>\n    ";
+  // Geometry is edited in src/icons/gas-boiler.svg; values are supplied by HA.
+
   const clamp=(v,min,max,def)=>typeof v!=='boolean'&&v!=null&&v!==''&&Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):def;
-  const reading=(h,e)=>{
-    const o=e&&h?.states?.[e];
-    if(!o||typeof o.state!=='string'&&typeof o.state!=='number')return null;
-    const v=String(o.state).trim();
-    if(!v||!Number.isFinite(Number(v)))return null;
-    return {value:Number(v),unit:String(o.attributes?.unit_of_measurement||'').trim()};
-  };
-  const temperature=(h,e)=>{
-    const r=reading(h,e);if(!r||!['','°C','C','°F','F'].includes(r.unit))return null;
-    const value=r.unit==='°F'||r.unit==='F'?(r.value-32)*5/9:r.value;
-    return value>=-40&&value<=150?value:null;
-  };
-  const modulation=(h,e)=>{
-    const r=reading(h,e);
-    // This percentage is burner MODULATION, not actual gas flow in m3/h.
-    // HA integrations may represent percentages as a bare number.
-    if(!r||!['','%','percent'].includes(r.unit)||r.value<0||r.value>100)return null;
-    return r.value;
-  };
-  const burnerEnabled=(h,e)=>{
-    if(!e)return true;
-    const o=h?.states?.[e];if(!o)return false;
-    return ['on','burning','heating','active','running','open'].includes(String(o.state).toLowerCase());
-  };
+  const reading=HASSStudioHA.reading;
+  const temperature=HASSStudioHA.temperature;
+  const modulation=(h,e)=>HASSStudioHA.percentage(h,e,true);
+  const burnerEnabled=(h,e)=>!e||HASSStudioHA.active(h,e,['burning']);
   const geometry=n=>{
     const sx=clamp(n?.width_scale,.5,2.4,1),sy=clamp(n?.height_scale,.5,2.4,1);
     const cx=66,cy=56;
@@ -1787,23 +1892,31 @@ const HASSStudioGasBoiler=(()=>{
     const gasGlow=(active?.06+.3*fraction+.10*intensity:0).toFixed(2);
     const aura=(active?.04+.22*intensity*visualStrength:.015).toFixed(3);
     const namespace='ssgas'+String(node.id||'gas').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,28);
-    let image=SVG_TEMPLATE
-      .replace('__GAS_TEMP__',t===null?'—':t.toFixed(1)+'°')
-      .replace('__GAS_FLAME_TRANSFORM__',flameTransform)
-      .replace('__GAS_FLAME_OPACITY__',active?'1':'0')
-      .replace('__GAS_FLAME_GLOW__',gasGlow)
-      .replace('__GAS_FRONT_GLOW__',frontGlow)
-      .replace('__GAS_FRONT_OPACITY__',frontOpacity)
-      .replace('__GAS_AURA__',aura);
-    for(let level=1;level<=4;level++)image=image.replace('__GAS_BAR_'+level+'__',
-      active&&percent>(level-1)*25?'1':'0.16');
-    image=image.replace(/(\bid=")([^"]+)(")/g,(_,prefix,id,end)=>prefix+namespace+id+end)
-      .replace(/url\(#([^)]+)\)/g,(_,id)=>'url(#'+namespace+id+')');
+    const bindings = {
+      gasAuraOutline: { 'stroke-opacity': aura },
+      frontIcon: { opacity: frontOpacity },
+      frontIconGlow: { opacity: frontGlow },
+      displayFlameGroup: {
+        transform: flameTransform,
+        opacity: active ? '1' : '0'
+      },
+      displayFlameGlow: { opacity: gasGlow },
+      tempValueDisplay: { text: t === null ? '—' : t.toFixed(1) + '°' }
+    };
+    for (let level = 1; level <= 4; level++) {
+      bindings['barLevel' + level] = {
+        opacity: active && percent > (level - 1) * 25 ? '1' : '0.16'
+      };
+    }
+    const image = HASSStudioSvg.namespaceIds(
+      HASSStudioSvg.apply(HASSStudioIconTemplates.gasBoiler, bindings),
+      namespace
+    );
     const {sx,sy}=geometry(node);
     return '<g class="ss-modern-gas-boiler" data-modulation="'+(measured===null?'unknown':measured.toFixed(1))+
       '" data-burning="'+(active?'on':'off')+'">'+
       '<g class="ss-gas-dimensions" transform="translate(66 56) scale('+sx+' '+sy+') translate(-66 -56)">'+
-      '<g transform="translate(14 -104) scale(.136 .255) translate(-164 -28)">'+image+'</g></g></g>';
+      '<g transform="translate(14 -104) scale(.2 .2) translate(-164 -28)">'+image+'</g></g></g>';
   };
   const styles='';
   return {render,styles,temperature,modulation,burnerEnabled,geometry};
@@ -1815,25 +1928,11 @@ const HASSStudioGasBoiler=(()=>{
  * optional electrical load percent. No control actions, no polling.
  */
 const HASSStudioElectricBoiler=(()=>{
-  const SVG_TEMPLATE="\n      <defs>\n        <linearGradient id=\"bodyGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#f8fbff\"/>\n          <stop offset=\".24\" stop-color=\"#eef2f7\"/>\n          <stop offset=\".58\" stop-color=\"#d7dde7\"/>\n          <stop offset=\"1\" stop-color=\"#bcc7d5\"/>\n        </linearGradient>\n        <linearGradient id=\"bodyShade\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#d5dde8\"/>\n          <stop offset=\".5\" stop-color=\"#ffffff\"/>\n          <stop offset=\"1\" stop-color=\"#bac4d4\"/>\n        </linearGradient>\n        <linearGradient id=\"panelDark\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#111b2b\"/>\n          <stop offset=\"1\" stop-color=\"#060d16\"/>\n        </linearGradient>\n        <linearGradient id=\"metalGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#283546\"/>\n          <stop offset=\".25\" stop-color=\"#7c90ab\"/>\n          <stop offset=\".55\" stop-color=\"#f0f6ff\"/>\n          <stop offset=\"1\" stop-color=\"#2a3648\"/>\n        </linearGradient>\n        <linearGradient id=\"waterDropOuter\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#7ff7ff\"/>\n          <stop offset=\".4\" stop-color=\"#19b4ff\"/>\n          <stop offset=\"1\" stop-color=\"#0a4eff\"/>\n        </linearGradient>\n        <linearGradient id=\"waterDropInner\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#eefcff\"/>\n          <stop offset=\"1\" stop-color=\"#57d8ff\"/>\n        </linearGradient>\n        <linearGradient id=\"lightningGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#fff4a9\"/>\n          <stop offset=\".4\" stop-color=\"#ffd233\"/>\n          <stop offset=\"1\" stop-color=\"#ff9f00\"/>\n        </linearGradient>\n        <linearGradient id=\"ringHeat\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#ff3b1f\"/>\n          <stop offset=\".55\" stop-color=\"#ffb000\"/>\n          <stop offset=\"1\" stop-color=\"#ffe66a\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-40%\" y=\"-40%\" width=\"180%\" height=\"180%\"><feGaussianBlur stdDeviation=\"12\"/></filter>\n        <filter id=\"softGlow\" x=\"-40%\" y=\"-40%\" width=\"180%\" height=\"180%\"><feGaussianBlur stdDeviation=\"6\"/></filter>\n        <filter id=\"warmGlow\" x=\"-40%\" y=\"-40%\" width=\"180%\" height=\"180%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n      </defs>\n\n      <g id=\"aura\">\n        <path d=\"M236 132 H848 Q926 132 926 210 V1244 Q926 1322 848 1322 H236 Q158 1322 158 1244 V210 Q158 132 236 132 Z\" fill=\"none\" stroke=\"#28a6ff\" stroke-opacity=\".25\" stroke-width=\"20\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"bodyGroup\">\n        <path id=\"bodyShape\" d=\"M236 132 H848 Q926 132 926 210 V1244 Q926 1322 848 1322 H236 Q158 1322 158 1244 V210 Q158 132 236 132 Z\" fill=\"url(#bodyGrad)\" stroke=\"#f6fbff\" stroke-width=\"4\"/>\n        <path d=\"M176 220 Q176 160 232 160 H264 V1260 H230 Q176 1260 176 1206 Z\" fill=\"#ffffff\" opacity=\".42\"/>\n        <path d=\"M842 160 H876 Q906 160 918 180 Q930 200 930 232 V1228 Q930 1284 880 1300 L842 1308 Z\" fill=\"#b7c3d4\" opacity=\".55\"/>\n        <path d=\"M250 160 C390 148 670 146 834 162\" stroke=\"#ffffff\" stroke-opacity=\".46\" stroke-width=\"7\" fill=\"none\" stroke-linecap=\"round\"/>\n        <path d=\"M368 162 L626 938\" stroke=\"#ffffff\" stroke-opacity=\".16\" stroke-width=\"6\"/>\n        <line x1=\"158\" y1=\"1018\" x2=\"926\" y2=\"1018\" stroke=\"#6e8098\" stroke-opacity=\".55\" stroke-width=\"4\"/>\n      </g>\n\n      <g id=\"lightningGroup\" transform=\"translate(-5 -30)\">\n        <path id=\"lightningGlow\" d=\"M575 468 L639 468 L607 576 L692 576 L544 786 L582 642 L488 642 Z\" fill=\"#ffcb34\" opacity=\"__ELECTRIC_GLOW__\" filter=\"url(#warmGlow)\"/>\n        <path id=\"lightningBolt\" d=\"M575 468 L639 468 L607 576 L692 576 L544 786 L582 642 L488 642 Z\" fill=\"url(#lightningGrad)\" stroke=\"#fff3b8\" stroke-width=\"3\"/>\n      </g>\n\n      <g id=\"controlPanelGroup\">\n        <rect id=\"controlPanelFrame\" x=\"372\" y=\"780\" width=\"376\" height=\"332\" rx=\"28\" fill=\"#dce6ef\" stroke=\"#51657e\" stroke-width=\"3\"/>\n        <rect id=\"controlPanelInner\" x=\"388\" y=\"796\" width=\"344\" height=\"300\" rx=\"24\" fill=\"url(#panelDark)\" stroke=\"#6fd4ff\" stroke-opacity=\".55\" stroke-width=\"2.6\"/>\n        <path d=\"M400 806 H560 L520 1090 H400 Z\" fill=\"#ffffff\" opacity=\".10\"/>\n\n        <g id=\"powerDisplayGroup\">\n          <rect id=\"powerDisplayFrame\" x=\"448\" y=\"820\" width=\"224\" height=\"58\" rx=\"12\" fill=\"#0a1321\" stroke=\"#67c9ff\" stroke-opacity=\".45\" stroke-width=\"2\"/>\n          <text x=\"470\" y=\"844\" font-size=\"12\" fill=\"#75c9ff\" font-family=\"monospace\">POWER DRAW</text>\n          <text id=\"powerKwDisplay\" x=\"470\" y=\"868\" font-size=\"30\" fill=\"#eef9ff\" font-family=\"monospace\" font-weight=\"700\">__ELECTRIC_POWER__</text>\n        </g>\n\n        <g id=\"ringGroup\">\n          <circle id=\"ringBg\" cx=\"560\" cy=\"960\" r=\"62\" fill=\"none\" stroke=\"#203043\" stroke-width=\"16\" stroke-linecap=\"round\" transform=\"rotate(-218.4 560 960)\" stroke-dasharray=\"281.35 389.56\"/>\n          <g id=\"powerRing\">__ELECTRIC_SEGMENTS__</g>\n          <g id=\"tickMarks\" opacity=\".55\">__ELECTRIC_TICKS__</g>\n          <circle id=\"knobOuter\" cx=\"560\" cy=\"960\" r=\"48\" fill=\"#09111b\" stroke=\"#8dc8ff\" stroke-opacity=\".28\" stroke-width=\"3\"/>\n          <circle id=\"knobInner\" cx=\"560\" cy=\"960\" r=\"38\" fill=\"url(#metalGrad)\" stroke=\"#243548\" stroke-width=\"3\"/>\n          <path id=\"knobIndicator\" d=\"M560 960 L560 924\" stroke=\"#eaf8ff\" stroke-width=\"6\" stroke-linecap=\"round\" transform=\"rotate(__ELECTRIC_KNOB__ 560 960)\"/>\n          <circle id=\"knobHub\" cx=\"560\" cy=\"960\" r=\"9\" fill=\"#20354d\"/>\n          <text id=\"powerPercentText\" x=\"560\" y=\"968\" font-size=\"19\" fill=\"#d6f2ff\" font-family=\"monospace\" font-weight=\"700\" text-anchor=\"middle\">__ELECTRIC_PERCENT__</text>\n        </g>\n\n        <g id=\"waterDisplayGroup\">\n          <rect id=\"waterDisplayFrame\" x=\"430\" y=\"1036\" width=\"260\" height=\"46\" rx=\"12\" fill=\"#0a1321\" stroke=\"#67c9ff\" stroke-opacity=\".45\" stroke-width=\"2\"/>\n<text x=\"526\" y=\"1048\" font-size=\"11\" fill=\"#75c9ff\" font-family=\"monospace\">WATER TEMP</text>\n          <text id=\"waterTempDisplay\" x=\"560\" y=\"1074\" font-size=\"28\" fill=\"#eef9ff\" font-family=\"monospace\" font-weight=\"700\" text-anchor=\"middle\">__ELECTRIC_TEMP__</text>\n        </g>\n      </g>\n\n      <g id=\"connectorsGroup\">\n        <g id=\"leftConnector\" transform=\"translate(340 1320)\">\n          <rect x=\"0\" y=\"0\" width=\"70\" height=\"90\" rx=\"12\" fill=\"url(#metalGrad)\" stroke=\"#d4ebff\" stroke-width=\"3\"/>\n          <rect x=\"10\" y=\"74\" width=\"50\" height=\"12\" rx=\"4\" fill=\"#1fb4ff\" opacity=\".7\" filter=\"url(#softGlow)\"/>\n        </g>\n        <g id=\"rightConnector\" transform=\"translate(686 1320)\">\n          <rect x=\"0\" y=\"0\" width=\"76\" height=\"100\" rx=\"12\" fill=\"#b88b33\" stroke=\"#ffe3a4\" stroke-width=\"3\"/>\n          <rect x=\"10\" y=\"82\" width=\"56\" height=\"12\" rx=\"4\" fill=\"#1fb4ff\" opacity=\".7\" filter=\"url(#softGlow)\"/>\n        </g>\n      </g>\n    ";
+  // Source artwork: src/icons/electric-boiler.svg
   const clamp=(v,min,max,otherwise)=>v!==''&&v!=null&&typeof v!=='boolean'&&Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):otherwise;
-  const read=(h,e)=>{
-    const item=e&&h?.states?.[e],value=item?.state;
-    if(value===undefined||value===null||typeof value==='boolean'||String(value).trim()===''||!Number.isFinite(Number(value)))return null;
-    return {value:Number(value),unit:String(item.attributes?.unit_of_measurement??'').trim()};
-  };
-  const power=(h,e)=>{
-    const r=read(h,e);if(!r||r.value<0)return null;
-    if(r.unit==='W')return r.value/1000;
-    if(r.unit==='kW')return r.value;
-    return null;
-  };
-  const temperature=(h,e)=>{
-    const r=read(h,e);
-    if(!r||!['','°C','C','°F','F'].includes(r.unit))return null;
-    const t=r.unit==='°F'||r.unit==='F'?(r.value-32)*5/9:r.value;
-    return t>=-40&&t<=150?t:null;
-  };
+  const read=HASSStudioHA.reading;
+  const power=HASSStudioHA.powerKw;
+  const temperature=HASSStudioHA.temperature;
   const load=(h,node)=>{
     if(node.electric_load_entity){
       const r=read(h,node.electric_load_entity);
@@ -1897,19 +1996,17 @@ const HASSStudioElectricBoiler=(()=>{
     const active=percent!==null&&percent>0;
     const scale=geometry(node),knob=-130+260*(percent??0)/100;
     const namespace='sselectric'+String(node.id||'electric').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,25);
-    let body=SVG_TEMPLATE
-      .replace('__ELECTRIC_POWER__',kw===null?'—':kw.toFixed(2)+' kW')
-      .replace('__ELECTRIC_PERCENT__',percent===null?'—':Math.round(percent)+'%')
-      .replace('__ELECTRIC_TEMP__',t===null?'—':t.toFixed(1)+'°C')
-      .replace('__ELECTRIC_SEGMENTS__',ringSegments(percent))
-      .replace('__ELECTRIC_TICKS__',TICKS)
-      .replace('__ELECTRIC_KNOB__',knob.toFixed(2))
-      .replace('__ELECTRIC_GLOW__',active?(.10+glow*.34).toFixed(2):'0.03');
-    // Limit the inactive gauge track to the 260-degree arc.
-    body=body.replace(/(<circle id="ringBg"[^>]*)(\/>)/,
-      (_,a,z)=>a+' stroke-dasharray="281.35 389.56"'+z);
-    body=body.replace(/(\bid=")([^"]+)(")/g,(_,a,name,c)=>a+namespace+name+c)
-      .replace(/url\(#([^)]+)\)/g,(_,name)=>'url(#'+namespace+name+')');
+    const body = HASSStudioSvg.namespaceIds(
+      HASSStudioSvg.inject(
+        HASSStudioSvg.apply(HASSStudioIconTemplates.electricBoiler, {
+          lightningGlow: { opacity: active ? (.10 + glow * .34).toFixed(2) : '0.03' },
+          powerKwDisplay: { text: kw === null ? '—' : kw.toFixed(2) + ' kW' },
+          knobIndicator: { transform: 'rotate(' + knob.toFixed(2) + ' 560 960)' },
+          powerPercentText: { text: percent === null ? '—' : Math.round(percent) + '%' },
+          waterTempDisplay: { text: t === null ? '—' : t.toFixed(1) + '°C' }
+        }), { powerRing: ringSegments(percent), tickMarks: TICKS }
+      ), namespace
+    );
     return '<g class="ss-modern-electric-boiler" data-load="'+(percent===null?'unknown':percent.toFixed(1))+
       '" data-power="'+(kw===null?'unknown':kw.toFixed(2))+'">'+
       '<g class="ss-electric-dimensions" transform="translate(70 55) scale('+scale.sx+' '+scale.sy+') translate(-70 -55)">'+
@@ -1924,7 +2021,7 @@ const HASSStudioElectricBoiler=(()=>{
  * Read-only HA temperature and combustion-state visualization.
  */
 const HASSStudioFireplace=(()=>{
-  const TEMPLATE="\n      <defs>\n        <linearGradient id=\"bodyGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#3a424d\"/>\n          <stop offset=\".18\" stop-color=\"#212933\"/>\n          <stop offset=\".48\" stop-color=\"#0b121a\"/>\n          <stop offset=\".76\" stop-color=\"#111923\"/>\n          <stop offset=\"1\" stop-color=\"#2f3742\"/>\n        </linearGradient>\n        <linearGradient id=\"bodySideGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#2b3440\"/>\n          <stop offset=\".22\" stop-color=\"#0f151d\"/>\n          <stop offset=\".5\" stop-color=\"#0a1017\"/>\n          <stop offset=\".78\" stop-color=\"#151d27\"/>\n          <stop offset=\"1\" stop-color=\"#303946\"/>\n        </linearGradient>\n        <linearGradient id=\"metalGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">\n          <stop offset=\"0\" stop-color=\"#5e6872\"/>\n          <stop offset=\".18\" stop-color=\"#9ca4ad\"/>\n          <stop offset=\".5\" stop-color=\"#2e3742\"/>\n          <stop offset=\".82\" stop-color=\"#0b1118\"/>\n          <stop offset=\"1\" stop-color=\"#3d4650\"/>\n        </linearGradient>\n        <linearGradient id=\"glassGrad\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#404654\" stop-opacity=\".76\"/>\n          <stop offset=\".3\" stop-color=\"#1a2028\" stop-opacity=\".60\"/>\n          <stop offset=\".72\" stop-color=\"#090d12\" stop-opacity=\".84\"/>\n          <stop offset=\"1\" stop-color=\"#030507\" stop-opacity=\".95\"/>\n        </linearGradient>\n        <linearGradient id=\"displayGrad\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#08131f\"/>\n          <stop offset=\"1\" stop-color=\"#02070d\"/>\n        </linearGradient>\n        <linearGradient id=\"screenShine\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n          <stop offset=\"0\" stop-color=\"#ffffff\" stop-opacity=\".10\"/>\n          <stop offset=\".6\" stop-color=\"#ffffff\" stop-opacity=\"0\"/>\n          <stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\".04\"/>\n        </linearGradient>\n        <filter id=\"blueGlow\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\"><feGaussianBlur stdDeviation=\"10\"/></filter>\n        <filter id=\"softGlow\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\"><feGaussianBlur stdDeviation=\"6\"/></filter>\n      <clipPath id=\"fireClip\"><rect x=\"400\" y=\"448\" width=\"400\" height=\"420\" rx=\"12\"/></clipPath></defs>\n\n      <g id=\"auraGroup\">\n        <path d=\"M350 162 H850 Q906 162 906 218 V1096 Q906 1154 850 1154 H350 Q294 1154 294 1096 V218 Q294 162 350 162 Z\" fill=\"none\" stroke=\"#2aa6ff\" stroke-opacity=\".28\" stroke-width=\"18\" filter=\"url(#blueGlow)\"/>\n        <ellipse cx=\"600\" cy=\"1172\" rx=\"330\" ry=\"34\" fill=\"#1f6dff\" fill-opacity=\".22\" filter=\"url(#blueGlow)\"/>\n      </g>\n\n      <g id=\"chimneyGroup\">\n        <rect x=\"512\" y=\"52\" width=\"176\" height=\"152\" rx=\"18\" fill=\"url(#bodySideGrad)\" stroke=\"#aeb7c1\" stroke-opacity=\".26\" stroke-width=\"3\"/>\n        <path d=\"M522 58 H678\" stroke=\"#45b9ff\" stroke-width=\"5\" stroke-linecap=\"round\" opacity=\".92\" filter=\"url(#softGlow)\"/>\n        <rect x=\"492\" y=\"202\" width=\"216\" height=\"26\" rx=\"10\" fill=\"#060a0f\" opacity=\".95\"/>\n      </g>\n\n      <g id=\"topCapGroup\">\n        <path d=\"M346 184 H854 L908 210 V286 H292 V210 Z\" fill=\"url(#metalGrad)\" stroke=\"#c2cad3\" stroke-opacity=\".28\" stroke-width=\"3\"/>\n        <path d=\"M354 190 H846\" stroke=\"#48b8ff\" stroke-width=\"4\" stroke-linecap=\"round\" opacity=\".92\" filter=\"url(#softGlow)\"/>\n        <path d=\"M344 282 H856\" stroke=\"#070c12\" stroke-width=\"10\" opacity=\".78\"/>\n      </g>\n\n      <g id=\"bodyGroup\">\n        <path d=\"M354 252 H846 Q900 252 900 306 V1092 Q900 1144 846 1144 H354 Q300 1144 300 1092 V306 Q300 252 354 252 Z\" fill=\"url(#bodyGrad)\" stroke=\"#c1c8d0\" stroke-opacity=\".25\" stroke-width=\"3\"/>\n        <path d=\"M326 304 V1080\" stroke=\"#3d4857\" stroke-opacity=\".26\" stroke-width=\"2\"/>\n        <path d=\"M874 304 V1080\" stroke=\"#0d131c\" stroke-opacity=\".44\" stroke-width=\"2\"/>\n        <path d=\"M318 312 C338 280 356 268 380 266 H820 C858 266 882 284 892 308\" fill=\"none\" stroke=\"#0e151d\" stroke-width=\"10\" opacity=\".64\"/>\n      </g>\n\n      <g id=\"displayGroup\">\n        <rect x=\"528\" y=\"298\" width=\"212\" height=\"68\" rx=\"12\" fill=\"#181d24\" stroke=\"#9ca6b3\" stroke-opacity=\".28\" stroke-width=\"3\"/>\n        <rect x=\"536\" y=\"306\" width=\"196\" height=\"52\" rx=\"10\" fill=\"url(#displayGrad)\" stroke=\"#44b8ff\" stroke-opacity=\".56\" stroke-width=\"2\"/>\n        <text x=\"556\" y=\"326\" font-size=\"11\" font-family=\"monospace\" fill=\"#73ddff\">STOVE TEMP</text>\n        <text id=\"stoveTempDisplay\" x=\"556\" y=\"350\" font-size=\"30\" font-family=\"monospace\" font-weight=\"700\" fill=\"#eef8ff\">__TEMP__</text>\n        <g id=\"displayBars\" transform=\"translate(666 316)\">\n          <rect x=\"0\" y=\"18\" width=\"10\" height=\"14\" rx=\"2\" fill=\"#19b8ff\" opacity=\"__BAR_1__\"/>\n          <rect x=\"18\" y=\"10\" width=\"10\" height=\"22\" rx=\"2\" fill=\"#28c0ff\" opacity=\"__BAR_1__\"/>\n          <rect x=\"36\" y=\"2\" width=\"10\" height=\"30\" rx=\"2\" fill=\"#55d4ff\" opacity=\"__BAR_1__\"/>\n          <circle cx=\"70\" cy=\"8\" r=\"3\" fill=\"#44b8ff\"/>\n          <circle cx=\"70\" cy=\"22\" r=\"3\" fill=\"#2875c9\"/>\n        </g>\n      </g>\n\n      <g id=\"windowOuterGroup\">\n        <rect x=\"346\" y=\"394\" width=\"508\" height=\"528\" rx=\"44\" fill=\"#0c1218\" stroke=\"#5d6771\" stroke-width=\"4\"/>\n        <rect x=\"376\" y=\"424\" width=\"448\" height=\"468\" rx=\"30\" fill=\"#060a0d\" stroke=\"#1a222c\" stroke-width=\"4\"/>\n        <rect x=\"400\" y=\"448\" width=\"400\" height=\"420\" rx=\"12\" fill=\"url(#glassGrad)\" stroke=\"#5d1f09\" stroke-opacity=\".20\" stroke-width=\"3\"/>\n        __COMBUSTION__\n        <rect x=\"392\" y=\"440\" width=\"416\" height=\"436\" rx=\"16\" fill=\"none\" stroke=\"#1a2129\" stroke-width=\"12\"/>\n        <path d=\"M430 464 H612 L472 860 H430 Z\" fill=\"#ffffff\" opacity=\".10\"/>\n        <path d=\"M676 458 C730 516 754 580 760 652\" fill=\"none\" stroke=\"#ffffff\" stroke-opacity=\".05\" stroke-width=\"18\" stroke-linecap=\"round\"/>\n        <path d=\"M414 460 H786\" stroke=\"#8a2d0d\" stroke-opacity=\".22\" stroke-width=\"4\" stroke-linecap=\"round\"/>\n      </g>\n\n      <g id=\"doorHandleGroup\">\n        <rect x=\"844\" y=\"596\" width=\"14\" height=\"114\" rx=\"7\" fill=\"#090d12\" opacity=\".88\"/>\n        <rect x=\"858\" y=\"584\" width=\"32\" height=\"174\" rx=\"10\" fill=\"url(#metalGrad)\" stroke=\"#d4dce6\" stroke-opacity=\".26\" stroke-width=\"2\"/>\n      </g>\n\n      <g id=\"baseGroup\">\n        <path d=\"M316 1102 H884 L902 1120 V1224 Q902 1238 888 1238 H312 Q298 1238 298 1224 V1120 Z\" fill=\"url(#bodySideGrad)\" stroke=\"#aab3be\" stroke-opacity=\".22\" stroke-width=\"3\"/>\n        <path d=\"M360 1238 H474 L456 1198 H378 Z\" fill=\"#02060a\"/>\n        <path d=\"M726 1238 H840 L824 1198 H744 Z\" fill=\"#02060a\"/>\n      </g>\n    ";
+  // Editable artwork: src/icons/fireplace.svg
   const clamp=(v,min,max,d)=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):d;
   const geometry=n=>{
     const sx=clamp(n?.width_scale,.5,2.4,1),sy=clamp(n?.height_scale,.5,2.4,1);
@@ -1955,101 +2052,185 @@ const HASSStudioFireplace=(()=>{
     const bars=temp===null?0:Math.min(3,Math.max(0,Math.ceil((temp-20)/30)));
     const glowOpacity=(.10+.35*glow).toFixed(2);
     const id='ssfireplace'+String(node.id||'').replace(/[^a-z0-9_-]/gi,'').slice(0,24);
-    let svg=TEMPLATE.replace('__TEMP__',temp===null?'—':temp.toFixed(1)+'°C')
-      .replace('__COMBUSTION__',combustion(mode,glow))
-      .replace(/__BAR_(\\d+)__/g,(_,i)=>Number(i)<=bars?'1':'.22')
-      .replace(/(\bid=")([^"]+)(")/g,(_,a,k,z)=>a+id+k+z)
-      .replace(/url\(#([^)]+)\)/g,(_,k)=>'url(#'+id+k+')');
+    const barBindings = {};
+    for (let level = 1; level <= 3; level++) {
+      barBindings['displayBar' + level] = { opacity: level <= bars ? '1' : '.22' };
+    }
+    const svg = HASSStudioSvg.namespaceIds(
+      HASSStudioSvg.inject(
+        HASSStudioSvg.apply(HASSStudioIconTemplates.fireplace, {
+          stoveTempDisplay: { text: temp === null ? '—' : temp.toFixed(1) + '°C' },
+          ...barBindings
+        }), { combustionSlot: combustion(mode, glow) }
+      ), id
+    );
     const bounds=geometry(node);
     return '<g class="ss-modern-fireplace" data-combustion="'+mode+'">'+
-      '<g class="ss-fireplace-dimensions" transform="translate(80 57) scale('+bounds.sx+' '+bounds.sy+') translate(-80 -57)">'+
-      '<g transform="translate(0 -115) scale(.133 .262)">'+svg+'</g></g></g>';
+      '<g class="ss-fireplace-dimensions" transform="translate(80 57) scale('+bounds.sx+' '+bounds.sy+') translate(-120 -30)">'+
+      '<g transform="translate(0 -115) scale(.2 .2)">'+svg+'</g></g></g>';
   };
   const styles='<style>@media(prefers-reduced-motion:reduce){.ss-modern-fireplace .ss-fire,.ss-modern-fireplace .ss-embers{animation:none!important}}</style>';
   return {render,styles,combustion,geometry};
 })();
 
 
-/* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
- * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
- * No external dependencies or service calls in the designer.
+/* Home Assistant Systems Studio — central device registry.
+ * Saved configurations keep the existing node.type and node.variant fields.
+ * Device families and catalog categories are metadata, not a migration.
  */
-(() => {
+const HASSStudioDeviceRegistry = (() => {
+  const categories = Object.freeze({
+    heat_sources: {pl:'Źródła ciepła',en:'Heat sources'},
+    tanks: {pl:'Zbiorniki',en:'Tanks'},
+    solar: {pl:'Solary',en:'Solar thermal'},
+    hydraulics: {pl:'Pompy i zawory',en:'Pumps and valves'},
+    measurements: {pl:'Czujniki',en:'Sensors'},
+    connections: {pl:'Rury i połączenia',en:'Pipes and connections'}
+  });
+  // Common logical identity, independent from the selected drawing.
+  const families = Object.freeze({
+    solid_fuel_boiler:{category:'heat_sources',pl:'Kocioł na drewno / węgiel',en:'Wood / coal boiler',fuels:['wood','coal'],entities:['entity','burner_entity'],animations:['combustion']},
+    pellet_boiler:{category:'heat_sources',pl:'Kocioł na pellet',en:'Pellet boiler',entities:['entity','burner_entity'],animations:['combustion']},
+    gas_boiler:{category:'heat_sources',pl:'Kocioł gazowy',en:'Gas boiler',entities:['entity','burner_entity','gas_draw_entity'],animations:['burner']},
+    electric_boiler:{category:'heat_sources',pl:'Kocioł elektryczny',en:'Electric boiler',entities:['entity','electric_power_entity','electric_load_entity'],animations:['heating']},
+    oil_boiler:{category:'heat_sources',pl:'Kocioł olejowy',en:'Oil boiler',entities:['entity','burner_entity'],animations:['burner']},
+    heat_pump:{category:'heat_sources',pl:'Pompa ciepła',en:'Heat pump',entities:['entity','hp_power_entity','hp_fan_entity'],animations:['fan']},
+    fireplace:{category:'heat_sources',pl:'Kominek',en:'Fireplace',entities:['entity','burner_entity'],animations:['combustion']},
+    tank:{category:'tanks',pl:'Zbiornik',en:'Tank',entities:['entity'],animations:['coil_flow','heater_glow'],parts:['sensor','heater','coil','baffle_horizontal','baffle_vertical','inner_tank']},
+    solar_collector:{category:'solar',pl:'Kolektor solarny',en:'Solar collector',entities:['entity','pump_entity','tank_entity'],animations:['solar_activity']},
+    pump:{category:'hydraulics',pl:'Pompa',en:'Pump',entities:['entity'],animations:['running']},
+    valve:{category:'hydraulics',pl:'Zawór',en:'Valve',entities:['entity'],animations:[]},
+    sensor:{category:'measurements',pl:'Czujnik',en:'Sensor',entities:['entity'],animations:[]},
+    pipe:{category:'connections',pl:'Rura',en:'Pipe',entities:['flow_entity'],animations:['flow']}
+  });
+
+  // Do not change order, names or ids: these are stored in existing HA layouts.
+  // Each entry: [legacy variant, logical family, Polish, English, renderer, SVG].
+  const legacy = Object.freeze({
+    boiler:{icon:'♨',variants:[
+      ['wood','solid_fuel_boiler','Drewno','Wood','warmwasser'],
+      ['solid_fuel','solid_fuel_boiler','Węgiel / drewno (nowoczesny)','Modern solid-fuel boiler','solidFuel','solid-fuel-stove.svg'],
+      ['pellet','pellet_boiler','Pellet','Pellet','warmwasser'],
+      ['pellet_modern','pellet_boiler','Pellet (nowoczesny)','Modern pellet boiler','pellet','pellet-stove.svg'],
+      ['heatpump_modern','heat_pump','Pompa ciepła (nowoczesna)','Modern heat pump','heatPump','heat-pump-stove.svg'],
+      ['gas','gas_boiler','Gaz','Gas','warmwasser'],
+      ['gas_modern','gas_boiler','Gazowy (nowoczesny)','Modern gas boiler','gasBoiler','gas-boiler.svg'],
+      ['oil','oil_boiler','Olej','Oil','warmwasser'],
+      ['electric','electric_boiler','Elektryczny','Electric','warmwasser'],
+      ['electric_modern','electric_boiler','Elektryczny (nowoczesny)','Modern electric boiler','electricBoiler','electric-boiler.svg'],
+      ['heatpump','heat_pump','Pompa ciepła','Heat pump','warmwasser'],
+      ['fireplace_modern','fireplace','Kominek (nowoczesny)','Modern fireplace','fireplace','fireplace.svg']
+    ]},
+    tank:{icon:'▤',variants:[
+      ['modular','tank','Modułowy','Modular','modularTank'],
+      ['stratified','tank','Warstwowy','Stratified','warmwasser'],
+      ['buffer','tank','Bufor','Buffer','warmwasser'],
+      ['coil','tank','Jedna wężownica','Single coil','warmwasser'],
+      ['dual_coil','tank','Dwie wężownice','Dual coil','warmwasser'],
+      ['hygiene','tank','Higieniczny','Hygienic','warmwasser'],
+      ['combi','tank','Kombi','Combi','warmwasser']
+    ]},
+    solar:{icon:'☼',variants:[
+      ['flat','solar_collector','Płaskie','Flat plate','warmwasser'],
+      ['tube','solar_collector','Próżniowe','Vacuum tubes','warmwasser']
+    ]},
+    pump:{icon:'◉',variants:[['circulation','pump','Obiegowa','Circulation','warmwasser'],['inline','pump','Przelotowa','Inline','warmwasser']]},
+    valve:{icon:'◇',variants:[['two_way','valve','Dwudrogowy','Two-way','warmwasser'],['three_way','valve','Trójdrogowy','Three-way','warmwasser']]},
+    sensor:{icon:'♧',variants:[['temperature','sensor','Temperatura','Temperature','warmwasser'],['pressure','sensor','Ciśnienie','Pressure','warmwasser']]},
+    pipe:{icon:'〰',variants:[]}
+  });
+  const types = Object.freeze(Object.keys(legacy));
+  const variantMap = new Map();
+  for (const type of types) {
+    const entries = legacy[type].variants.map(([id,family,pl,en,renderer,svg]) =>
+      Object.freeze({id,family,label:Object.freeze({pl,en}),renderer,svg:svg||null}));
+    for (const variant of entries) {
+      if (!families[variant.family] || variantMap.has(type+':'+variant.id))
+        throw new Error('Invalid device variant: '+type+':'+variant.id);
+      variantMap.set(type+':'+variant.id,variant);
+    }
+  }
+  const listTypes = () => types;
+  const variantsFor = type => legacy[type]
+    ? legacy[type].variants.map(entry => variantMap.get(type+':'+entry[0])) : [];
+  const isNodeType = type => variantsFor(type).length>0;
+  const isVariant = (type,id) => variantMap.has(type+':'+id);
+  const defaultVariant = type => variantsFor(type)[0]?.id || null;
+  const normalizeVariant = (type,id) => isVariant(type,id)?id:defaultVariant(type);
+  const iconFor = type => legacy[type]?.icon || '';
+  const variantOptions = (type,lang='pl') => variantsFor(type)
+    .map(item => [item.id,item.label[lang==='en'?'en':'pl']]);
+  const resolve = (type,variant) => {
+    const graphic=variantMap.get(type+':'+variant);
+    return graphic ? Object.freeze({...graphic,type,category:families[graphic.family].category,device:families[graphic.family]}):null;
+  };
+  // Curated choices for the left library. Each entry creates a supported
+  // legacy node/pipe variant; no new device data format is introduced.
+  // A family appears once when its alternatives are only graphic styles.
+  const libraryPresets = Object.freeze([
+    ['boiler','solid_fuel','solid_fuels'],
+    ['boiler','pellet_modern','solid_fuels'],
+    ['boiler','gas_modern'],
+    ['boiler','electric_modern'],
+    ['boiler','oil'],
+    ['boiler','heatpump_modern'],
+    ['boiler','fireplace_modern'],
+    ['tank','modular'],
+    ['solar','flat'],
+    ['pump','circulation'],
+    ['pump','inline'],
+    ['valve','two_way'],
+    ['valve','three_way'],
+    ['sensor','temperature'],
+    ['sensor','pressure'],
+    ['pipe',null]
+  ]);
+  const subgroups = Object.freeze({
+    solid_fuels: Object.freeze({pl:'Kotły na paliwo stałe',en:'Solid-fuel boilers'})
+  });
+  const presetNames = Object.freeze({
+    'pump:circulation':{pl:'Pompa obiegowa',en:'Circulation pump'},
+    'pump:inline':{pl:'Pompa przelotowa',en:'Inline pump'},
+    'valve:two_way':{pl:'Zawór dwudrogowy',en:'Two-way valve'},
+    'valve:three_way':{pl:'Zawór trójdrogowy',en:'Three-way valve'},
+    'sensor:temperature':{pl:'Czujnik temperatury',en:'Temperature sensor'},
+    'sensor:pressure':{pl:'Czujnik ciśnienia',en:'Pressure sensor'}
+  });
+  const libraryEntries = (lang='pl') => libraryPresets.map(([type,variant,subgroup]) => {
+    const choice=variant===null
+      ? {type,family:'pipe',category:'connections',device:families.pipe}
+      : resolve(type,variant);
+    if(!choice) throw new Error('Missing library device: '+type+':'+variant);
+    const language=lang==='en'?'en':'pl';
+    const label=presetNames[type+':'+variant]?.[language] || families[choice.family]?.[language]
+      || choice.device[language];
+    return Object.freeze({
+      type,variant,category:choice.category,family:choice.family||'pipe',
+      subgroup:subgroup||null,label,icon:iconFor(type)
+    });
+  });
+  const variantOptionsForNode = (node, lang='pl') => {
+    const device=resolve(node?.type,node?.variant);
+    return device
+      ? variantsFor(node.type).filter(entry=>entry.family===device.family)
+          .map(entry=>[entry.id,entry.label[lang==='en'?'en':'pl']])
+      : variantOptions(node?.type,lang);
+  };
+  const catalog = (lang='pl') => Object.keys(families).map(id => Object.freeze({
+    id,category:families[id].category,label:families[id][lang==='en'?'en':'pl'],
+    variants:types.flatMap(type => variantsFor(type).filter(item=>item.family===id).map(item=>item.id))
+  }));
+  return Object.freeze({categories,families,listTypes,variantsFor,isNodeType,
+    isVariant,defaultVariant,normalizeVariant,iconFor,variantOptions,variantOptionsForNode,
+    resolve,catalog,subgroups,libraryEntries});
+})();
+
+
+/* Schema normalization for existing custom layouts. Keeps saved IDs and fields. */
+const HASSStudioLayout = (() => {
   const W=1200,H=720,MAX_NODES=60,MAX_PIPES=80;
-  const types=['boiler','tank','solar','pump','valve','sensor','pipe'];
-  const graphics={
-    boiler:['wood','solid_fuel','pellet','pellet_modern','heatpump_modern','gas','gas_modern','oil','electric','electric_modern','heatpump','fireplace_modern'],
-    tank:['modular','stratified','buffer','coil','dual_coil','hygiene','combi'],
-    solar:['flat','tube'],pump:['circulation','inline'],
-    valve:['two_way','three_way'],sensor:['temperature','pressure']
-  };
-  const variants={
-    pl:{modular:'Modułowy',solid_fuel:'Węgiel / drewno (nowoczesny)',pellet_modern:'Pellet (nowoczesny)',wood:'Drewno',pellet:'Pellet',gas:'Gaz',gas_modern:'Gazowy (nowoczesny)',oil:'Olej',electric:'Elektryczny',electric_modern:'Elektryczny (nowoczesny)',fireplace_modern:'Kominek (nowoczesny)',heatpump:'Pompa ciepła',heatpump_modern:'Pompa ciepła (nowoczesna)',
-      stratified:'Warstwowy',buffer:'Bufor',coil:'Jedna wężownica',dual_coil:'Dwie wężownice',
-      hygiene:'Higieniczny',combi:'Kombi',flat:'Płaskie',tube:'Próżniowe',
-      circulation:'Obiegowa',inline:'Przelotowa',two_way:'Dwudrogowy',three_way:'Trójdrogowy',
-      temperature:'Temperatura',pressure:'Ciśnienie'},
-    en:{modular:'Modular',solid_fuel:'Modern solid-fuel boiler',pellet_modern:'Modern pellet boiler',wood:'Wood',pellet:'Pellet',gas:'Gas',gas_modern:'Modern gas boiler',oil:'Oil',electric:'Electric',electric_modern:'Modern electric boiler',fireplace_modern:'Modern fireplace',heatpump:'Heat pump',heatpump_modern:'Modern heat pump',
-      stratified:'Stratified',buffer:'Buffer',coil:'Single coil',dual_coil:'Dual coil',
-      hygiene:'Hygienic',combi:'Combi',flat:'Flat plate',tube:'Vacuum tubes',
-      circulation:'Circulation',inline:'Inline',two_way:'Two-way',three_way:'Three-way',
-      temperature:'Temperature',pressure:'Pressure'}
-  };
-  const words={
-    pl:{sensorScale:'Skala odczytu',accessoryLabel:'Podpis przy ikonie',boilerState:'Praca palnika / grzania',burnerEntity:'Encja palnika (opcjonalna; inaczej temperatura)',burnerOnTemp:'Kocioł aktywny powyżej (°C)',burnerOffTemp:'Kocioł nieaktywny poniżej (°C)',solarTank:'Temperatura zbiornika (do porównania)',solarOnDelta:'Kolektor aktywny – różnica (°C)',solarOffDelta:'Kolektor nieaktywny – różnica (°C)',solarSensors:'Czujniki kolektora',solarPump:'Encja pompy solarnej',pipeStart:'Króciec na początku',pipeEnd:'Króciec na końcu',yes:'Tak',no:'Nie',compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
-      flowOn:'Włączona (podgląd)',flowAuto:'Według encji',flowDirection:'Kierunek przepływu',
-      flowSpeed:'Czas animacji (s)',flowEntity:'Encja sterująca przepływem',
-      forward:'Początek → koniec',reverse:'Koniec → początek',mode:'Tryb układu',auto:'Automatyczny (Warmwasser)',custom:'Własny układ',language:'Język',
-      automatic:'Automatyczny',open:'Otwórz projektant',close:'Zamknij',add:'Dodaj',remove:'Usuń',
-      library:'BIBLIOTEKA SVG',properties:'WŁAŚCIWOŚCI',canvas:'SCHEMAT',choose:'Zaznacz element na schemacie',
-      name:'Nazwa',graphic:'Rodzaj / grafika',scale:'Skala',position:'Pozycja',entity:'Encja HA',
-      entities:'Dodatkowe encje',sensors:'Elementy wewnętrzne',height:'Wysokość od dołu (%)',
-      side:'Strona',left:'Lewa',right:'Prawa',inside:'Wewnątrz',sensor:'Czujnik',
-      heater:'Grzałka',coil:'Wężownica',accessories:'Elementy na rurze',
-      pump:'Pompa',valve:'Zawór',pipe:'Rura',pipeColor:'Rodzaj rury',pipeWidth:'Grubość',
-      hot:'Ciepła woda',cold:'Zimna woda',solarFlow:'Obieg solarny',returnFlow:'Powrót',
-      newBend:'Dodaj punkt załamania',removeBend:'Usuń ostatni punkt',
-      pipeHelp:'Przeciągaj punkty rury. Dwuklik na rurze dodaje nowe załamanie.',
-      accessoryPos:'Położenie na rurze (%)',editHelp:'Wybierz element po lewej i ustaw jego właściwości po prawej.',
-      boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',pipes:'Rury',
-      link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
-      zoom:'Powiększenie',noValues:'Bez pomiaru',editor:'Projektant instalacji'},
-    en:{sensorScale:'Reading scale',accessoryLabel:'Icon caption',boilerState:'Burner / heating state',burnerEntity:'Burner entity (optional; otherwise temperature)',burnerOnTemp:'Boiler on above (°C)',burnerOffTemp:'Boiler off below (°C)',solarTank:'Tank temperature (reference)',solarOnDelta:'Collector active – delta (°C)',solarOffDelta:'Collector inactive – delta (°C)',solarSensors:'Collector sensors',solarPump:'Solar pump entity',pipeStart:'Start connector',pipeEnd:'End connector',yes:'Yes',no:'No',compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
-      flowOn:'On (preview)',flowAuto:'Controlled by entity',flowDirection:'Flow direction',
-      flowSpeed:'Animation duration (s)',flowEntity:'Flow control entity',
-      forward:'Start → end',reverse:'End → start',mode:'Layout mode',auto:'Automatic (Warmwasser)',custom:'Custom layout',language:'Language',
-      automatic:'Automatic',open:'Open designer',close:'Close',add:'Add',remove:'Delete',
-      library:'SVG LIBRARY',properties:'PROPERTIES',canvas:'DIAGRAM',choose:'Select an element in the diagram',
-      name:'Name',graphic:'Type / graphic',scale:'Scale',position:'Position',entity:'HA entity',
-      entities:'Additional entities',sensors:'Internal components',height:'Height from bottom (%)',
-      side:'Side',left:'Left',right:'Right',inside:'Inside',sensor:'Sensor',
-      heater:'Heating element',coil:'Coil',accessories:'On-pipe equipment',
-      pump:'Pump',valve:'Valve',pipe:'Pipe',pipeColor:'Pipe type',pipeWidth:'Width',
-      hot:'Hot water',cold:'Cold water',solarFlow:'Solar circuit',returnFlow:'Return',
-      newBend:'Add bend point',removeBend:'Remove last point',
-      pipeHelp:'Drag pipe handles. Double-click the pipe to add a bend.',
-      accessoryPos:'Position on pipe (%)',editHelp:'Pick a component on the left; configure it on the right.',
-      boiler:'Boilers',tank:'Tanks',solar:'Solar',pumps:'Pumps',valves:'Valves',sensorsMenu:'Sensors',pipes:'Pipes',
-      link:'Assign entity',addEntity:'Add entity',label:'Description',default:'Default',
-      zoom:'Zoom',noValues:'No data',editor:'System diagram designer'}
-  };
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankGlow:'Efekt cieplny grzałek (%)',heaterMode:'Stan grzałki',heaterPower:'Intensywność (%)',heaterWatts:'Encja mocy (W/kW)',partX:'Pozycja pozioma (%)',partLength:'Wysokość / długość (%)',partWidth:'Szerokość (%)',partTurns:'Liczba zwojów',permeability:'Przepuszczalność 0–1',partContainer:'Strefa czujnika',partFlowMode:'Przepływ wężownicy',baffle_horizontal:'Przegroda pozioma',baffle_vertical:'Przegroda pionowa',inner_tank:'Zbiornik wewnętrzny'}:{tankGlow:'Heater visual glow (%)',heaterMode:'Heater status',heaterPower:'Glow intensity (%)',heaterWatts:'Power entity (W/kW)',partX:'Horizontal position (%)',partLength:'Height / length (%)',partWidth:'Width (%)',partTurns:'Coil turns',permeability:'Permeability 0–1',partContainer:'Sensor compartment',partFlowMode:'Coil flow',baffle_horizontal:'Horizontal baffle',baffle_vertical:'Vertical baffle',inner_tank:'Inner tank'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankScaleMode:'Skalowanie zbiornika',tankScaleProportional:'Proporcjonalne',tankScaleFree:'Osobna szerokość i wysokość',tankWidthScale:'Szerokość zbiornika',tankHeightScale:'Wysokość zbiornika'}:{tankScaleMode:'Tank scaling',tankScaleProportional:'Proportional',tankScaleFree:'Independent width and height',tankWidthScale:'Tank width',tankHeightScale:'Tank height'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{partLayer:'Warstwa',partLayerUp:'Przenieś wyżej',partLayerDown:'Przenieś niżej'}:{partLayer:'Layer',partLayerUp:'Move up',partLayerDown:'Move down'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidModel:'Piec węgiel / drewno',solidFuel:'Rodzaj opału',solidWood:'Drewno',solidCoal:'Węgiel',solidState:'Stan paleniska (wizualizacja)',solidAuto:'Automatycznie wg encji / temperatury',solidBurning:'Palenie',solidEmbers:'Żarzenie',solidOff:'Wygaszenie',solidGlow:'Intensywność efektu (%)',solidHelp:'Animacja jest wizualna, bez sterowania urządzeniem. Encja stanu spalania ma pierwszeństwo nad progami temperatury.'}:{solidModel:'Wood / coal boiler',solidFuel:'Fuel type',solidWood:'Wood',solidCoal:'Coal',solidState:'Combustion state (visual only)',solidAuto:'Auto from entity / temperature',solidBurning:'Burning',solidEmbers:'Embers',solidOff:'Extinguished',solidGlow:'Effect intensity (%)',solidHelp:'Animation only, no device control. Combustion entity takes precedence over temperature thresholds.'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidWidth:'Szerokość pieca',solidHeight:'Wysokość pieca'}:{solidWidth:'Boiler width',solidHeight:'Boiler height'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{pelletModel:'Piec na pellet (nowoczesny)'}:{pelletModel:'Modern pellet boiler'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{hpModel:'Pompa ciepła (nowoczesna)',hpPower:'Encja poboru mocy (W/kW)',hpFan:'Encja prędkości wentylatora (%/RPM)',hpMaxRpm:'Maksymalne obroty (RPM)',hpGlow:'Podświetlenie (%)'}:{hpModel:'Modern heat pump',hpPower:'Electrical power entity (W/kW)',hpFan:'Fan speed entity (%/RPM)',hpMaxRpm:'Max fan speed (RPM)',hpGlow:'Glow (%)'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{gasModel:'Piec gazowy (nowoczesny)',gasDraw:'Encja modulacji palnika (%)',gasGlow:'Intensywność podświetlenia (%)',gasHelp:'Modulacja to procent mocy palnika, nie zmierzony przepływ gazu. Brak danych wyłącza płomień.'}:{gasModel:'Modern gas boiler',gasDraw:'Burner modulation entity (%)',gasGlow:'Lighting intensity (%)',gasHelp:'Modulation is burner load, not measured gas flow. Missing data disables the flame.'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{electricModel:'Piec elektryczny (nowoczesny)',electricPower:'Encja poboru mocy (W/kW)',electricLoad:'Encja obciążenia (%) — opcjonalna',electricMax:'Moc znamionowa pieca (kW)',electricGlow:'Podświetlenie (%)',electricHelp:'Bez osobnej encji % obciążenie wynika z poboru mocy / mocy znamionowej. Brak odczytu nie jest zastępowany wartością demo.'}:{electricModel:'Modern electric boiler',electricPower:'Electrical power entity (W/kW)',electricLoad:'Load entity (%) — optional',electricMax:'Rated boiler power (kW)',electricGlow:'Lighting (%)',electricHelp:'If no % entity is set, load derives from measured power divided by rated power. Missing data never uses demo values.'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{fireplaceModel:'Kominek (nowoczesny)',fireplaceHelp:'Ogień i żar są wizualizacją, automatyka zależy od encji lub temperatury.'}:{fireplaceModel:'Modern fireplace',fireplaceHelp:'Fire and embers are visual only; auto stage uses HA status or temperature.'});
+  const registry=HASSStudioDeviceRegistry;
   const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
-  const icons={boiler:'♨',tank:'▤',solar:'☼',pump:'◉',valve:'◇',sensor:'♧',pipe:'〰'};
-  const pickLang=(config,hass)=>{
-    const setting=config?.studio_language;
-    return setting==='pl'||setting==='en'?setting:
-      (String(hass?.language||'').toLowerCase().startsWith('pl')?'pl':'en');
-  };
   const clamp=(n,lo,hi,fallback)=>Number.isFinite(Number(n))?Math.max(lo,Math.min(hi,Number(n))):fallback;
   const validEntity=(value)=>typeof value==='string' && isEnt(value);
   const freshId=(prefix)=>prefix+Math.random().toString(36).slice(2,10);
@@ -2081,7 +2262,7 @@ const HASSStudioFireplace=(()=>{
   });
   const normalized=(config)=>{
     const source=config?.studio_layout||{};
-    const nodes=(Array.isArray(source.nodes)?source.nodes:[]).filter(v=>v && graphics[v.type] &&
+    const nodes=(Array.isArray(source.nodes)?source.nodes:[]).filter(v=>v && registry.isNodeType(v.type) &&
       typeof v.id==='string').slice(0,MAX_NODES).map(v=>({
       id:v.id.slice(0,32),type:v.type,
       x:clamp(v.x,0,W-120,40),y:clamp(v.y,0,H-140,40),
@@ -2107,7 +2288,7 @@ const HASSStudioFireplace=(()=>{
       solar_on_delta:clamp(v.solar_on_delta,1,40,6),
       solar_off_delta:clamp(v.solar_off_delta,0,39,3),
       visual:v.visual==='studio'?'studio':'warmwasser',
-      variant:graphics[v.type].includes(v.variant)?v.variant:graphics[v.type][0],
+      variant:registry.normalizeVariant(v.type,v.variant),
       label:String(v.label||'').slice(0,64),
       entity:validEntity(v.entity)?v.entity:'',
       entities:(Array.isArray(v.entities)?v.entities:[]).slice(0,20).map(e=>({
@@ -2145,6 +2326,17 @@ const HASSStudioFireplace=(()=>{
     }
     return {nodes,pipes};
   };
+
+  return Object.freeze({normalized,normalizeItem,normalizeAccessory});
+})();
+
+
+/* Pure SVG diagram renderer for the Custom designer.
+ * Input is normalized layout and read-only HA states; pointer interaction
+ * remains in the editor controller. Existing SVG paths/styles are unchanged.
+ */
+const HASSStudioCanvas = (() => {
+  const create = ({W,H,colors,normalized,pickLang,words,clamp,validEntity,esc}) => {
   const formatReading=(v)=>Number.isFinite(Number(v))&&String(v).trim()!==''?Number(v).toFixed(1):String(v);
   const valueOf=(h,entity)=>{
     const state=validEntity(entity)?h?.states?.[entity]:null;
@@ -2224,7 +2416,7 @@ const HASSStudioFireplace=(()=>{
     const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(node.variant)))
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
     const pipes=data.pipes.map(pipe=>{
-      const d=pipePath(pipe.points),enabled=pipe.flow_mode==='on'||(pipe.flow_mode==='auto'&&HASSStudioGraphics.on(hass,pipe.flow_entity));
+      const d=pipePath(pipe.points),enabled=HASSStudioAnimation.flowActive(pipe.flow_mode,hass,pipe.flow_entity);
       const endcap=(first)=>{
         if(first&&pipe.cap_start===false||!first&&pipe.cap_end===false)return '';
         const pts=pipe.points,at=first?pts[0]:pts[pts.length-1],near=first?pts[1]:pts[pts.length-2];
@@ -2277,134 +2469,22 @@ const HASSStudioFireplace=(()=>{
       '<rect width="'+W+'" height="'+H+'" rx="10" fill="var(--secondary-background-color,#17222d)"/>'+
       '<g class="ss-devices">'+nodes+'</g><g class="ss-pipe-layer" stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-pipe-handles">'+handles+'</g></svg>';
   };
-  const nativeRender=WarmwasserSchemaCard.prototype._render;
-  WarmwasserSchemaCard.prototype._render=function(){
-    if(this._cfg?.layout_mode!=='custom')return nativeRender.call(this);
-    return '<div class="kopf"><div class="l"><div class="t1">'+esc(this._cfg.titel||'Home Assistant Systems Studio')+
-      '</div></div></div>'+canvasSvg(this._cfg,this._hass);
+
+    return Object.freeze({canvasSvg,pipePath,onPipe,variantShape});
   };
-  // In automatic mode, retain the complete original Warmwasser settings.
-  const nativeSchema=WarmwasserSchemaCardEditor.prototype._mainSchema;
-  WarmwasserSchemaCardEditor.prototype._mainSchema=function(){
-    const L=words[pickLang(this._config,this._hass)];
-    return [F_('layout_mode',sel.opt([['automatic',L.auto],['custom',L.custom]])),...nativeSchema.call(this)];
-  };
-  const nativeSet=WarmwasserSchemaCardEditor.prototype.setConfig;
-  WarmwasserSchemaCardEditor.prototype.setConfig=function(config){
-    nativeSet.call(this,config);
-    const mode=this._config?.layout_mode||'automatic';
-    if(this._studioMode && mode!==this._studioMode)this._build();
-  };
-  const nativeFire=WarmwasserSchemaCardEditor.prototype._fire;
-  WarmwasserSchemaCardEditor.prototype._fire=function(){
-    const changed=this._studioMode && this._studioMode!==(this._config?.layout_mode||'automatic');
-    nativeFire.call(this);
-    if(changed)this._build();
-  };
-  const nativeBuild=WarmwasserSchemaCardEditor.prototype._build;
-  WarmwasserSchemaCardEditor.prototype._build=function(){
-    this._studioMode=this._config?.layout_mode||'automatic';
-    if(this._studioMode!=='custom')return nativeBuild.call(this);
-    this._forms=[]; // Keeps inherited setConfig from recreating the designer on every edit.
-    this._renderStudioEditor();
-  };
-  WarmwasserSchemaCardEditor.prototype._renderStudioEditor=function(){
-    if(!this.shadowRoot)this.attachShadow({mode:'open'});
-    const root=this.shadowRoot;
-    const L=words[pickLang(this._config,this._hass)];
-    const langs=[['auto',L.automatic],['pl','Polski'],['en','English']];
-    const opts=(options,selected)=>options.map(row=>
-      '<option value="'+esc(row[0])+'"'+(row[0]===selected?' selected':'')+'>'+esc(row[1])+'</option>').join('');
-    const style='<style>'+
-      ':host{display:block;color:var(--primary-text-color)}'+
-      '.ss-launch{display:flex;gap:10px;align-items:end;flex-wrap:wrap;padding:12px}'+
-      '.ss-launch label,.ss-props label{display:flex;flex-direction:column;gap:5px;font-size:12px}'+
-      '.ss-launch select,.ss-props input,.ss-props select,.ss-bar select{border:1px solid var(--divider-color,#555);background:var(--card-background-color,#29323c);color:var(--primary-text-color);border-radius:7px;padding:8px;min-width:0;box-sizing:border-box;width:100%}'+
-      '.ss-launch button,.ss-bar button,.ss-library button,.ss-props button{color:var(--primary-text-color);background:var(--card-background-color,#29323c);border:1px solid var(--divider-color,#555);border-radius:8px;padding:9px;cursor:pointer;font:inherit}'+
-      '.ss-launch button{background:var(--primary-color,#168bce);color:var(--text-primary-color,#fff)}'+
-      '.ss-modal{position:fixed;inset:0;z-index:100000;background:var(--primary-background-color,#11191f);display:flex;flex-direction:column;padding:0;color:var(--primary-text-color)}'+
-      '.ss-modal:not([open]){display:none}.ss-modal.ss-fullscreen{position:fixed;inset:0;width:100vw;height:100vh;max-width:none;max-height:none;border:0;margin:0;padding:0;box-sizing:border-box}'+
-      '.ss-modal.ss-fullscreen::backdrop{background:#071018dd}.ss-modal.ss-fullscreen[open]{display:flex} .ss-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--divider-color,#555);flex-wrap:wrap}'+
-      '.ss-bar strong{margin-right:auto}.ss-bar button{white-space:nowrap}'+
-      '.ss-grid{display:grid;grid-template-columns:var(--ss-left,180px) 7px minmax(0,1fr) 7px var(--ss-right,310px);flex:1;min-height:0;height:100%}'+
-      '.ss-splitter{width:7px;cursor:col-resize;background:var(--divider-color,#44505b);opacity:.6;flex-shrink:0}'+
-      '.ss-library,.ss-props{padding:12px;overflow-y:auto;border-right:1px solid var(--divider-color,#555)}'+
-      '.ss-props{border-right:none;border-left:1px solid var(--divider-color,#555);min-width:0;overflow-x:hidden}'+
-      '.ss-library h3,.ss-props h3{font-size:12px;letter-spacing:.06em;color:var(--secondary-text-color);margin:0 0 12px}'+
-      '.ss-library button{display:flex;align-items:center;gap:12px;width:100%;margin-bottom:8px;text-align:left;font-size:13px}'+
-      '.ss-library button span{font-size:19px;display:inline-block;width:24px;text-align:center}'+
-      '.ss-canvas{min-width:0;min-height:0;overflow:auto;background:var(--secondary-background-color,#18222e);padding:16px}'+
-      '.ss-stage{width:max-content;max-width:none}.ss-svg{display:block;width:1200px;height:720px;max-height:none;padding:0;touch-action:none}'+
-      '.ss-svg-editor .ss-node{cursor:grab}.ss-svg-editor .ss-pipe-hit{cursor:pointer;pointer-events:stroke}.ss-handle{cursor:move}'+
-      '.ss-svg-editor .ss-accessory{pointer-events:none}.ss-svg:not(.ss-svg-editor) .ss-pipe{pointer-events:none}'+
-      '.ss-svg:not(.ss-svg-editor) [data-more]{cursor:pointer}'+
-      '.ss-props section{border-top:1px solid var(--divider-color,#555);padding:12px 0;display:grid;grid-template-columns:minmax(0,1fr);min-width:0;gap:10px}'+
-      '.ss-props section:first-of-type{border-top:0}.ss-props h4{margin:0;font-size:13px}'+
-      '.ss-props p,.ss-note{font-size:12px;color:var(--secondary-text-color)}'+
-      '.ss-props .ss-row{display:flex;align-items:center;gap:6px}.ss-props .ss-row>*{flex:1;min-width:0}'+
-      '.ss-props .ss-row button{flex:0 0 auto}.ss-props input[type=range]{padding:0}'+
-      '.ss-props label,.ss-props .ss-row{min-width:0}.ss-props .ss-row strong{overflow-wrap:anywhere}'+
-      '.ss-props .ss-add-parts{display:flex;flex-wrap:wrap;gap:6px;min-width:0;width:100%}'+
-      '.ss-props .ss-add-parts button{flex:0 1 auto;max-width:100%;white-space:normal;overflow-wrap:anywhere}'+
-      '.ss-selected{outline:1px solid var(--primary-color)}'+
-      '.ss-preview{border:1px solid var(--divider-color,#555);border-radius:8px;display:grid;place-items:center;padding:8px}'+
-      '.ss-entities{max-height:210px;overflow-y:auto;border:1px solid var(--divider-color,#555);border-radius:8px}'+
-      '.ss-entity-choice{width:100%;text-align:left;border:0;background:transparent;padding:8px;cursor:pointer;display:block;font-size:12px}'+
-      '.ss-entity-choice:hover{background:var(--secondary-background-color)}'+
-      '@media(max-width:900px){.ss-grid{grid-template-columns:110px minmax(230px,1fr) 220px}.ss-library button{font-size:11px;gap:4px}.ss-library button span{font-size:15px}}'+
-      '</style>';
-    root.innerHTML=style+
-      '<div class="ss-launch"><label>'+esc(L.mode)+'<select id="ss-mode">'+opts([['automatic',L.auto],['custom',L.custom]],'custom')+'</select></label>'+
-      '<label>'+esc(L.language)+'<select id="ss-lang">'+opts(langs,this._config.studio_language||'auto')+'</select></label>'+
-      '<button type="button" id="ss-open">'+esc(L.open)+'</button></div>'+
-      '<dialog class="ss-modal ss-fullscreen" id="ss-modal"><div class="ss-bar"><strong>'+esc(L.editor)+' · v'+esc(VERSION)+'</strong>'+
-      '<label>'+esc(L.zoom)+' <select id="ss-zoom">'+opts([['0.65','65%'],['0.8','80%'],['1','100%'],['1.25','125%'],['1.5','150%']],'1')+'</select></label>'+
-      '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
-      '<button id="ss-close" type="button">'+esc(L.close)+'</button></div>'+
-      '<div class="ss-grid" id="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+
-      types.map(type=>'<button type="button" data-add="'+type+'"><span aria-hidden="true">'+icons[type]+'</span>'+
-        esc(L[type==='pump'?'pumps':type==='valve'?'valves':type==='sensor'?'sensorsMenu':type==='pipe'?'pipes':type])+'</button>').join('')+
-      '<button type="button" data-add-preset="solid_fuel"><span aria-hidden="true">♨</span>'+esc(L.solidModel)+'</button>'+
-      '<button type="button" data-add-preset="pellet_modern"><span aria-hidden="true">♨</span>'+esc(L.pelletModel)+'</button>'+
-      '<button type="button" data-add-preset="heatpump_modern"><span aria-hidden="true">◉</span>'+esc(L.hpModel)+'</button>'+
-      '<button type="button" data-add-preset="gas_modern"><span aria-hidden="true">♨</span>'+esc(L.gasModel)+'</button>'+
-      '<button type="button" data-add-preset="electric_modern"><span aria-hidden="true">⚡</span>'+esc(L.electricModel)+'</button>'+
-      '<button type="button" data-add-preset="fireplace_modern"><span aria-hidden="true">♨</span>'+esc(L.fireplaceModel)+'</button>'+
-      '</aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
-      '<p class="ss-note">'+esc(L.editHelp)+'</p></main>'+
-      '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
-    const modal=root.getElementById('ss-modal'),stage=root.getElementById('ss-stage'),properties=root.getElementById('ss-props');
-    const splitterGrid=root.getElementById('ss-grid');
-    for(const grip of root.querySelectorAll('.ss-splitter')){
-      grip.addEventListener('pointerdown',event=>{
-        if(event.button!==0)return;
-        grip.setPointerCapture(event.pointerId);
-        const move=e=>{
-          if(e.pointerId!==event.pointerId)return;
-          const r=splitterGrid.getBoundingClientRect();
-          const span=grip.dataset.split==='left'?e.clientX-r.left:r.right-e.clientX;
-          splitterGrid.style.setProperty(grip.dataset.split==='left'?'--ss-left':'--ss-right',
-            clamp(Math.round(span),110,500,200)+'px');
-        };
-        const end=()=>{grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',end);grip.removeEventListener('pointercancel',end);};
-        grip.addEventListener('pointermove',move);
-        grip.addEventListener('pointerup',end);
-        grip.addEventListener('pointercancel',end);
-      });
-    }
-    let selection=null,drag=null,zoom=1;
-    const get=()=>normalized(this._config);
-    const commit=(model)=>{
-      this._config={...this._config,studio_layout:model};
-      this._fire();
-    };
-    const selectedObject=(model)=>{
-      if(!selection)return null;
-      return selection.type==='node'?model.nodes.find(x=>x.id===selection.id):
-        model.pipes.find(x=>x.id===selection.id);
-    };
+  return Object.freeze({create});
+})();
+
+
+/* Dedicated right-hand device/pipe inspector, extracted without changing
+ * existing properties or saved configuration fields. Event updates stay in
+ * studio-custom.js for now; the panel only renders and wires HA suggestions.
+ */
+const HASSStudioEditorInspector = (() => {
+  const create = ({editor, L, properties, esc, opts, registry, pickLang,
+    get, selectedObject, getSelection, getSelectedPartId, variantShape}) => {
     const entityList=()=>{
-      const states=this._hass?.states||{};
+      const states=editor._hass?.states||{};
       return Object.keys(states).sort().slice(0,2000).map(id=>
         '<option value="'+esc(id)+'" label="'+esc(states[id]?.attributes?.friendly_name||id)+'"></option>').join('');
     };
@@ -2420,11 +2500,12 @@ const HASSStudioFireplace=(()=>{
         (index!==undefined?' data-index="'+index+'"':'')+
         ' value="'+esc(value||'')+'" placeholder="sensor..." autocomplete="off"/>';
     };
-    const variantOptions=(node)=>graphics[node.type].map(key=>[key,variants[pickLang(this._config,this._hass)][key]]);
+    const variantOptions=(node)=>registry.variantOptionsForNode(node,pickLang(editor._config,editor._hass));
     const styleOptions=[['warmwasser','Warmwasser (default)'],['studio','Studio (simple)']];
     const sides=[['left',L.left],['right',L.right],['inside',L.inside]];
     const colorsList=[['hot',L.hot],['cold',L.cold],['solar',L.solarFlow],['return',L.returnFlow]];
     const renderProps=()=>{
+      const selection=getSelection();
       const model=get(),obj=selectedObject(model);
       let markup='<h3>'+esc(L.properties)+'</h3>';
       if(!obj){properties.innerHTML=markup+'<p>'+esc(L.choose)+'</p>';return;}
@@ -2448,8 +2529,8 @@ const HASSStudioFireplace=(()=>{
           obj.visual==='warmwasser'&&obj.type==='boiler'?'0 -110 130 350':
           previewFree?((60-previewWidth/2)+' '+(70-previewHeight/2)+' '+previewWidth+' '+previewHeight):'0 0 120 140';
         markup+='<div class="ss-preview"><svg viewBox="'+previewBox+'" width="120" height="120">'+
-          HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+HASSStudioGraphics.defs(obj,this._hass)+'</defs>'+
-          (obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,this._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,this._hass):previewPellet?HASSStudioPellet.render(obj,this._hass):previewHP?HASSStudioHeatPump.render(obj,this._hass):previewGas?HASSStudioGasBoiler.render(obj,this._hass):previewElectric?HASSStudioElectricBoiler.render(obj,this._hass):previewFireplace?HASSStudioFireplace.render(obj,this._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,this._hass):variantShape(obj))+'</svg></div>';
+          HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+HASSStudioGraphics.defs(obj,editor._hass)+'</defs>'+
+          (obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,editor._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,editor._hass):previewPellet?HASSStudioPellet.render(obj,editor._hass):previewHP?HASSStudioHeatPump.render(obj,editor._hass):previewGas?HASSStudioGasBoiler.render(obj,editor._hass):previewElectric?HASSStudioElectricBoiler.render(obj,editor._hass):previewFireplace?HASSStudioFireplace.render(obj,editor._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,editor._hass):variantShape(obj))+'</svg></div>';
         const freeScale=obj.type==='tank'&&obj.variant==='modular'&&obj.scale_mode==='free';
         if(obj.type==='tank'&&obj.variant==='modular')
           markup+=field(L.tankScaleMode,'scale_mode',obj.scale_mode,'text',
@@ -2511,7 +2592,14 @@ const HASSStudioFireplace=(()=>{
         if(obj.type==='tank'||obj.type==='solar'){
           const isModular=obj.type==='tank'&&obj.variant==='modular';
           markup+='<section><h4>'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'</h4>'+
-          obj.parts.map((item,index)=>'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+(isModular?' · '+esc(L.partLayer)+' '+index:'')+'</strong>'+
+            '<div class="ss-part-list" role="group" aria-label="'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'">'+
+            obj.parts.map((part,i)=>'<button type="button" class="ss-part-pick'+
+              (part.id===getSelectedPartId()?' ss-part-active':'')+'" data-select-part="'+esc(part.id)+'" aria-pressed="'+
+              (part.id===getSelectedPartId()?'true':'false')+'">'+
+              esc(part.label||((L[part.kind]||part.kind)+' '+(i+1)))+
+              (part.entity?' · '+esc(part.entity):'')+'</button>').join('')+'</div>'+
+            (obj.parts.some(part=>part.id===getSelectedPartId())?'<h4>'+esc(L.properties)+'</h4>':'')+
+          obj.parts.map((item,index)=>item.id!==getSelectedPartId()?'':'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+(isModular?' · '+esc(L.partLayer)+' '+index:'')+'</strong>'+
             (isModular?'<button type="button" title="'+esc(L.partLayerDown)+'" aria-label="'+esc(L.partLayerDown)+'" data-layer-down="'+index+'"'+(index===0?' disabled':'')+'>↓</button>'+
               '<button type="button" title="'+esc(L.partLayerUp)+'" aria-label="'+esc(L.partLayerUp)+'" data-layer-up="'+index+'"'+(index===obj.parts.length-1?' disabled':'')+'>↑</button>':'')+
             '<button type="button" data-delete-part="'+index+'">×</button></div>'+
@@ -2573,7 +2661,7 @@ const HASSStudioFireplace=(()=>{
         const update=()=>{
           const search=input.value.trim().toLocaleLowerCase();
           if(!search){popup.hidden=true;return;}
-          const matches=Object.entries(this._hass?.states||{}).filter(([entity,state])=>
+          const matches=Object.entries(editor._hass?.states||{}).filter(([entity,state])=>
             entity.toLocaleLowerCase().includes(search)||
             String(state?.attributes?.friendly_name||'').toLocaleLowerCase().includes(search)).slice(0,25);
           popup.replaceChildren();
@@ -2591,6 +2679,249 @@ const HASSStudioFireplace=(()=>{
       }
 
     };
+    return renderProps;
+  };
+  return Object.freeze({create});
+})();
+
+
+/* Grouped equipment library; variants are resolved by the device registry. */
+const HASSStudioEditorLibrary=(()=>{
+  const render=({registry,language='pl',esc})=>{
+    const lang=language==='en'?'en':'pl',entries=registry.libraryEntries(lang);
+    const button=item=>{
+      const attrs=item.type==='boiler'?' data-add-preset="'+esc(item.variant)+'"':
+        ' data-add="'+esc(item.type)+'"'+(item.variant?' data-variant="'+esc(item.variant)+'"':'');
+      return '<button type="button" class="ss-lib-item"'+attrs+' aria-label="'+esc(item.label)+'">'+
+        '<span class="ss-lib-icon" aria-hidden="true">'+esc(item.icon)+'</span>'+
+        '<span class="ss-lib-label">'+esc(item.label)+'</span></button>';
+    };
+    return Object.entries(registry.categories).map(([category,names])=>{
+      const items=entries.filter(item=>item.category===category);
+      if(!items.length)return '';
+      const nested=Object.entries(registry.subgroups).map(([group,labels])=>{
+        const subset=items.filter(item=>item.subgroup===group);
+        return subset.length?'<details class="ss-lib-subgroup" open><summary>'+esc(labels[lang])+
+          '<span class="ss-lib-count">'+subset.length+'</span></summary><div class="ss-lib-items">'+
+          subset.map(button).join('')+'</div></details>':'';
+      }).join('');
+      const direct=items.filter(item=>!item.subgroup).map(button).join('');
+      return '<details class="ss-lib-group" data-lib-category="'+esc(category)+'"'+
+        (category==='heat_sources'?' open':'')+'><summary>'+esc(names[lang])+
+        '<span class="ss-lib-count">'+items.length+'</span></summary>'+
+        '<div class="ss-lib-contents">'+nested+direct+'</div></details>';
+    }).join('');
+  };
+  return Object.freeze({render});
+})();
+
+
+/* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
+ * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
+ * No external dependencies or service calls in the designer.
+ */
+(() => {
+  const W=1200,H=720,MAX_NODES=60,MAX_PIPES=80;
+  const registry=HASSStudioDeviceRegistry;
+  const types=registry.listTypes();
+  const words={
+    pl:{sensorScale:'Skala odczytu',accessoryLabel:'Podpis przy ikonie',boilerState:'Praca palnika / grzania',burnerEntity:'Encja palnika (opcjonalna; inaczej temperatura)',burnerOnTemp:'Kocioł aktywny powyżej (°C)',burnerOffTemp:'Kocioł nieaktywny poniżej (°C)',solarTank:'Temperatura zbiornika (do porównania)',solarOnDelta:'Kolektor aktywny – różnica (°C)',solarOffDelta:'Kolektor nieaktywny – różnica (°C)',solarSensors:'Czujniki kolektora',solarPump:'Encja pompy solarnej',pipeStart:'Króciec na początku',pipeEnd:'Króciec na końcu',yes:'Tak',no:'Nie',compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
+      flowOn:'Włączona (podgląd)',flowAuto:'Według encji',flowDirection:'Kierunek przepływu',
+      flowSpeed:'Czas animacji (s)',flowEntity:'Encja sterująca przepływem',
+      forward:'Początek → koniec',reverse:'Koniec → początek',mode:'Tryb układu',auto:'Automatyczny (Warmwasser)',custom:'Własny układ',language:'Język',
+      automatic:'Automatyczny',open:'Otwórz projektant',close:'Zamknij',add:'Dodaj',remove:'Usuń',
+      library:'BIBLIOTEKA SVG',properties:'WŁAŚCIWOŚCI',canvas:'SCHEMAT',choose:'Zaznacz element na schemacie',
+      name:'Nazwa',graphic:'Rodzaj / grafika',scale:'Skala',position:'Pozycja',entity:'Encja HA',
+      entities:'Dodatkowe encje',sensors:'Elementy wewnętrzne',height:'Wysokość od dołu (%)',
+      side:'Strona',left:'Lewa',right:'Prawa',inside:'Wewnątrz',sensor:'Czujnik',
+      heater:'Grzałka',coil:'Wężownica',accessories:'Elementy na rurze',
+      pump:'Pompa',valve:'Zawór',pipe:'Rura',pipeColor:'Rodzaj rury',pipeWidth:'Grubość',
+      hot:'Ciepła woda',cold:'Zimna woda',solarFlow:'Obieg solarny',returnFlow:'Powrót',
+      newBend:'Dodaj punkt załamania',removeBend:'Usuń ostatni punkt',
+      pipeHelp:'Przeciągaj punkty rury. Dwuklik na rurze dodaje nowe załamanie.',
+      accessoryPos:'Położenie na rurze (%)',editHelp:'Wybierz element po lewej i ustaw jego właściwości po prawej.',
+      boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',pipes:'Rury',
+      link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
+      zoom:'Powiększenie',noValues:'Bez pomiaru',editor:'Projektant instalacji'},
+    en:{sensorScale:'Reading scale',accessoryLabel:'Icon caption',boilerState:'Burner / heating state',burnerEntity:'Burner entity (optional; otherwise temperature)',burnerOnTemp:'Boiler on above (°C)',burnerOffTemp:'Boiler off below (°C)',solarTank:'Tank temperature (reference)',solarOnDelta:'Collector active – delta (°C)',solarOffDelta:'Collector inactive – delta (°C)',solarSensors:'Collector sensors',solarPump:'Solar pump entity',pipeStart:'Start connector',pipeEnd:'End connector',yes:'Yes',no:'No',compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
+      flowOn:'On (preview)',flowAuto:'Controlled by entity',flowDirection:'Flow direction',
+      flowSpeed:'Animation duration (s)',flowEntity:'Flow control entity',
+      forward:'Start → end',reverse:'End → start',mode:'Layout mode',auto:'Automatic (Warmwasser)',custom:'Custom layout',language:'Language',
+      automatic:'Automatic',open:'Open designer',close:'Close',add:'Add',remove:'Delete',
+      library:'SVG LIBRARY',properties:'PROPERTIES',canvas:'DIAGRAM',choose:'Select an element in the diagram',
+      name:'Name',graphic:'Type / graphic',scale:'Scale',position:'Position',entity:'HA entity',
+      entities:'Additional entities',sensors:'Internal components',height:'Height from bottom (%)',
+      side:'Side',left:'Left',right:'Right',inside:'Inside',sensor:'Sensor',
+      heater:'Heating element',coil:'Coil',accessories:'On-pipe equipment',
+      pump:'Pump',valve:'Valve',pipe:'Pipe',pipeColor:'Pipe type',pipeWidth:'Width',
+      hot:'Hot water',cold:'Cold water',solarFlow:'Solar circuit',returnFlow:'Return',
+      newBend:'Add bend point',removeBend:'Remove last point',
+      pipeHelp:'Drag pipe handles. Double-click the pipe to add a bend.',
+      accessoryPos:'Position on pipe (%)',editHelp:'Pick a component on the left; configure it on the right.',
+      boiler:'Boilers',tank:'Tanks',solar:'Solar',pumps:'Pumps',valves:'Valves',sensorsMenu:'Sensors',pipes:'Pipes',
+      link:'Assign entity',addEntity:'Add entity',label:'Description',default:'Default',
+      zoom:'Zoom',noValues:'No data',editor:'System diagram designer'}
+  };
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankGlow:'Efekt cieplny grzałek (%)',heaterMode:'Stan grzałki',heaterPower:'Intensywność (%)',heaterWatts:'Encja mocy (W/kW)',partX:'Pozycja pozioma (%)',partLength:'Wysokość / długość (%)',partWidth:'Szerokość (%)',partTurns:'Liczba zwojów',permeability:'Przepuszczalność 0–1',partContainer:'Strefa czujnika',partFlowMode:'Przepływ wężownicy',baffle_horizontal:'Przegroda pozioma',baffle_vertical:'Przegroda pionowa',inner_tank:'Zbiornik wewnętrzny'}:{tankGlow:'Heater visual glow (%)',heaterMode:'Heater status',heaterPower:'Glow intensity (%)',heaterWatts:'Power entity (W/kW)',partX:'Horizontal position (%)',partLength:'Height / length (%)',partWidth:'Width (%)',partTurns:'Coil turns',permeability:'Permeability 0–1',partContainer:'Sensor compartment',partFlowMode:'Coil flow',baffle_horizontal:'Horizontal baffle',baffle_vertical:'Vertical baffle',inner_tank:'Inner tank'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankScaleMode:'Skalowanie zbiornika',tankScaleProportional:'Proporcjonalne',tankScaleFree:'Osobna szerokość i wysokość',tankWidthScale:'Szerokość zbiornika',tankHeightScale:'Wysokość zbiornika'}:{tankScaleMode:'Tank scaling',tankScaleProportional:'Proportional',tankScaleFree:'Independent width and height',tankWidthScale:'Tank width',tankHeightScale:'Tank height'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{partLayer:'Warstwa',partLayerUp:'Przenieś wyżej',partLayerDown:'Przenieś niżej'}:{partLayer:'Layer',partLayerUp:'Move up',partLayerDown:'Move down'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidModel:'Piec węgiel / drewno',solidFuel:'Rodzaj opału',solidWood:'Drewno',solidCoal:'Węgiel',solidState:'Stan paleniska (wizualizacja)',solidAuto:'Automatycznie wg encji / temperatury',solidBurning:'Palenie',solidEmbers:'Żarzenie',solidOff:'Wygaszenie',solidGlow:'Intensywność efektu (%)',solidHelp:'Animacja jest wizualna, bez sterowania urządzeniem. Encja stanu spalania ma pierwszeństwo nad progami temperatury.'}:{solidModel:'Wood / coal boiler',solidFuel:'Fuel type',solidWood:'Wood',solidCoal:'Coal',solidState:'Combustion state (visual only)',solidAuto:'Auto from entity / temperature',solidBurning:'Burning',solidEmbers:'Embers',solidOff:'Extinguished',solidGlow:'Effect intensity (%)',solidHelp:'Animation only, no device control. Combustion entity takes precedence over temperature thresholds.'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidWidth:'Szerokość pieca',solidHeight:'Wysokość pieca'}:{solidWidth:'Boiler width',solidHeight:'Boiler height'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{pelletModel:'Piec na pellet (nowoczesny)'}:{pelletModel:'Modern pellet boiler'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{hpModel:'Pompa ciepła (nowoczesna)',hpPower:'Encja poboru mocy (W/kW)',hpFan:'Encja prędkości wentylatora (%/RPM)',hpMaxRpm:'Maksymalne obroty (RPM)',hpGlow:'Podświetlenie (%)'}:{hpModel:'Modern heat pump',hpPower:'Electrical power entity (W/kW)',hpFan:'Fan speed entity (%/RPM)',hpMaxRpm:'Max fan speed (RPM)',hpGlow:'Glow (%)'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{gasModel:'Piec gazowy (nowoczesny)',gasDraw:'Encja modulacji palnika (%)',gasGlow:'Intensywność podświetlenia (%)',gasHelp:'Modulacja to procent mocy palnika, nie zmierzony przepływ gazu. Brak danych wyłącza płomień.'}:{gasModel:'Modern gas boiler',gasDraw:'Burner modulation entity (%)',gasGlow:'Lighting intensity (%)',gasHelp:'Modulation is burner load, not measured gas flow. Missing data disables the flame.'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{electricModel:'Piec elektryczny (nowoczesny)',electricPower:'Encja poboru mocy (W/kW)',electricLoad:'Encja obciążenia (%) — opcjonalna',electricMax:'Moc znamionowa pieca (kW)',electricGlow:'Podświetlenie (%)',electricHelp:'Bez osobnej encji % obciążenie wynika z poboru mocy / mocy znamionowej. Brak odczytu nie jest zastępowany wartością demo.'}:{electricModel:'Modern electric boiler',electricPower:'Electrical power entity (W/kW)',electricLoad:'Load entity (%) — optional',electricMax:'Rated boiler power (kW)',electricGlow:'Lighting (%)',electricHelp:'If no % entity is set, load derives from measured power divided by rated power. Missing data never uses demo values.'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{fireplaceModel:'Kominek (nowoczesny)',fireplaceHelp:'Ogień i żar są wizualizacją, automatyka zależy od encji lub temperatury.'}:{fireplaceModel:'Modern fireplace',fireplaceHelp:'Fire and embers are visual only; auto stage uses HA status or temperature.'});
+  const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
+  const pickLang=(config,hass)=>{
+    const setting=config?.studio_language;
+    return setting==='pl'||setting==='en'?setting:
+      (String(hass?.language||'').toLowerCase().startsWith('pl')?'pl':'en');
+  };
+  const clamp=(n,lo,hi,fallback)=>Number.isFinite(Number(n))?Math.max(lo,Math.min(hi,Number(n))):fallback;
+  const validEntity=(value)=>typeof value==='string' && isEnt(value);
+  const freshId=(prefix)=>prefix+Math.random().toString(36).slice(2,10);
+  const normalized=HASSStudioLayout.normalized;
+  const {canvasSvg,pipePath,onPipe,variantShape}=HASSStudioCanvas.create({
+    W,H,colors,normalized,pickLang,words,clamp,validEntity,esc
+  });
+  const nativeRender=WarmwasserSchemaCard.prototype._render;
+  WarmwasserSchemaCard.prototype._render=function(){
+    if(this._cfg?.layout_mode!=='custom')return nativeRender.call(this);
+    return '<div class="kopf"><div class="l"><div class="t1">'+esc(this._cfg.titel||'Home Assistant Systems Studio')+
+      '</div></div></div>'+canvasSvg(this._cfg,this._hass);
+  };
+  // In automatic mode, retain the complete original Warmwasser settings.
+  const nativeSchema=WarmwasserSchemaCardEditor.prototype._mainSchema;
+  WarmwasserSchemaCardEditor.prototype._mainSchema=function(){
+    const L=words[pickLang(this._config,this._hass)];
+    return [F_('layout_mode',sel.opt([['automatic',L.auto],['custom',L.custom]])),...nativeSchema.call(this)];
+  };
+  const nativeSet=WarmwasserSchemaCardEditor.prototype.setConfig;
+  WarmwasserSchemaCardEditor.prototype.setConfig=function(config){
+    nativeSet.call(this,config);
+    const mode=this._config?.layout_mode||'automatic';
+    if(this._studioMode && mode!==this._studioMode)this._build();
+  };
+  const nativeFire=WarmwasserSchemaCardEditor.prototype._fire;
+  WarmwasserSchemaCardEditor.prototype._fire=function(){
+    const changed=this._studioMode && this._studioMode!==(this._config?.layout_mode||'automatic');
+    nativeFire.call(this);
+    if(changed)this._build();
+  };
+  const nativeBuild=WarmwasserSchemaCardEditor.prototype._build;
+  WarmwasserSchemaCardEditor.prototype._build=function(){
+    this._studioMode=this._config?.layout_mode||'automatic';
+    if(this._studioMode!=='custom')return nativeBuild.call(this);
+    this._forms=[]; // Keeps inherited setConfig from recreating the designer on every edit.
+    this._renderStudioEditor();
+  };
+  WarmwasserSchemaCardEditor.prototype._renderStudioEditor=function(){
+    if(!this.shadowRoot)this.attachShadow({mode:'open'});
+    const root=this.shadowRoot;
+    const L=words[pickLang(this._config,this._hass)];
+    const langs=[['auto',L.automatic],['pl','Polski'],['en','English']];
+    const opts=(options,selected)=>options.map(row=>
+      '<option value="'+esc(row[0])+'"'+(row[0]===selected?' selected':'')+'>'+esc(row[1])+'</option>').join('');
+    const style='<style>'+
+      ':host{display:block;color:var(--primary-text-color)}'+
+      '.ss-launch{display:flex;gap:10px;align-items:end;flex-wrap:wrap;padding:12px}'+
+      '.ss-launch label,.ss-props label{display:flex;flex-direction:column;gap:5px;font-size:12px}'+
+      '.ss-launch select,.ss-props input,.ss-props select,.ss-bar select{border:1px solid var(--divider-color,#555);background:var(--card-background-color,#29323c);color:var(--primary-text-color);border-radius:7px;padding:8px;min-width:0;box-sizing:border-box;width:100%}'+
+      '.ss-launch button,.ss-bar button,.ss-library button,.ss-props button{color:var(--primary-text-color);background:var(--card-background-color,#29323c);border:1px solid var(--divider-color,#555);border-radius:8px;padding:9px;cursor:pointer;font:inherit}'+
+      '.ss-launch button{background:var(--primary-color,#168bce);color:var(--text-primary-color,#fff)}'+
+      '.ss-modal{position:fixed;inset:0;z-index:100000;background:var(--primary-background-color,#11191f);display:flex;flex-direction:column;padding:0;color:var(--primary-text-color)}'+
+      '.ss-modal:not([open]){display:none}.ss-modal.ss-fullscreen{position:fixed;inset:0;width:100vw;height:100vh;max-width:none;max-height:none;border:0;margin:0;padding:0;box-sizing:border-box}'+
+      '.ss-modal.ss-fullscreen::backdrop{background:#071018dd}.ss-modal.ss-fullscreen[open]{display:flex} .ss-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--divider-color,#555);flex-wrap:wrap}'+
+      '.ss-bar strong{margin-right:auto}.ss-bar button{white-space:nowrap}'+
+      '.ss-grid{display:grid;grid-template-columns:var(--ss-left,180px) 7px minmax(0,1fr) 7px var(--ss-right,310px);flex:1;min-height:0;height:100%}'+
+      '.ss-splitter{width:7px;cursor:col-resize;background:var(--divider-color,#44505b);opacity:.6;flex-shrink:0}'+
+      '.ss-library,.ss-props{padding:12px;overflow-y:auto;border-right:1px solid var(--divider-color,#555)}'+
+      '.ss-props{border-right:none;border-left:1px solid var(--divider-color,#555);min-width:0;overflow-x:hidden}'+
+      '.ss-library h3,.ss-props h3{font-size:12px;letter-spacing:.06em;color:var(--secondary-text-color);margin:0 0 12px}'+
+      '.ss-library button{display:flex;align-items:center;gap:12px;width:100%;margin-bottom:8px;text-align:left;font-size:13px}'+
+      '.ss-library button span{font-size:19px;display:inline-block;width:24px;text-align:center}'+
+      '.ss-library .ss-lib-group{border:1px solid var(--divider-color,#555);border-radius:8px;margin:0 0 8px;overflow:hidden}'+
+      '.ss-library .ss-lib-group>summary,.ss-library .ss-lib-subgroup>summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:10px 8px;font-size:12px;font-weight:600;list-style-position:inside}'+
+      '.ss-library .ss-lib-group>summary{background:var(--secondary-background-color,#18222e)}'+
+      '.ss-library .ss-lib-subgroup{margin:4px 0 8px;border-left:2px solid var(--divider-color,#555)}'+
+      '.ss-library .ss-lib-subgroup>summary{font-size:11px;padding:8px}'+
+      '.ss-library .ss-lib-contents{padding:6px}'+
+      '.ss-library .ss-lib-count{color:var(--secondary-text-color);font-weight:400}'+
+      '.ss-library button.ss-lib-item{gap:8px;padding:8px 6px;margin:0 0 4px;border-color:transparent;background:transparent;white-space:normal}'+
+      '.ss-library button.ss-lib-item:hover,.ss-library button.ss-lib-item:focus-visible{background:var(--secondary-background-color,#18222e);border-color:var(--primary-color,#168bce)}'+
+      '.ss-library .ss-lib-label{font-size:12px;line-height:1.3;display:block;min-width:0;flex:1;overflow-wrap:anywhere}'+
+      '.ss-library .ss-lib-icon{flex:0 0 22px}'+
+      '.ss-canvas{min-width:0;min-height:0;overflow:auto;background:var(--secondary-background-color,#18222e);padding:16px}'+
+      '.ss-stage{width:max-content;max-width:none}.ss-svg{display:block;width:1200px;height:720px;max-height:none;padding:0;touch-action:none}'+
+      '.ss-svg-editor .ss-node{cursor:grab}.ss-svg-editor .ss-pipe-hit{cursor:pointer;pointer-events:stroke}.ss-handle{cursor:move}'+
+      '.ss-svg-editor .ss-accessory{pointer-events:none}.ss-svg:not(.ss-svg-editor) .ss-pipe{pointer-events:none}'+
+      '.ss-svg:not(.ss-svg-editor) [data-more]{cursor:pointer}'+
+      '.ss-props section{border-top:1px solid var(--divider-color,#555);padding:12px 0;display:grid;grid-template-columns:minmax(0,1fr);min-width:0;gap:10px}'+
+      '.ss-props section:first-of-type{border-top:0}.ss-props h4{margin:0;font-size:13px}'+
+      '.ss-props p,.ss-note{font-size:12px;color:var(--secondary-text-color)}'+
+      '.ss-props .ss-row{display:flex;align-items:center;gap:6px}.ss-props .ss-row>*{flex:1;min-width:0}'+
+      '.ss-props .ss-row button{flex:0 0 auto}.ss-props input[type=range]{padding:0}'+
+      '.ss-props label,.ss-props .ss-row{min-width:0}.ss-props .ss-row strong{overflow-wrap:anywhere}'+
+      '.ss-props .ss-add-parts{display:flex;flex-wrap:wrap;gap:6px;min-width:0;width:100%}'+
+      '.ss-props .ss-add-parts button{flex:0 1 auto;max-width:100%;white-space:normal;overflow-wrap:anywhere}'+
+      '.ss-part-list{display:flex;flex-direction:column;gap:4px;max-height:210px;overflow-y:auto}'+
+      '.ss-props button.ss-part-pick{text-align:left;padding:8px;white-space:normal;overflow-wrap:anywhere;font-size:12px}'+
+      '.ss-part-pick.ss-part-active{outline:2px solid var(--primary-color,#168bce)}'+
+      '.ss-selected{outline:1px solid var(--primary-color)}'+
+      '.ss-preview{border:1px solid var(--divider-color,#555);border-radius:8px;display:grid;place-items:center;padding:8px}'+
+      '.ss-entities{max-height:210px;overflow-y:auto;border:1px solid var(--divider-color,#555);border-radius:8px}'+
+      '.ss-entity-choice{width:100%;text-align:left;border:0;background:transparent;padding:8px;cursor:pointer;display:block;font-size:12px}'+
+      '.ss-entity-choice:hover{background:var(--secondary-background-color)}'+
+      '@media(max-width:900px){.ss-grid{grid-template-columns:110px minmax(230px,1fr) 220px}.ss-library button{font-size:11px;gap:4px}.ss-library button span{font-size:15px}}'+
+      '</style>';
+    root.innerHTML=style+
+      '<div class="ss-launch"><label>'+esc(L.mode)+'<select id="ss-mode">'+opts([['automatic',L.auto],['custom',L.custom]],'custom')+'</select></label>'+
+      '<label>'+esc(L.language)+'<select id="ss-lang">'+opts(langs,this._config.studio_language||'auto')+'</select></label>'+
+      '<button type="button" id="ss-open">'+esc(L.open)+'</button></div>'+
+      '<dialog class="ss-modal ss-fullscreen" id="ss-modal"><div class="ss-bar"><strong>'+esc(L.editor)+' · v'+esc(VERSION)+'</strong>'+
+      '<label>'+esc(L.zoom)+' <select id="ss-zoom">'+opts([['0.65','65%'],['0.8','80%'],['1','100%'],['1.25','125%'],['1.5','150%']],'1')+'</select></label>'+
+      '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
+      '<button id="ss-close" type="button">'+esc(L.close)+'</button></div>'+
+      '<div class="ss-grid" id="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+
+      HASSStudioEditorLibrary.render({registry,language:pickLang(this._config,this._hass),esc})+
+      '</aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
+      '<p class="ss-note">'+esc(L.editHelp)+'</p></main>'+
+      '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
+    const modal=root.getElementById('ss-modal'),stage=root.getElementById('ss-stage'),properties=root.getElementById('ss-props');
+    const splitterGrid=root.getElementById('ss-grid');
+    for(const grip of root.querySelectorAll('.ss-splitter')){
+      grip.addEventListener('pointerdown',event=>{
+        if(event.button!==0)return;
+        grip.setPointerCapture(event.pointerId);
+        const move=e=>{
+          if(e.pointerId!==event.pointerId)return;
+          const r=splitterGrid.getBoundingClientRect();
+          const span=grip.dataset.split==='left'?e.clientX-r.left:r.right-e.clientX;
+          splitterGrid.style.setProperty(grip.dataset.split==='left'?'--ss-left':'--ss-right',
+            clamp(Math.round(span),110,500,200)+'px');
+        };
+        const end=()=>{grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',end);grip.removeEventListener('pointercancel',end);};
+        grip.addEventListener('pointermove',move);
+        grip.addEventListener('pointerup',end);
+        grip.addEventListener('pointercancel',end);
+      });
+    }
+    let selection=null,drag=null,zoom=1,selectedPartId=null;
+    const get=()=>normalized(this._config);
+    const commit=(model)=>{
+      this._config={...this._config,studio_layout:model};
+      this._fire();
+    };
+    const selectedObject=(model)=>{
+      if(!selection)return null;
+      return selection.type==='node'?model.nodes.find(x=>x.id===selection.id):
+        model.pipes.find(x=>x.id===selection.id);
+    };
+    const renderProps=HASSStudioEditorInspector.create({
+      editor:this,L,properties,esc,opts,registry,pickLang,get,selectedObject,
+      getSelection:()=>selection,getSelectedPartId:()=>selectedPartId,variantShape
+    });
     const render=()=>{
       stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
       stage.firstElementChild.style.width=(W*zoom)+'px';
@@ -2598,7 +2929,7 @@ const HASSStudioFireplace=(()=>{
       renderProps();
     };
     const setSelected=(type,id)=>{
-      selection={type,id};render();
+      selection={type,id};selectedPartId=type==='node'?get().nodes.find(n=>n.id===id)?.parts?.[0]?.id||null:null;render();
     };
     const point=(ev,svg)=>{
       const p=svg.createSVGPoint();p.x=ev.clientX;p.y=ev.clientY;
@@ -2646,7 +2977,7 @@ const HASSStudioFireplace=(()=>{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,visual:'warmwasser',variant:kind==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(preset)?preset:graphics[kind][0],label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
+          scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -2680,9 +3011,9 @@ const HASSStudioFireplace=(()=>{
       const model=get();
       if(selection.type==='node')model.nodes=model.nodes.filter(n=>n.id!==selection.id);
       else model.pipes=model.pipes.filter(n=>n.id!==selection.id);
-      selection=null;commit(model);render();
+      selection=null;selectedPartId=null;commit(model);render();
     });
-    root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add)));
+    root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add,button.dataset.variant||'')));
     root.querySelectorAll('[data-add-preset]').forEach(button=>button.addEventListener('click',()=>create('boiler',button.dataset.addPreset)));
     properties.addEventListener('change',event=>{
       const el=event.target,key=el.dataset.field;
@@ -2724,7 +3055,7 @@ const HASSStudioFireplace=(()=>{
         else if(key==='visual')obj.visual=val==='studio'?'studio':'warmwasser';
         else if(key==='flow_mode')obj.flow_mode=['on','off','auto'].includes(val)?val:'auto';
         else if(key==='flow_direction')obj.flow_direction=val==='reverse'?'reverse':'forward';
-        else if(key==='variant')obj.variant=graphics[obj.type]?.includes(val)?val:obj.variant;
+        else if(key==='variant')obj.variant=registry.isVariant(obj.type,val)?val:obj.variant;
         else if(key==='color')obj.color=colors[val]?val:obj.color;
         else obj.label=val.slice(0,64);
       }else if(key==='multiEntity'&&obj.entities[index])obj.entities[index].entity=validEntity(val)?val:'';
@@ -2756,6 +3087,12 @@ const HASSStudioFireplace=(()=>{
       const button=event.target.closest('button');
       if(!button||!selection)return;
       const model=get(),obj=selectedObject(model);if(!obj)return;
+      if(button.hasAttribute('data-select-part')){
+        if(obj.parts?.some(part=>part.id===button.dataset.selectPart)){
+          selectedPartId=button.dataset.selectPart;renderProps();
+        }
+        return;
+      }
       const index=Number(button.dataset.deletePart||button.dataset.deleteAccessory||button.dataset.deleteEntity);
       if(button.hasAttribute('data-layer-up')&&obj.parts){
         const i=Number(button.dataset.layerUp);
@@ -2765,16 +3102,20 @@ const HASSStudioFireplace=(()=>{
         const i=Number(button.dataset.layerDown);
         if(i>0&&i<obj.parts.length)[obj.parts[i],obj.parts[i-1]]=[obj.parts[i-1],obj.parts[i]];
         else return;
-      }else if(button.hasAttribute('data-delete-part'))obj.parts.splice(index,1);
+      }else if(button.hasAttribute('data-delete-part')){
+        const removed=obj.parts.splice(index,1)[0];
+        if(removed?.id===selectedPartId)selectedPartId=obj.parts[Math.min(index,obj.parts.length-1)]?.id||null;
+      }
       else if(button.hasAttribute('data-delete-accessory'))obj.accessories.splice(index,1);
       else if(button.hasAttribute('data-delete-entity'))obj.entities.splice(index,1);
       else if(button.dataset.addPart){
         if(obj.parts.length>=40)return;
         const kind=obj.type==='solar'?'sensor':button.dataset.addPart;
         const sensorCount=obj.parts.filter(part=>part.kind==='sensor').length+1;
-        obj.parts.push({id:freshId('i'),kind,label:obj.type==='solar'?'Kolektor':kind==='sensor'?'T'+sensorCount:'',
+        const newPart={id:freshId('i'),kind,label:obj.type==='solar'?'Kolektor':kind==='sensor'?'T'+sensorCount:'',
           side:obj.type==='solar'?'right':'left',height:obj.type==='solar'?80:50,
-          display_scale:1,variant:'warmwasser',entity:'',x:50,length:58,width:60,turns:12,power:75,mode:'auto',flow_mode:'auto',flow_direction:'forward',flow_speed:1,permeability:kind==='baffle_horizontal'?.35:0,container:'main',power_entity:''});
+          display_scale:1,variant:'warmwasser',entity:'',x:50,length:58,width:60,turns:12,power:75,mode:'auto',flow_mode:'auto',flow_direction:'forward',flow_speed:1,permeability:kind==='baffle_horizontal'?.35:0,container:'main',power_entity:''};
+        obj.parts.push(newPart);selectedPartId=newPart.id;
       }else if(button.dataset.addAccessory){
         if(obj.accessories.length>=20)return;
         obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,label:'',position:50,entity:''});
@@ -2795,19 +3136,22 @@ const HASSStudioFireplace=(()=>{
       if(event.button!==0)return;
       const hit=event.target.closest?.('.ss-handle');
       if(hit){
-        selection={type:'pipe',id:hit.dataset.id};
+        selection={type:'pipe',id:hit.dataset.id};selectedPartId=null;
         drag={type:'point',id:hit.dataset.id,index:Number(hit.dataset.point),pointer:event.pointerId};
       }else{
         const node=event.target.closest?.('.ss-node');
         if(node){
           selection={type:'node',id:node.dataset.id};
+          const partHit=event.target.closest?.('[data-part-id]');
+          selectedPartId=partHit?.dataset.partId||get().nodes.find(n=>n.id===node.dataset.id)?.parts?.[0]?.id||null;
+          if(partHit){renderProps();return;}
           const model=get(),obj=selectedObject(model),svg=stage.querySelector('svg'),p=point(event,svg);
           if(!obj)return;
           drag={type:'node',id:obj.id,offsetX:p.x-obj.x,offsetY:p.y-obj.y,pointer:event.pointerId};
         }else{
           const pipe=event.target.closest?.('.ss-pipe');
           if(pipe){setSelected('pipe',pipe.dataset.id);return;}
-          selection=null;render();return;
+          selection=null;selectedPartId=null;render();return;
         }
       }
       stage.querySelector('svg')?.setPointerCapture(event.pointerId);

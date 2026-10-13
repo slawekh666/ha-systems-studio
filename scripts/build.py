@@ -5,7 +5,9 @@ This is a narrow, auditable rename/guard transform, not a rewrite.
 Keep warmwasser-schema-card.js untouched so upstream changes can be merged.
 """
 from pathlib import Path
+import json
 import re
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'warmwasser-schema-card.js'
@@ -79,19 +81,53 @@ def build() -> None:
         ' */\n'
     )
     DEST.parent.mkdir(parents=True, exist_ok=True)
-    library = ROOT / 'src' / 'warmwasser-shapes.js'
-    extra = ROOT / 'src' / 'studio-custom.js'
-    tank = ROOT / 'src' / 'studio-tank.js'
-    solid = ROOT / 'src' / 'solid-fuel-stove.js'
-    pellet = ROOT / 'src' / 'pellet-stove.js'
-    heatpump = ROOT / 'src' / 'heat-pump-stove.js'
-    gas = ROOT / 'src' / 'gas-boiler.js'
-    electric = ROOT / 'src' / 'electric-boiler.js'
-    fireplace = ROOT / 'src' / 'fireplace.js'
-    for f in (library, tank, solid, pellet, heatpump, gas, electric, fireplace, extra):
-        if not f.is_file():
-            raise SystemExit(f'Missing {f.relative_to(ROOT)}')
-    DEST.write_text(header + transformed + '\n\n' + library.read_text(encoding='utf-8') + '\n\n' + tank.read_text(encoding='utf-8') + '\n\n' + solid.read_text(encoding='utf-8') + '\n\n' + pellet.read_text(encoding='utf-8') + '\n\n' + heatpump.read_text(encoding='utf-8') + '\n\n' + gas.read_text(encoding='utf-8') + '\n\n' + electric.read_text(encoding='utf-8') + '\n\n' + fireplace.read_text(encoding='utf-8') + '\n\n' + extra.read_text(encoding='utf-8'), encoding='utf-8')
+    # Editable SVG files are the single artwork source for all modern icons.
+    names = {
+        'solidFuel': 'solid-fuel-stove',
+        'pellet': 'pellet-stove',
+        'heatPump': 'heat-pump-stove',
+        'gasBoiler': 'gas-boiler',
+        'electricBoiler': 'electric-boiler',
+        'fireplace': 'fireplace',
+    }
+    assets = []
+    for key, name in names.items():
+        path = ROOT / 'src' / 'icons' / (name + '.svg')
+        if not path.is_file():
+            raise SystemExit(f'Missing SVG asset: {path.relative_to(ROOT)}')
+        xml = path.read_text(encoding='utf-8')
+        try:
+            root = ET.fromstring(xml)
+        except ET.ParseError as exc:
+            raise SystemExit(f'Invalid SVG: {path.relative_to(ROOT)}: {exc}') from exc
+        if root.tag != '{http://www.w3.org/2000/svg}svg':
+            raise SystemExit(f'Unexpected SVG root: {path.relative_to(ROOT)}')
+        matched = re.fullmatch(r'\s*(?:<\?xml[^>]*>\s*)?<svg\b[^>]*>([\s\S]*)</svg>\s*', xml)
+        if not matched:
+            raise SystemExit(f'Invalid SVG document: {path.relative_to(ROOT)}')
+        if re.search(r'__[A-Z0-9_]+__', matched.group(1)):
+            raise SystemExit(f'Unresolved SVG markers: {path.relative_to(ROOT)}')
+        assets.append('  ' + key + ': ' + json.dumps(matched.group(1), ensure_ascii=False))
+    embedded = 'const HASSStudioIconTemplates = Object.freeze({\n' + ',\n'.join(assets) + '\n});\n'
+
+    source_names = (
+        'ha-state.js', 'animation-state.js',
+        'warmwasser-shapes.js', 'studio-tank.js', 'svg-template.js',
+        'solid-fuel-stove.js', 'pellet-stove.js', 'heat-pump-stove.js',
+        'gas-boiler.js', 'electric-boiler.js', 'fireplace.js',
+        'device-registry.js', 'studio-layout.js', 'studio-canvas.js',
+        'studio-inspector.js', 'studio-library.js', 'studio-custom.js',
+    )
+    paths = [ROOT / 'src' / name for name in source_names]
+    for path in paths:
+        if not path.is_file():
+            raise SystemExit(f'Missing source: {path.relative_to(ROOT)}')
+    parts = [header + transformed]
+    for path in paths:
+        if path.name == 'solid-fuel-stove.js':
+            parts.append(embedded)
+        parts.append(path.read_text(encoding='utf-8'))
+    DEST.write_text('\n\n'.join(parts), encoding='utf-8')
     print(f'Generated {DEST.relative_to(ROOT)} ({DEST.stat().st_size} bytes)')
 
 
