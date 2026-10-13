@@ -186,7 +186,7 @@
         grip.addEventListener('pointercancel',end);
       });
     }
-    let selection=null,drag=null,zoom=1;
+    let selection=null,drag=null,zoom=1,selectedPartId=null;
     const get=()=>normalized(this._config);
     const commit=(model)=>{
       this._config={...this._config,studio_layout:model};
@@ -199,7 +199,7 @@
     };
     const renderProps=HASSStudioEditorInspector.create({
       editor:this,L,properties,esc,opts,registry,pickLang,get,selectedObject,
-      getSelection:()=>selection,variantShape
+      getSelection:()=>selection,getSelectedPartId:()=>selectedPartId,variantShape
     });
     const render=()=>{
       stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
@@ -208,7 +208,7 @@
       renderProps();
     };
     const setSelected=(type,id)=>{
-      selection={type,id};render();
+      selection={type,id};selectedPartId=type==='node'?get().nodes.find(n=>n.id===id)?.parts?.[0]?.id||null:null;render();
     };
     const point=(ev,svg)=>{
       const p=svg.createSVGPoint();p.x=ev.clientX;p.y=ev.clientY;
@@ -290,7 +290,7 @@
       const model=get();
       if(selection.type==='node')model.nodes=model.nodes.filter(n=>n.id!==selection.id);
       else model.pipes=model.pipes.filter(n=>n.id!==selection.id);
-      selection=null;commit(model);render();
+      selection=null;selectedPartId=null;commit(model);render();
     });
     root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add,button.dataset.variant||'')));
     root.querySelectorAll('[data-add-preset]').forEach(button=>button.addEventListener('click',()=>create('boiler',button.dataset.addPreset)));
@@ -366,6 +366,12 @@
       const button=event.target.closest('button');
       if(!button||!selection)return;
       const model=get(),obj=selectedObject(model);if(!obj)return;
+      if(button.hasAttribute('data-select-part')){
+        if(obj.parts?.some(part=>part.id===button.dataset.selectPart)){
+          selectedPartId=button.dataset.selectPart;renderProps();
+        }
+        return;
+      }
       const index=Number(button.dataset.deletePart||button.dataset.deleteAccessory||button.dataset.deleteEntity);
       if(button.hasAttribute('data-layer-up')&&obj.parts){
         const i=Number(button.dataset.layerUp);
@@ -375,16 +381,20 @@
         const i=Number(button.dataset.layerDown);
         if(i>0&&i<obj.parts.length)[obj.parts[i],obj.parts[i-1]]=[obj.parts[i-1],obj.parts[i]];
         else return;
-      }else if(button.hasAttribute('data-delete-part'))obj.parts.splice(index,1);
+      }else if(button.hasAttribute('data-delete-part')){
+        const removed=obj.parts.splice(index,1)[0];
+        if(removed?.id===selectedPartId)selectedPartId=obj.parts[Math.min(index,obj.parts.length-1)]?.id||null;
+      }
       else if(button.hasAttribute('data-delete-accessory'))obj.accessories.splice(index,1);
       else if(button.hasAttribute('data-delete-entity'))obj.entities.splice(index,1);
       else if(button.dataset.addPart){
         if(obj.parts.length>=40)return;
         const kind=obj.type==='solar'?'sensor':button.dataset.addPart;
         const sensorCount=obj.parts.filter(part=>part.kind==='sensor').length+1;
-        obj.parts.push({id:freshId('i'),kind,label:obj.type==='solar'?'Kolektor':kind==='sensor'?'T'+sensorCount:'',
+        const newPart={id:freshId('i'),kind,label:obj.type==='solar'?'Kolektor':kind==='sensor'?'T'+sensorCount:'',
           side:obj.type==='solar'?'right':'left',height:obj.type==='solar'?80:50,
-          display_scale:1,variant:'warmwasser',entity:'',x:50,length:58,width:60,turns:12,power:75,mode:'auto',flow_mode:'auto',flow_direction:'forward',flow_speed:1,permeability:kind==='baffle_horizontal'?.35:0,container:'main',power_entity:''});
+          display_scale:1,variant:'warmwasser',entity:'',x:50,length:58,width:60,turns:12,power:75,mode:'auto',flow_mode:'auto',flow_direction:'forward',flow_speed:1,permeability:kind==='baffle_horizontal'?.35:0,container:'main',power_entity:''};
+        obj.parts.push(newPart);selectedPartId=newPart.id;
       }else if(button.dataset.addAccessory){
         if(obj.accessories.length>=20)return;
         obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,label:'',position:50,entity:''});
@@ -405,19 +415,20 @@
       if(event.button!==0)return;
       const hit=event.target.closest?.('.ss-handle');
       if(hit){
-        selection={type:'pipe',id:hit.dataset.id};
+        selection={type:'pipe',id:hit.dataset.id};selectedPartId=null;
         drag={type:'point',id:hit.dataset.id,index:Number(hit.dataset.point),pointer:event.pointerId};
       }else{
         const node=event.target.closest?.('.ss-node');
         if(node){
           selection={type:'node',id:node.dataset.id};
+          selectedPartId=get().nodes.find(n=>n.id===node.dataset.id)?.parts?.[0]?.id||null;
           const model=get(),obj=selectedObject(model),svg=stage.querySelector('svg'),p=point(event,svg);
           if(!obj)return;
           drag={type:'node',id:obj.id,offsetX:p.x-obj.x,offsetY:p.y-obj.y,pointer:event.pointerId};
         }else{
           const pipe=event.target.closest?.('.ss-pipe');
           if(pipe){setSelected('pipe',pipe.dataset.id);return;}
-          selection=null;render();return;
+          selection=null;selectedPartId=null;render();return;
         }
       }
       stage.querySelector('svg')?.setPointerCapture(event.pointerId);
