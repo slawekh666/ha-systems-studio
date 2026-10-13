@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1350" aria-label="Gas boiler">
+<defs>
+        <linearGradient id="bodyGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f8fbff"/>
+          <stop offset=".24" stop-color="#eef2f7"/>
+          <stop offset=".58" stop-color="#d7dde7"/>
+          <stop offset="1" stop-color="#c3cbd7"/>
+        </linearGradient>
+        <linearGradient id="bodySide" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#cdd5e0"/>
+          <stop offset=".5" stop-color="#eef4fb"/>
+          <stop offset="1" stop-color="#b6c0ce"/>
+        </linearGradient>
+        <linearGradient id="metalGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#2b3748"/>
+          <stop offset=".3" stop-color="#7f92ab"/>
+          <stop offset=".55" stop-color="#e4edf8"/>
+          <stop offset="1" stop-color="#253344"/>
+        </linearGradient>
+        <linearGradient id="darkScreen" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#07101b"/>
+          <stop offset="1" stop-color="#02070f"/>
+        </linearGradient>
+        <linearGradient id="screenReflect" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffffff" stop-opacity=".15"/>
+          <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="flameOuter" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#90f5ff"/>
+          <stop offset=".45" stop-color="#19b8ff"/>
+          <stop offset="1" stop-color="#0056ff"/>
+        </linearGradient>
+        <linearGradient id="flameInner" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#e9ffff"/>
+          <stop offset="1" stop-color="#3fd7ff"/>
+        </linearGradient>
+        <filter id="blueGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="10"/></filter>
+        <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"/></filter>
+      </defs>
+
+      <g id="aura">
+        <path id="gasAuraOutline" d="M230 92 H874 Q940 92 940 158 V1138 Q940 1204 874 1204 H230 Q164 1204 164 1138 V158 Q164 92 230 92 Z" fill="none" stroke="#2ca7ff" stroke-opacity="0.12" stroke-width="18" filter="url(#blueGlow)"/>
+      </g>
+
+      <g id="flueTop">
+        <rect x="495" y="52" width="136" height="58" rx="18" fill="url(#metalGrad)" stroke="#d4ebff" stroke-width="4"/>
+        <rect x="516" y="28" width="94" height="36" rx="12" fill="url(#metalGrad)" stroke="#d4ebff" stroke-width="3"/>
+      </g>
+
+      <g id="boilerBody">
+        <path d="M230 92 H874 Q940 92 940 158 V1138 Q940 1204 874 1204 H230 Q164 1204 164 1138 V158 Q164 92 230 92 Z" fill="url(#bodyGrad)" stroke="#f8fbff" stroke-width="4"/>
+        <path d="M180 154 Q180 106 228 106 H252 V1136 H228 Q180 1136 180 1088 Z" fill="#f0f5fa" opacity=".72"/>
+        <path d="M884 106 H904 Q924 106 932 122 Q940 138 940 164 V1128 Q940 1182 894 1194 L884 1196 Z" fill="#bfc9d6" opacity=".72"/>
+        <path d="M260 116 C352 108 680 104 848 120" fill="none" stroke="#ffffff" stroke-opacity=".42" stroke-width="6" stroke-linecap="round"/>
+        <path d="M364 130 L620 858" stroke="#ffffff" stroke-opacity=".18" stroke-width="5"/>
+        <line x1="164" y1="988" x2="940" y2="988" stroke="#8093ac" stroke-opacity=".5" stroke-width="4"/>
+      </g>
+
+      <g id="frontIcon" transform="translate(-60 0)" opacity="0.90">
+        <g id="frontIconGlow" opacity="0.32">
+          <path d="M584 560 C578 606 566 642 546 674 C522 712 516 746 528 776 C544 816 578 838 620 834 C668 830 706 794 708 746 C710 706 690 674 658 634 C632 602 608 576 584 560 Z" fill="#1fa6ff" filter="url(#blueGlow)"/>
+        </g>
+        <path d="M584 560 C578 606 566 642 546 674 C522 712 516 746 528 776 C544 816 578 838 620 834 C668 830 706 794 708 746 C710 706 690 674 658 634 C632 602 608 576 584 560 Z" fill="url(#flameOuter)" stroke="#88f5ff" stroke-width="4"/>
+        <path d="M592 600 C590 632 580 658 564 684 C546 712 544 738 554 760 C566 788 590 802 620 800 C652 798 678 772 680 744 C682 716 668 692 646 664 C628 642 610 620 592 600 Z" fill="url(#flameInner)" opacity=".96"/>
+        <path d="M586 658 C574 684 572 712 578 736 C586 716 598 694 614 678 C604 668 594 662 586 658 Z" fill="#ffffff" opacity=".72"/>
+      </g>
+
+      <g id="displayFrame">
+        <rect x="428" y="1040" width="292" height="114" rx="18" fill="#d9e4ef" stroke="#4d627b" stroke-width="3"/>
+        <rect x="440" y="1052" width="268" height="90" rx="14" fill="url(#darkScreen)" stroke="#1eb5ff" stroke-opacity=".6" stroke-width="2.6"/>
+        <path d="M448 1060 H570 L548 1140 H448 Z" fill="url(#screenReflect)"/>
+
+        <line x1="528" y1="1062" x2="528" y2="1132" stroke="#13344e" stroke-opacity=".85" stroke-width="2"/>
+        <line x1="620" y1="1062" x2="620" y2="1132" stroke="#13344e" stroke-opacity=".85" stroke-width="2"/>
+
+        <g id="gasBarsGroup">
+          <rect id="barLevel4" x="456" y="1068" width="58" height="10" rx="5" fill="#ff3434" opacity="0.16"/>
+          <rect id="barLevel3" x="464" y="1086" width="50" height="10" rx="5" fill="#ff982a" opacity="0.16"/>
+          <rect id="barLevel2" x="472" y="1104" width="42" height="10" rx="5" fill="#59d44e" opacity="1"/>
+          <rect id="barLevel1" x="480" y="1122" width="34" height="10" rx="5" fill="#31a8ff" opacity="1"/>
+        </g>
+
+        <g id="displayFlameGroup" transform="translate(575 1132) scale(0.2857) translate(-596 -1154)" opacity="1">
+          <g id="displayFlameGlow" opacity="0.27">
+            <path d="M575 1122 C572 1110 572 1097 575 1082 C579 1062 587 1044 596 1028 C605 1044 613 1062 617 1082 C620 1097 620 1110 617 1122 C613 1138 605 1150 596 1154 C587 1150 579 1138 575 1122 Z" fill="#18a8ff" filter="url(#softGlow)"/>
+          </g>
+          <path id="displayFlameOuter" d="M575 1122 C572 1110 572 1097 575 1082 C579 1062 587 1044 596 1028 C605 1044 613 1062 617 1082 C620 1097 620 1110 617 1122 C613 1138 605 1150 596 1154 C587 1150 579 1138 575 1122 Z" fill="url(#flameOuter)"/>
+          <path id="displayFlameInner" d="M581 1120 C579 1111 579 1100 581 1088 C584 1072 590 1058 596 1046 C602 1058 608 1072 611 1088 C613 1100 613 1111 611 1120 C608 1132 602 1141 596 1144 C590 1141 584 1132 581 1120 Z" fill="url(#flameInner)" opacity=".94"/>
+          <path d="M588 1099 C588 1087 591 1076 596 1066 C594 1081 594 1093 595 1104 C592 1102 590 1100 588 1099 Z" fill="#ffffff" opacity=".62"/>
+        </g>
+
+        <g id="tempGroup">
+          <text x="640" y="1080" font-size="11" fill="#76caff" font-family="monospace">TEMP</text>
+          <text id="tempValueDisplay" x="640" y="1124" font-size="34" fill="#eff9ff" font-family="monospace" font-weight="700">65.0°</text>
+          <text x="694" y="1122" font-size="16" fill="#7fd2ff" font-family="monospace">C</text>
+        </g>
+      </g>
+
+      <g id="bottomConnectors">
+        <g transform="translate(296 1214)">
+          <rect x="0" y="0" width="64" height="74" rx="10" fill="url(#metalGrad)" stroke="#d4ebff" stroke-width="3"/>
+          <rect x="8" y="60" width="48" height="12" rx="4" fill="#1fb4ff" opacity=".7" filter="url(#softGlow)"/>
+        </g>
+        <g transform="translate(680 1214)">
+          <rect x="0" y="0" width="64" height="74" rx="10" fill="url(#metalGrad)" stroke="#d4ebff" stroke-width="3"/>
+          <rect x="8" y="60" width="48" height="12" rx="4" fill="#1fb4ff" opacity=".7" filter="url(#softGlow)"/>
+        </g>
+      </g>
+</svg>

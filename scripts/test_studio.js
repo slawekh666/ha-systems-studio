@@ -265,7 +265,13 @@ console.log('OK: modern heat pump power and fan state.');
 
 // Modern gas boiler: measured modulation %, temperature and no invented values.
 const gasSrc=fs.readFileSync('src/gas-boiler.js','utf8');
-const gas=vm.runInNewContext(gasSrc+'\nHASSStudioGasBoiler;',{});
+const gasXml=fs.readFileSync('src/icons/gas-boiler.svg','utf8');
+const svgLib=fs.readFileSync('src/svg-template.js','utf8');
+assert.match(gasXml,/<svg xmlns="http:\/\/www\\.w3\\.org\/2000\/svg"/);
+assert.doesNotMatch(gasXml,/__GAS_/);
+const gasAssets='const HASSStudioIconTemplates = {gasBoiler: HASSStudioSvg.fragment(' +
+  JSON.stringify(gasXml) + ')};';
+const gas=vm.runInNewContext(svgLib+'\n'+gasAssets+'\n'+gasSrc+'\nHASSStudioGasBoiler;',{});
 const gasNode={id:'gas1',type:'boiler',variant:'gas_modern',entity:'sensor.boiler',gas_draw_entity:'sensor.mod',gas_glow:62,width_scale:1,height_scale:1};
 const gasState={states:{'sensor.boiler':{state:'65',attributes:{unit_of_measurement:'°C'}},'sensor.mod':{state:'42',attributes:{unit_of_measurement:'%'}},'binary_sensor.burner':{state:'off'}}};
 assert.equal(gas.temperature(gasState,'sensor.boiler'),65);
@@ -277,6 +283,8 @@ const gasSvg=gas.render(gasNode,gasState);
 assert.match(gasSvg,/65\.0°/);
 assert.match(gasSvg,/data-modulation="42\.0" data-burning="on"/);
 assert.match(gasSvg,/id="ssgasgas1bodyGrad"/);
+assert.match(gasSvg,/id="ssgasgas1gasAuraOutline"/);
+assert.match(gasSvg,/id="ssgasgas1frontIcon" transform="translate\(-60 0\)"/);
 assert.match(gasSvg,/id="ssgasgas1barLevel1"[^>]*opacity="1"/);
 assert.match(gasSvg,/id="ssgasgas1barLevel2"[^>]*opacity="1"/);
 assert.match(gasSvg,/id="ssgasgas1barLevel3"[^>]*opacity="0\.16"/);
