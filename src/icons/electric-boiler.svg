@@ -75,7 +75,7 @@
         </g>
 
         <g id="ringGroup">
-          <circle id="ringBg" stroke-dasharray="281.35 389.56" cx="560" cy="960" r="62" fill="none" stroke="#203043" stroke-width="16" stroke-linecap="round" transform="rotate(-218.4 560 960)" stroke-dasharray="281.35 389.56"/>
+          <circle id="ringBg" cx="560" cy="960" r="62" fill="none" stroke="#203043" stroke-width="16" stroke-linecap="round" transform="rotate(-218.4 560 960)" stroke-dasharray="281.35 389.56"/>
           <g id="powerRing"></g>
           <g id="tickMarks" opacity=".55"></g>
           <circle id="knobOuter" cx="560" cy="960" r="48" fill="#09111b" stroke="#8dc8ff" stroke-opacity=".28" stroke-width="3"/>
