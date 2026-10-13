@@ -5,12 +5,19 @@
 const HASSStudioDeviceRegistry = (() => {
   const categories = Object.freeze({
     heat_sources: {pl:'Źródła ciepła',en:'Heat sources'},
-    tanks: {pl:'Zbiorniki',en:'Tanks'},
+    tanks: {pl:'Zbiorniki i wymienniki',en:'Tanks and heat exchangers'},
     solar: {pl:'Solary',en:'Solar thermal'},
-    hydraulics: {pl:'Pompy i zawory',en:'Pumps and valves'},
-    measurements: {pl:'Czujniki',en:'Sensors'},
+    hydraulics: {pl:'Pompy, zawory i osprzęt',en:'Pumps, valves and accessories'},
+    measurements: {pl:'Czujniki i pomiary',en:'Sensors and measurements'},
     connections: {pl:'Rury i połączenia',en:'Pipes and connections'}
   });
+  // MDI identifiers refer to native Home Assistant icons, not custom SVG assets.
+  const categoryIcons=Object.freeze({heat_sources:'mdi:fire',tanks:'mdi:water-boiler',solar:'mdi:white-balance-sunny',
+    hydraulics:'mdi:pump',measurements:'mdi:thermometer',connections:'mdi:pipe'});
+  const familyIcons=Object.freeze({solid_fuel_boiler:'mdi:fire',pellet_boiler:'mdi:fire',gas_boiler:'mdi:fire',
+    electric_boiler:'mdi:flash',oil_boiler:'mdi:fire',heat_pump:'mdi:heat-pump',fireplace:'mdi:fireplace',
+    tank:'mdi:water-boiler',solar_collector:'mdi:white-balance-sunny',pump:'mdi:pump',valve:'mdi:valve',
+    sensor:'mdi:thermometer',pipe:'mdi:pipe'});
   // Common logical identity, independent from the selected drawing.
   const families = Object.freeze({
     solid_fuel_boiler:{category:'heat_sources',pl:'Kocioł na drewno / węgiel',en:'Wood / coal boiler',fuels:['wood','coal'],entities:['entity','burner_entity'],animations:['combustion']},
@@ -94,23 +101,30 @@ const HASSStudioDeviceRegistry = (() => {
   const libraryPresets = Object.freeze([
     ['boiler','solid_fuel','solid_fuels'],
     ['boiler','pellet_modern','solid_fuels'],
-    ['boiler','gas_modern'],
-    ['boiler','electric_modern'],
-    ['boiler','oil'],
-    ['boiler','heatpump_modern'],
-    ['boiler','fireplace_modern'],
-    ['tank','modular'],
-    ['solar','flat'],
-    ['pump','circulation'],
-    ['pump','inline'],
-    ['valve','two_way'],
-    ['valve','three_way'],
-    ['sensor','temperature'],
-    ['sensor','pressure'],
-    ['pipe',null]
+    ['boiler','gas_modern','other_heat'],
+    ['boiler','electric_modern','other_heat'],
+    ['boiler','oil','other_heat'],
+    ['boiler','heatpump_modern','other_heat'],
+    ['boiler','fireplace_modern','other_heat'],
+    ['tank','modular','tank_group'],
+    ['solar','flat','solar_group'],
+    ['pump','circulation','pump_group'],
+    ['pump','inline','pump_group'],
+    ['valve','two_way','valve_group'],
+    ['valve','three_way','valve_group'],
+    ['sensor','temperature','sensor_group'],
+    ['sensor','pressure','sensor_group'],
+    ['pipe',null,'pipe_group']
   ]);
   const subgroups = Object.freeze({
-    solid_fuels: Object.freeze({pl:'Kotły na paliwo stałe',en:'Solid-fuel boilers'})
+    solid_fuels: Object.freeze({pl:'Kotły na paliwo stałe',en:'Solid-fuel boilers',icon:'mdi:fire'}),
+    other_heat: Object.freeze({pl:'Pozostałe źródła ciepła',en:'Other heat sources',icon:'mdi:fireplace'}),
+    tank_group: Object.freeze({pl:'Zbiorniki',en:'Tanks',icon:'mdi:water-boiler'}),
+    solar_group: Object.freeze({pl:'Kolektory solarne',en:'Solar collectors',icon:'mdi:white-balance-sunny'}),
+    pump_group: Object.freeze({pl:'Pompy',en:'Pumps',icon:'mdi:pump'}),
+    valve_group: Object.freeze({pl:'Zawory',en:'Valves',icon:'mdi:valve'}),
+    sensor_group: Object.freeze({pl:'Czujniki',en:'Sensors',icon:'mdi:thermometer'}),
+    pipe_group: Object.freeze({pl:'Rury',en:'Pipes',icon:'mdi:pipe'})
   });
   const presetNames = Object.freeze({
     'pump:circulation':{pl:'Pompa obiegowa',en:'Circulation pump'},
@@ -130,7 +144,7 @@ const HASSStudioDeviceRegistry = (() => {
       || choice.device[language];
     return Object.freeze({
       type,variant,category:choice.category,family:choice.family||'pipe',
-      subgroup:subgroup||null,label,icon:iconFor(type)
+      subgroup:subgroup||null,label,icon:familyIcons[choice.family]||'mdi:cube-outline'
     });
   });
   const variantOptionsForNode = (node, lang='pl') => {
@@ -144,7 +158,7 @@ const HASSStudioDeviceRegistry = (() => {
     id,category:families[id].category,label:families[id][lang==='en'?'en':'pl'],
     variants:types.flatMap(type => variantsFor(type).filter(item=>item.family===id).map(item=>item.id))
   }));
-  return Object.freeze({categories,families,listTypes,variantsFor,isNodeType,
+  return Object.freeze({categories,categoryIcons,families,listTypes,variantsFor,isNodeType,
     isVariant,defaultVariant,normalizeVariant,iconFor,variantOptions,variantOptionsForNode,
     resolve,catalog,subgroups,libraryEntries});
 })();

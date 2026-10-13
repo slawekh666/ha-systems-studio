@@ -122,18 +122,22 @@
       '.ss-props{border-right:none;border-left:1px solid var(--divider-color,#555);min-width:0;overflow-x:hidden}'+
       '.ss-library h3,.ss-props h3{font-size:12px;letter-spacing:.06em;color:var(--secondary-text-color);margin:0 0 12px}'+
       '.ss-library button{display:flex;align-items:center;gap:12px;width:100%;margin-bottom:8px;text-align:left;font-size:13px}'+
-      '.ss-library button span{font-size:19px;display:inline-block;width:24px;text-align:center}'+
+      '.ss-library ha-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 20px;width:20px;height:20px;--mdc-icon-size:20px;color:var(--secondary-text-color,#9eacbb)}'+
+       '.ss-library .ss-lib-chevron{flex:0 0 16px;width:16px;height:16px;--mdc-icon-size:16px;transition:transform .15s}'+
+       '.ss-lib-group:not([open])>summary .ss-lib-chevron,.ss-lib-subgroup:not([open])>summary .ss-lib-chevron{transform:rotate(-90deg)}'+
+       '.ss-library summary::-webkit-details-marker{display:none}.ss-library summary{list-style:none}'+
       '.ss-library .ss-lib-group{border:1px solid var(--divider-color,#555);border-radius:8px;margin:0 0 8px;overflow:hidden}'+
-      '.ss-library .ss-lib-group>summary,.ss-library .ss-lib-subgroup>summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:10px 8px;font-size:12px;font-weight:600;list-style-position:inside}'+
+      '.ss-library .ss-lib-group>summary,.ss-library .ss-lib-subgroup>summary{cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 8px;font-size:12px;font-weight:600;min-width:0}'+
       '.ss-library .ss-lib-group>summary{background:var(--secondary-background-color,#18222e)}'+
-      '.ss-library .ss-lib-subgroup{margin:4px 0 8px;border-left:2px solid var(--divider-color,#555)}'+
+      '.ss-library .ss-lib-subgroup{margin:4px 0 8px;border-left:1px solid var(--divider-color,#555);padding-left:3px}'+
+       '.ss-library .ss-lib-title{flex:1;min-width:0;overflow-wrap:anywhere}'+
       '.ss-library .ss-lib-subgroup>summary{font-size:11px;padding:8px}'+
       '.ss-library .ss-lib-contents{padding:6px}'+
       '.ss-library .ss-lib-count{color:var(--secondary-text-color);font-weight:400}'+
       '.ss-library button.ss-lib-item{gap:8px;padding:8px 6px;margin:0 0 4px;border-color:transparent;background:transparent;white-space:normal}'+
       '.ss-library button.ss-lib-item:hover,.ss-library button.ss-lib-item:focus-visible{background:var(--secondary-background-color,#18222e);border-color:var(--primary-color,#168bce)}'+
       '.ss-library .ss-lib-label{font-size:12px;line-height:1.3;display:block;min-width:0;flex:1;overflow-wrap:anywhere}'+
-      '.ss-library .ss-lib-icon{flex:0 0 22px}'+
+      '.ss-library .ss-lib-icon{flex:0 0 20px}'+
       '.ss-canvas{min-width:0;min-height:0;overflow:auto;background:var(--secondary-background-color,#18222e);padding:16px}'+
       '.ss-stage{width:max-content;max-width:none}.ss-svg{display:block;width:1200px;height:720px;max-height:none;padding:0;touch-action:none}'+
       '.ss-svg-editor .ss-node{cursor:grab}.ss-svg-editor .ss-pipe-hit{cursor:pointer;pointer-events:stroke}.ss-handle{cursor:move}'+
@@ -149,7 +153,25 @@
       '.ss-props .ss-add-parts button{flex:0 1 auto;max-width:100%;white-space:normal;overflow-wrap:anywhere}'+
       '.ss-part-list{display:flex;flex-direction:column;gap:4px;max-height:210px;overflow-y:auto}'+
       '.ss-props button.ss-part-pick{text-align:left;padding:8px;white-space:normal;overflow-wrap:anywhere;font-size:12px}'+
-      '.ss-part-pick.ss-part-active{outline:2px solid var(--primary-color,#168bce)}'+
+      '.ss-inspector-heading{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;margin-bottom:12px;overflow-wrap:anywhere}'+
+       '.ss-inspector-heading ha-icon{--mdc-icon-size:22px;color:var(--primary-color,#168bce)}'+
+       '.ss-section-details{border:1px solid var(--divider-color,#555);border-radius:9px;margin-bottom:10px;overflow:hidden}'+
+       '.ss-section-details>summary{display:flex;align-items:center;gap:8px;list-style:none;padding:11px;cursor:pointer;background:var(--secondary-background-color,#18222e);font-weight:600;font-size:12px}'+
+       '.ss-section-details>summary::-webkit-details-marker{display:none}'+
+       '.ss-section-details>summary span:first-of-type{flex:1}'+
+       '.ss-section-details>summary ha-icon{--mdc-icon-size:18px;width:18px;height:18px;color:var(--secondary-text-color)}'+
+       '.ss-section-details:not([open])>summary ha-icon:last-child{transform:rotate(-90deg)}'+
+       '.ss-section-details>section{border:0;padding:10px;gap:10px}'+
+       '.ss-part-count{color:var(--secondary-text-color);font-weight:400}'+
+       '.ss-part-cards{display:grid;gap:6px}'+
+       '.ss-part-card{border:1px solid var(--divider-color,#555);border-radius:8px;overflow:hidden;min-width:0}'+
+       '.ss-part-card.ss-part-active{border-color:var(--primary-color,#168bce)}'+
+       '.ss-props button.ss-part-pick{display:flex;align-items:center;gap:8px;text-align:left;width:100%;border:0;border-radius:0;background:var(--card-background-color,#29323c)}'+
+       '.ss-part-pick ha-icon{--mdc-icon-size:18px;flex:0 0 18px;color:var(--secondary-text-color)}'+
+       '.ss-part-caption{display:flex;flex-direction:column;flex:1;min-width:0;gap:3px;overflow-wrap:anywhere}'+
+       '.ss-part-caption small{font-size:10px;color:var(--secondary-text-color)}'+
+       '.ss-part-fields{display:grid;gap:10px;padding:10px;border-top:1px solid var(--divider-color,#555)}'+
+       '.ss-part-actions strong{font-size:11px}'+
       '.ss-selected{outline:1px solid var(--primary-color)}'+
       '.ss-preview{border:1px solid var(--divider-color,#555);border-radius:8px;display:grid;place-items:center;padding:8px}'+
       '.ss-entities{max-height:210px;overflow-y:auto;border:1px solid var(--divider-color,#555);border-radius:8px}'+
@@ -189,7 +211,7 @@
         grip.addEventListener('pointercancel',end);
       });
     }
-    let selection=null,drag=null,zoom=1,selectedPartId=null;
+    let selection=null,drag=null,zoom=1,selectedPartId=null,expandedPartId=null;
     const get=()=>normalized(this._config);
     const commit=(model)=>{
       this._config={...this._config,studio_layout:model};
@@ -202,7 +224,7 @@
     };
     const renderProps=HASSStudioEditorInspector.create({
       editor:this,L,properties,esc,opts,registry,pickLang,get,selectedObject,
-      getSelection:()=>selection,getSelectedPartId:()=>selectedPartId,variantShape
+      getSelection:()=>selection,getSelectedPartId:()=>selectedPartId,getExpandedPartId:()=>expandedPartId,variantShape
     });
     const render=()=>{
       stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
@@ -211,7 +233,7 @@
       renderProps();
     };
     const setSelected=(type,id)=>{
-      selection={type,id};selectedPartId=type==='node'?get().nodes.find(n=>n.id===id)?.parts?.[0]?.id||null:null;render();
+      selection={type,id};selectedPartId=type==='node'?get().nodes.find(n=>n.id===id)?.parts?.[0]?.id||null:null;expandedPartId=selectedPartId;render();
     };
     const point=(ev,svg)=>{
       const p=svg.createSVGPoint();p.x=ev.clientX;p.y=ev.clientY;
@@ -293,7 +315,7 @@
       const model=get();
       if(selection.type==='node')model.nodes=model.nodes.filter(n=>n.id!==selection.id);
       else model.pipes=model.pipes.filter(n=>n.id!==selection.id);
-      selection=null;selectedPartId=null;commit(model);render();
+      selection=null;selectedPartId=null;expandedPartId=null;commit(model);render();
     });
     root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add,button.dataset.variant||'')));
     root.querySelectorAll('[data-add-preset]').forEach(button=>button.addEventListener('click',()=>create('boiler',button.dataset.addPreset)));
@@ -303,24 +325,20 @@
       const model=get(),obj=selectedObject(model);if(!obj)return;
       const index=Number(el.dataset.index);
       const val=el.value;
-      if(key==='scale_mode'&&obj.type==='tank'&&obj.variant==='modular'){
-        if(val==='free'&&obj.scale_mode!=='free'){
-          obj.width_scale=clamp(obj.scale,0.5,2.4,1);
-          obj.height_scale=clamp(obj.scale,0.5,2.4,1);
-          obj.scale=1;
-        }else if(val!=='free'&&obj.scale_mode==='free'){
-          obj.scale=clamp(Math.sqrt(obj.width_scale*obj.height_scale),0.5,2.4,1);
-          obj.width_scale=1;obj.height_scale=1;
-        }
-        obj.scale_mode=val==='free'?'free':'proportional';
+      if(key==='aspect_locked'&&obj.type==='tank'&&obj.variant==='modular'){
+        obj.aspect_locked=val==='true';
       }else if(['width_scale','height_scale'].includes(key)&&obj.type==='tank'&&obj.variant==='modular'){
-        if(obj.scale_mode!=='free'){
-          obj.width_scale=obj.scale;
-          obj.height_scale=obj.scale;
-          obj.scale=1;
-          obj.scale_mode='free';
+        const previous=obj[key];
+        const next=clamp(val,.5,2.4,previous);
+        if(obj.aspect_locked){
+          const other=key==='width_scale'?'height_scale':'width_scale';
+          const ratio=previous>0?next/previous:1;
+          const companion=obj[other]*ratio;
+          if(companion>=.5&&companion<=2.4)obj[other]=companion;
+          else {obj.aspect_locked=false;}
         }
-        obj[key]=clamp(val,.5,2.4,obj[key]);
+        obj[key]=next;
+        obj.scale_mode='free';
       }else if(['width_scale','height_scale'].includes(key)&&obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)){
         // Independent from the proportional whole-node scale.
         obj[key]=clamp(val,.5,2.4,obj[key]);
@@ -369,9 +387,14 @@
       const button=event.target.closest('button');
       if(!button||!selection)return;
       const model=get(),obj=selectedObject(model);if(!obj)return;
+      if(button.dataset.action==='reset-tank-aspect' && obj.type==='tank'&&obj.variant==='modular'){
+        obj.width_scale=1;obj.height_scale=1;obj.scale_mode='free';obj.aspect_locked=true;
+        commit(model);render();return;
+      }
       if(button.hasAttribute('data-select-part')){
         if(obj.parts?.some(part=>part.id===button.dataset.selectPart)){
-          selectedPartId=button.dataset.selectPart;renderProps();
+          selectedPartId=button.dataset.selectPart;
+          expandedPartId=expandedPartId===selectedPartId?null:selectedPartId;renderProps();
         }
         return;
       }
@@ -386,7 +409,7 @@
         else return;
       }else if(button.hasAttribute('data-delete-part')){
         const removed=obj.parts.splice(index,1)[0];
-        if(removed?.id===selectedPartId)selectedPartId=obj.parts[Math.min(index,obj.parts.length-1)]?.id||null;
+        if(removed?.id===selectedPartId){selectedPartId=obj.parts[Math.min(index,obj.parts.length-1)]?.id||null;expandedPartId=selectedPartId;}
       }
       else if(button.hasAttribute('data-delete-accessory'))obj.accessories.splice(index,1);
       else if(button.hasAttribute('data-delete-entity'))obj.entities.splice(index,1);
@@ -397,7 +420,7 @@
         const newPart={id:freshId('i'),kind,label:obj.type==='solar'?'Kolektor':kind==='sensor'?'T'+sensorCount:'',
           side:obj.type==='solar'?'right':'left',height:obj.type==='solar'?80:50,
           display_scale:1,variant:'warmwasser',entity:'',x:50,length:58,width:60,turns:12,power:75,mode:'auto',flow_mode:'auto',flow_direction:'forward',flow_speed:1,permeability:kind==='baffle_horizontal'?.35:0,container:'main',power_entity:''};
-        obj.parts.push(newPart);selectedPartId=newPart.id;
+        obj.parts.push(newPart);selectedPartId=newPart.id;expandedPartId=newPart.id;
       }else if(button.dataset.addAccessory){
         if(obj.accessories.length>=20)return;
         obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,label:'',position:50,entity:''});
@@ -426,6 +449,7 @@
           selection={type:'node',id:node.dataset.id};
           const partHit=event.target.closest?.('[data-part-id]');
           selectedPartId=partHit?.dataset.partId||get().nodes.find(n=>n.id===node.dataset.id)?.parts?.[0]?.id||null;
+           expandedPartId=selectedPartId;
           if(partHit){renderProps();return;}
           const model=get(),obj=selectedObject(model),svg=stage.querySelector('svg'),p=point(event,svg);
           if(!obj)return;
@@ -433,7 +457,7 @@
         }else{
           const pipe=event.target.closest?.('.ss-pipe');
           if(pipe){setSelected('pipe',pipe.dataset.id);return;}
-          selection=null;selectedPartId=null;render();return;
+          selection=null;selectedPartId=null;expandedPartId=null;render();return;
         }
       }
       stage.querySelector('svg')?.setPointerCapture(event.pointerId);

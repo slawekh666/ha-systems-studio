@@ -237,7 +237,7 @@ const HASSStudioTank = (() => {
           '<stop stop-color="#506780"/><stop offset="1" stop-color="#506780"/>')+'</linearGradient>');
       if(x1>x0 && y1>y0)water+='<rect x="'+x0+'" y="'+y0+'" width="'+(x1-x0)+'" height="'+(y1-y0)+'" fill="url(#'+id+')"/>';
     }
-    const nonUniform=n.scale_mode==='free';
+    const nonUniform=n.scale_mode==='free'; // Legacy proportional layouts still use the whole-node scale only.
     const sx=nonUniform?clamp(n.width_scale,.5,2.4,1):1;
     const sy=nonUniform?clamp(n.height_scale,.5,2.4,1):1;
     const remap=at=>({x:60+(at.x-60)*sx,y:61+(at.y-61)*sy});

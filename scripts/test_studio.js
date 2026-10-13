@@ -74,7 +74,7 @@ const drawInspector=inspector.create({editor:{_config:{},_hass:{states:{}}},
     (row[0]===selected?' selected':'')+'>'+row[1]+'</option>').join(''),
   registry,pickLang:()=> 'pl',get:()=>({nodes:[sampleTank],pipes:[]}),
   selectedObject:()=>sampleTank,getSelection:()=>({type:'node'}),
-  getSelectedPartId:()=>selectedPart,variantShape:()=>''});
+  getSelectedPartId:()=>selectedPart,getExpandedPartId:()=>selectedPart,variantShape:()=>''});
 drawInspector();
 assert(mockProperties.innerHTML.includes('data-select-part="sensor-one"'));
 assert(mockProperties.innerHTML.includes('data-select-part="coil-two"'));
@@ -191,8 +191,8 @@ assert.match(src,/\.ss-props\{[^}]*overflow-x:hidden/);
 assert.match(src,/<\/h4>'\+/); // The title must close before rendering part fields.
 assert.match(src,/scale_mode:v\.type==='tank'/);
 assert.match(src,/width_scale:clamp\(v\.width_scale/);
-assert.match(src,/key==='scale_mode'/);
-assert.match(src,/field\(L\.tankWidthScale,'width_scale'/);
+assert.match(src,/key==='aspect_locked'/);
+assert.match(src,/field\(L\.tankWidthScale/);
 const stretchNode={...tankNode,scale_mode:'free',width_scale:1.7,height_scale:.75};
 const stretched=tankApi.render(stretchNode,tankState);
 assert.match(stretched,/class="ss-tank-body" transform="translate\(60 61\) scale\(1\.7 0\.75\)/);
@@ -207,8 +207,8 @@ console.log('OK: wrapped accessory UI, independent modular tank scaling and conn
 
 // Three bugfixes reported from live HA screenshots: direct nonuniform scaling,
 // missing upper return, along-path thermal colouring, and insertion-order layers.
-assert.match(src,/field\(L\.tankWidthScale,'width_scale',freeScale\?/);
-assert.match(src,/field\(L\.tankHeightScale,'height_scale',freeScale\?/);
+assert.match(src,/field\(L\.tankWidthScale/);
+assert.match(src,/field\(L\.tankHeightScale/);
 assert.match(src,/obj\.scale_mode='free';/);
 assert.match(src,/data-layer-up=/);
 assert.match(src,/data-layer-down=/);
@@ -443,3 +443,28 @@ assert.match(fireplace.render({...hearth,width_scale:1.4,height_scale:.75},haMod
 assert.match(src,/HASSStudioFireplace\.render\(node,hass\)/);
 assert(libHtml.includes('data-add-preset="fireplace_modern"'));
 console.log('OK: modern fireplace flames, embers, temperature and sizing.');
+
+// v0.4.16 compatibility and hierarchical-library regression assertions.
+assert(libHtml.includes('ha-icon') && libHtml.includes('mdi:'));
+assert(libHtml.includes('Kolektory solarne') && libHtml.includes('ss-lib-subgroup'));
+assert(inspectSrc.includes('ss-part-card') && inspectSrc.includes('getExpandedPartId'));
+assert(inspectSrc.includes("'aspect_locked'"));
+assert(src.includes("obj.scale_mode='free';") && !src.includes("obj.scale=1;\n          obj.scale_mode='free';"));
+
+// Local icon preview must track the split source modules and every registered renderer.
+const preview=fs.readFileSync('dev/icon-preview.html','utf8');
+for(const dependency of ['ha-state.js','animation-state.js','device-registry.js',
+  'warmwasser-shapes.js','studio-tank.js','svg-template.js','solid-fuel-stove.js',
+  'pellet-stove.js','heat-pump-stove.js','gas-boiler.js','electric-boiler.js','fireplace.js']){
+  assert(preview.includes('src="'+ '../src/'+dependency+'"'), 'Missing preview module '+dependency);
+}
+assert(preview.indexOf('src="../src/ha-state.js"')<preview.indexOf('src="../src/studio-tank.js"'));
+assert(preview.indexOf('src="../src/svg-template.js"')<preview.indexOf('src="../src/solid-fuel-stove.js"'));
+assert.match(preview,/registry\.variantsFor\(type\)/);
+assert.match(preview,/await ensureAsset\(def\)/);
+assert.match(preview,/if\(request!==drawSerial\)return/);
+const renderers=registry.listTypes().flatMap(type=>registry.variantsFor(type)).map(x=>x.renderer);
+for(const name of new Set(renderers)){
+  assert(preview.includes(name+':{api:'),'Preview renderer not wired: '+name);
+}
+console.log('OK: standalone icon preview dependencies, registry-backed variants and SVG asset loading.');

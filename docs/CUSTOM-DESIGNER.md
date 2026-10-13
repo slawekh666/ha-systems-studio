@@ -1,4 +1,4 @@
-# Custom Designer — development status (0.4.14-dev)
+# Custom Designer — development status (0.4.16-dev)
 
 The custom designer is on `main` and remains experimental. It is built on the original Warmwasser Schema Card; automatic Warmwasser rendering remains available.
 
@@ -56,3 +56,9 @@ The `heatpump_modern` variant uses the uploaded heat pump SVG. Power supports W 
 - Prototype edges can migrate to free-form pipe polylines
 
 See [README](../README.md) and [release workflow](RELEASING.md).
+
+## 0.4.16-dev interface and scaling
+
+Library categories and groups use native Home Assistant MDI `ha-icon` elements; custom device SVG+JS rendering is unchanged. The right-hand inspector uses collapsible sections and individual active-part cards, selected by stable part IDs. Section expansion state is not stored in `studio_layout`.
+
+Modular tanks preserve `scale`, `width_scale`, `height_scale`, and legacy `scale_mode`. Free width/height adjustment does not reset global scaling. Optional `aspect_locked` governs ratio-locked editing and defaults according to legacy mode. Reset 1:1 restores local width and height to 1 without changing overall scale. Browser testing of expanded panels, device selection bounds, labels, and HA icon support is required.
