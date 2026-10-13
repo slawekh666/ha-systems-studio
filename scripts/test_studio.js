@@ -49,6 +49,48 @@ assert.equal(registry.variantOptionsForNode({type:'boiler',variant:'gas_modern'}
 assert(src.includes("create(button.dataset.add,button.dataset.variant||'')"));
 assert(src.includes('registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind)'));
 console.log('OK: nested equipment catalog and family-scoped graphic selection.');
+// Part selection: only active part fields are rendered, even after layer reordering.
+const mockProperties={innerHTML:'',querySelectorAll:()=>[],appendChild(){}};
+const mockRenderer={styles:'',render:()=>'<g></g>',defs:()=>''};
+const mockContext={document:{createElement:()=>({hidden:true})},
+  HASSStudioGraphics:mockRenderer,HASSStudioTank:mockRenderer,
+  HASSStudioSolidFuel:mockRenderer,HASSStudioPellet:mockRenderer,
+  HASSStudioHeatPump:mockRenderer,HASSStudioGasBoiler:mockRenderer,
+  HASSStudioFireplace:mockRenderer,HASSStudioElectricBoiler:mockRenderer};
+const inspector=vm.runInNewContext(inspectSrc+'\nHASSStudioEditorInspector;',mockContext);
+const samplePart=(id,kind,label,entity)=>({id,kind,label,entity,variant:'warmwasser',
+  side:'left',height:50,display_scale:1,x:50,length:58,width:60,turns:12,mode:'auto',
+  power:75,power_entity:'',flow_mode:'on',flow_direction:'forward',flow_speed:1});
+const sampleTank={type:'tank',variant:'modular',scale_mode:'proportional',width_scale:1,
+  height_scale:1,scale:1,x:50,y:60,label:'',visual:'warmwasser',entity:'',entities:[],
+  parts:[samplePart('sensor-one','sensor','Góra','sensor.top'),
+         samplePart('coil-two','coil','Wężownica','binary_sensor.coil')]};
+let selectedPart='sensor-one';
+const fakeLabels=new Proxy({properties:'Właściwości',sensors:'Elementy',tank:'Zbiornik'},
+  {get:(target,key)=>target[key]||String(key)});
+const drawInspector=inspector.create({editor:{_config:{},_hass:{states:{}}},
+  L:fakeLabels,properties:mockProperties,esc:String,
+  opts:(rows,selected)=>rows.map(row=>'<option value="'+row[0]+'"'+
+    (row[0]===selected?' selected':'')+'>'+row[1]+'</option>').join(''),
+  registry,pickLang:()=> 'pl',get:()=>({nodes:[sampleTank],pipes:[]}),
+  selectedObject:()=>sampleTank,getSelection:()=>({type:'node'}),
+  getSelectedPartId:()=>selectedPart,variantShape:()=>''});
+drawInspector();
+assert(mockProperties.innerHTML.includes('data-select-part="sensor-one"'));
+assert(mockProperties.innerHTML.includes('data-select-part="coil-two"'));
+assert(mockProperties.innerHTML.includes('data-field="partLabel"') &&
+  mockProperties.innerHTML.includes('data-index="0"'));
+assert(!mockProperties.innerHTML.includes('data-field="partTurns"'));
+selectedPart='coil-two';drawInspector();
+assert(mockProperties.innerHTML.includes('data-field="partTurns"'));
+assert(!mockProperties.innerHTML.includes('data-field="partDisplayScale"'));
+sampleTank.parts.reverse();drawInspector();
+assert(mockProperties.innerHTML.includes('data-field="partTurns"'));
+assert(mockProperties.innerHTML.includes('data-index="0"'));
+assert(inspectSrc.includes('getSelectedPartId'));
+assert(src.includes("event.target.closest?.('[data-part-id]')"));
+console.log('OK: selected part inspector and stable selection across layer reordering.');
+
 const graphics=fs.readFileSync('src/warmwasser-shapes.js','utf8');
 const api=vm.runInNewContext(graphics+'\nHASSStudioGraphics;', {esc:s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')});
 const state=map=>({states:Object.fromEntries(Object.entries(map).map(([id,v])=>[id,{state:String(v)}]))});
