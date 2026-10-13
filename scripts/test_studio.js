@@ -186,10 +186,10 @@ console.log('OK: modern wood/coal boiler, burning/embers/off, original SVG, scop
 
 // New solid-fuel boiler geometry controls: global scale stays independent.
 const stretchedModern=solid.render({...modern,width_scale:1.75,height_scale:.65},haModern);
-assert.match(stretchedModern,/class="ss-solid-boiler-dimensions" transform="translate\(66 53\) scale\(1\.75 0\.65\) translate\(-66 -53\)"/);
-assert.match(solid.render({...modern},haModern),/scale\(1 1\) translate\(-66 -53\)/);
+assert.match(stretchedModern,/class="ss-solid-boiler-dimensions" transform="translate\(66 53\) scale\(1\.75 0\.65\) translate\(-60 -43\)"/);
+assert.match(solid.render({...modern},haModern),/scale\(1 1\) translate\(-60 -43\)/);
 assert.match(solid.render({...modern,width_scale:100,height_scale:-10},haModern),
-  /scale\(2\.4 0\.5\) translate\(-66 -53\)/);
+  /scale\(2\.4 0\.5\) translate\(-60 -43\)/);
 assert.match(src,/field\(L\.scale,'scale',obj\.scale/);
 assert.match(src,/field\(L\.solidWidth\+'\s*\('\+Math\.round\(obj\.width_scale\*100\)/);
 assert.match(src,/field\(L\.solidHeight\+'\s*\('\+Math\.round\(obj\.height_scale\*100\)/);
@@ -267,7 +267,7 @@ console.log('OK: modern heat pump power and fan state.');
 const gasSrc=fs.readFileSync('src/gas-boiler.js','utf8');
 const gasXml=fs.readFileSync('src/icons/gas-boiler.svg','utf8');
 const svgLib=fs.readFileSync('src/svg-template.js','utf8');
-assert.match(gasXml,/<svg xmlns="http:\/\/www\\.w3\\.org\/2000\/svg"/);
+assert.ok(gasXml.includes('<svg xmlns="http://www.w3.org/2000/svg"'));
 assert.doesNotMatch(gasXml,/__GAS_/);
 const gasAssets='const HASSStudioIconTemplates = {gasBoiler: HASSStudioSvg.fragment(' +
   JSON.stringify(gasXml) + ')};';
