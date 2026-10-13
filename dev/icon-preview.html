@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Assistant Systems Studio — podgląd SVG</title>
+<style>
+:root{font-family:Inter,Segoe UI,Arial,sans-serif;color-scheme:dark;background:#10151d;color:#eaf1fa}
+*{box-sizing:border-box}body{margin:0}header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid #2b3c51}
+header h1{font-size:16px;margin:0}header small{color:#9bacbd}main{display:grid;grid-template-columns:minmax(270px,340px) minmax(0,1fr);height:calc(100vh - 63px)}
+aside{overflow:auto;padding:17px;background:#151e29;border-right:1px solid #304155}
+label{display:block;font-size:12px;color:#aac0d6;margin:13px 0 6px}input,select{width:100%;padding:9px;background:#0c131c;color:#f3f8ff;border:1px solid #42566e;border-radius:6px}
+input[type=range]{padding:0;accent-color:#56baff}input[type=checkbox]{width:auto;margin:0 8px 0 0}
+.reading{display:flex;align-items:center;gap:12px}.reading input{flex:1;min-width:0}.reading output{width:58px;text-align:right;font-variant-numeric:tabular-nums;color:#71c9ff}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:0 13px}
+.mini{font-size:12px;line-height:1.5;color:#a5b5c8}.source{font-size:13px;color:#80d4ff;word-break:break-all}
+section{min-width:0;min-height:0;display:flex;flex-direction:column;padding:16px;gap:11px}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:15px}.toolbar label{margin:0}.toolbar input[type=range]{width:145px;vertical-align:middle}
+#stage{flex:1;min-height:300px;border:1px solid #33475e;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;background-color:#131e29;background-image:linear-gradient(#263344 1px,transparent 1px),linear-gradient(90deg,#263344 1px,transparent 1px);background-size:25px 25px}
+#stage.no-grid{background-image:none}#canvas{width:100%;height:100%;max-height:100%}
+#canvas [data-inspected]{stroke:#45caff!important;stroke-width:2.4!important}
+#inspector{min-height:40px;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#a5c5e0;overflow-wrap:anywhere}
+.error{color:#ff958f!important}
+a{color:#8ad7ff}code{color:#edc182}
+@media(max-width:750px){main{display:flex;flex-direction:column;height:auto}aside{border-right:0;border-bottom:1px solid #304155}section{height:65vh}}
+</style>
+</head>
+<body>
+<header><h1>Systems Studio · podgląd ikon SVG</h1><small>Źródło: rzeczywiste pliki <code>src/*.js</code>, bez HA</small></header>
+<main>
+<aside>
+<label for="icon">Ikona / moduł</label>
+<select id="icon">
+<option value="solid">Kocioł na paliwo stałe — nowy</option>
+<option value="pellet">Kocioł pelletowy — nowy</option>
+<option value="heatpump">Pompa ciepła — nowa</option>
+<option value="gas">Kocioł gazowy — nowy</option>
+<option value="electric">Kocioł elektryczny — nowy</option>
+<option value="fireplace">Kominek — nowy</option>
+<option value="tank">Zbiornik modułowy — nowy</option>
+<optgroup label="Starsze ikony Warmwasser">
+<option value="old-boiler">Kocioł — Warmwasser</option>
+<option value="old-tank">Zbiornik — Warmwasser</option>
+<option value="old-solar">Solar — Warmwasser</option>
+<option value="old-pump">Pompa — Warmwasser</option>
+<option value="old-valve">Zawór — Warmwasser</option>
+<option value="old-sensor">Czujnik — Warmwasser</option>
+</optgroup>
+</select>
+<label>Plik źródłowy</label>
+<div class="source" id="source">src/solid-fuel-stove.js</div>
+<p class="mini">Edytuj ten plik w lewej kolumnie VS Code. Po zapisaniu <kbd>Ctrl+S</kbd> podgląd odświeży Live Preview.</p>
+<div class="controls">
+<div><label for="temperature">Temperatura (°C)</label><div class="reading"><input id="temperature" type="range" min="10" max="95" value="65"><output id="temperatureValue"></output></div></div>
+<div><label for="power">Moc (kW)</label><div class="reading"><input id="power" type="range" min="0" max="10" step=".1" value="4.5"><output id="powerValue"></output></div></div>
+<div><label for="load">Obciążenie / modulacja (%)</label><div class="reading"><input id="load" type="range" min="0" max="100" value="60"><output id="loadValue"></output></div></div>
+<div><label for="fan">Wentylator (%)</label><div class="reading"><input id="fan" type="range" min="0" max="100" value="65"><output id="fanValue"></output></div></div>
+<div><label for="sx">Szerokość X</label><div class="reading"><input id="sx" type="range" min="50" max="200" value="100"><output id="sxValue"></output></div></div>
+<div><label for="sy">Wysokość Y</label><div class="reading"><input id="sy" type="range" min="50" max="200" value="100"><output id="syValue"></output></div></div>
+</div>
+<label for="combustion">Stan paleniska</label>
+<select id="combustion"><option value="burning">Płomień</option><option value="embers">Żar</option><option value="off">Wyłączony</option></select>
+<label for="fuel">Paliwo (kocioł stałopalny)</label>
+<select id="fuel"><option value="wood">Drewno</option><option value="coal">Węgiel</option></select>
+<p class="mini"><strong>Uwaga:</strong> <code>studio-custom.js</code> jest edytorem karty, nie oddzielną ikoną. Tę część należy testować w HA lub osobnym środowisku edytora. Ten podgląd nie zapisuje zmian w źródłach; służy do obserwacji kodu edytowanego w VS Code.</p>
+</aside>
+<section>
+<div class="toolbar">
+<label for="zoom">Powiększenie <output id="zoomValue">100%</output></label>
+<input id="zoom" type="range" min="50" max="200" value="100">
+<label><input id="grid" type="checkbox" checked>Siatka</label>
+</div>
+<div id="stage"><svg id="canvas" xmlns="http://www.w3.org/2000/svg" viewBox="-25 -130 200 430" role="img" aria-label="Podgląd SVG"></svg></div>
+<div id="inspector">Kliknij element grafiki, aby sprawdzić jego SVG (tag, id, klasa, atrybuty).</div>
+</section>
+</main>
+<script src="../src/warmwasser-shapes.js"></script>
+<script src="../src/studio-tank.js"></script>
+<script src="../src/solid-fuel-stove.js"></script>
+<script src="../src/pellet-stove.js"></script>
+<script src="../src/heat-pump-stove.js"></script>
+<script src="../src/gas-boiler.js"></script>
+<script src="../src/electric-boiler.js"></script>
+<script src="../src/fireplace.js"></script>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const models={
+solid:{file:"src/solid-fuel-stove.js",api:HASSStudioSolidFuel,bounds:{x:12,y:-105,width:110,height:318}},
+pellet:{file:"src/pellet-stove.js",api:HASSStudioPellet},
+heatpump:{file:"src/heat-pump-stove.js",api:HASSStudioHeatPump},
+gas:{file:"src/gas-boiler.js",api:HASSStudioGasBoiler},
+electric:{file:"src/electric-boiler.js",api:HASSStudioElectricBoiler},
+fireplace:{file:"src/fireplace.js",api:HASSStudioFireplace},
+tank:{file:"src/studio-tank.js",api:HASSStudioTank,bounds:{x:-5,y:-10,width:145,height:175}},
+"old-boiler":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"boiler",bounds:{x:-18,y:-8,width:180,height:270}},
+"old-tank":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"tank",bounds:{x:-30,y:-8,width:205,height:215}},
+"old-solar":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"solar",bounds:{x:-20,y:-15,width:170,height:180}},
+"old-pump":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"pump",bounds:{x:0,y:0,width:125,height:130}},
+"old-valve":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"valve",bounds:{x:0,y:0,width:125,height:130}},
+"old-sensor":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"sensor",bounds:{x:0,y:0,width:125,height:130}}
+};
+const canvas=$("canvas"), stage=$("stage"), inspector=$("inspector");
+const styles=[HASSStudioGraphics,HASSStudioTank,HASSStudioSolidFuel,HASSStudioPellet,HASSStudioHeatPump,HASSStudioGasBoiler,HASSStudioElectricBoiler,HASSStudioFireplace]
+ .map(x=>x.styles||"").join("");
+const styleHolder=document.createElement("div");styleHolder.innerHTML=styles;document.head.append(...styleHolder.childNodes);
+const num=id=>Number($(id).value);
+function props(){
+ const kind=$("icon").value,temp=num("temperature"),load=num("load");
+ const node={
+   id:"localPreview",type:"boiler",variant:"wood",entity:"sensor.preview_temp",
+   scale:1,scale_mode:"free",width_scale:num("sx")/100,height_scale:num("sy")/100,
+   solid_state:$("combustion").value,solid_fuel:$("fuel").value,solid_glow:74,
+   burner_entity:"binary_sensor.preview_burner",
+   gas_draw_entity:"sensor.preview_load",gas_glow:60,
+   electric_power_entity:"sensor.preview_power",electric_load_entity:"sensor.preview_load",electric_glow:60,
+   hp_power_entity:"sensor.preview_power",hp_fan_entity:"sensor.preview_fan",hp_glow:65,
+   parts:[
+    {id:"top",kind:"sensor",side:"right",height:86,x:50,entity:"sensor.preview_top",label:"Góra"},
+    {id:"bottom",kind:"sensor",side:"right",height:14,x:50,entity:"sensor.preview_bottom",label:"Dół"},
+    {id:"coil",kind:"coil",height:50,x:50,turns:10,width:66,length:58,flow_mode:"on"},
+    {id:"heater",kind:"heater",height:28,x:80,side:"right",entity:"switch.preview_heater",power:75}
+   ]
+ };
+ const type=models[kind].type;
+ if(type){node.type=type;node.variant=({boiler:"wood",tank:"buffer",solar:"flat",pump:"circulation",valve:"three_way",sensor:"temperature"})[type];}
+ if(kind==="tank")node.variant="modular";
+ const make=(state,unit)=>({state:String(state),attributes:{unit_of_measurement:unit}});
+ const hass={states:{
+  "sensor.preview_temp":make(temp,"°C"),
+  "sensor.preview_top":make(temp,"°C"),
+  "sensor.preview_bottom":make(Math.max(10,temp-30),"°C"),
+  "sensor.preview_power":make(num("power"),"kW"),
+  "sensor.preview_load":make(load,"%"),
+  "sensor.preview_fan":make(num("fan"),"%"),
+  "binary_sensor.preview_burner":make($("combustion").value==="off"?"off":"on",""),
+  "switch.preview_heater":make("on","")
+ }};
+ return {node,hass};
+}
+function draw(){
+ try{
+  const def=models[$("icon").value], data=props(), {node,hass}=data;
+  $("source").textContent=def.file;
+  const svg=def.api.render(node,hass);
+  if(!svg || typeof svg!=="string")throw Error("Renderer nie zwrócił kodu SVG");
+  canvas.innerHTML=(def.api.defs?"<defs>"+def.api.defs(node,hass)+"</defs>":"")+svg;
+  const b=(typeof def.api.geometry==="function"?def.api.geometry(node):null)||def.bounds;
+  const zoom=num("zoom")/100,pad=Math.max(b.width,b.height)*.1;
+  const w=(b.width+pad*2)/zoom,h=(b.height+pad*2)/zoom;
+  canvas.setAttribute("viewBox",[(b.x+b.width/2-w/2),(b.y+b.height/2-h/2),w,h].join(" "));
+  inspector.classList.remove("error");
+  inspector.textContent="Kliknij fragment ikony, żeby sprawdzić tag, id i atrybuty SVG.";
+ }catch(error){
+  inspector.classList.add("error");
+  inspector.textContent="Błąd renderowania: "+String(error&&error.stack||error);
+  canvas.replaceChildren();
+  console.error(error);
+ }
+}
+for(const id of ["temperature","power","load","fan","sx","sy","zoom"]){
+ $(id).addEventListener("input",()=>{
+  $(id+"Value").textContent=$(id).value+({temperature:"°C",power:" kW",load:"%",fan:"%",sx:"%",sy:"%",zoom:"%"}[id]);
+  draw();
+ });
+ $(id+"Value").textContent=$(id).value+({temperature:"°C",power:" kW",load:"%",fan:"%",sx:"%",sy:"%",zoom:"%"}[id]);
+}
+for(const id of ["icon","combustion","fuel"])$(id).addEventListener("change",draw);
+$("grid").addEventListener("change",()=>stage.classList.toggle("no-grid",!$("grid").checked));
+canvas.addEventListener("click",event=>{
+ const element=event.target.closest("path,rect,circle,ellipse,polygon,polyline,line,text,g");
+ if(!element || element===canvas)return;
+ canvas.querySelectorAll("[data-inspected]").forEach(e=>e.removeAttribute("data-inspected"));
+ element.setAttribute("data-inspected","true");
+ const at=[...element.attributes].filter(a=>a.name!=="data-inspected").map(a=>a.name+"="+a.value).join(" | ");
+ inspector.textContent="<"+element.tagName.toLowerCase()+"> "+at.slice(0,600);
+});
+draw();
+})();
+</script>
+</body>
+</html>
