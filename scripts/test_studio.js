@@ -241,7 +241,7 @@ assert.match(other,/sssolidsmodern2bodyFront/);
 assert.doesNotMatch(burningWood,/sssolidsmodern2bodyFront/);
 assert.match(solid.render({...modern,entity:'sensor.missing'},haModern),/>—<\/text>/);
 assert.match(src,/HASSStudioSolidFuel\.render\(node,hass\)/);
-assert.match(src,/data-add-preset="solid_fuel"/);
+assert(libHtml.includes('data-add-preset="solid_fuel"'));
 assert.match(src,/field\(L\.solidFuel,'solid_fuel'/);
 assert.match(src,/field\(L\.solidState,'solid_state'/);
 console.log('OK: modern wood/coal boiler, burning/embers/off, original SVG, scoped defs.');
@@ -302,7 +302,7 @@ assert.equal(gb.height,312*.65);
 assert.equal(pellet.geometry(pelletNode).centerX,97);
 assert.equal(registry.variantOptions('boiler','pl').find(([id])=>id==='pellet_modern')?.[1],'Pellet (nowoczesny)');
 assert.match(src,/HASSStudioPellet\.render\(node,hass\)/);
-assert.match(src,/data-add-preset="pellet_modern"/);
+assert(libHtml.includes('data-add-preset="pellet_modern"'));
 assert.match(src,/modernPellet\?HASSStudioPellet\.geometry\(node\)/);
 assert.match(src,/previewPellet\?/);
 assert.match(src,/field\(L\.solidState,'solid_state'/);
@@ -350,7 +350,7 @@ assert.match(gas.render({...gasNode,burner_entity:'binary_sensor.burner'},gasSta
 assert.match(gas.render({...gasNode,width_scale:1.4,height_scale:.8},gasState),/scale\(1\.4 0\.8\)/);
 assert.doesNotMatch(gasSvg,/<script\b|onload=|onclick=|<foreignObject/i);
 assert.match(src,/HASSStudioGasBoiler\.render\(node,hass\)/);
-assert.match(src,/data-add-preset="gas_modern"/);
+assert(libHtml.includes('data-add-preset="gas_modern"'));
 console.log('OK: gas boiler modulation, temperature, SVG isolation and resizing.');
 
 // Modern electric: actual power, water temperature and 260-degree load ring.
@@ -378,7 +378,7 @@ assert.match(elSvg,/stroke-dasharray="281\.35 389\.56"/);
 assert.match(electric.render({...electricNode,electric_power_entity:'sensor.missing'},electricHass),/data-load="unknown" data-power="unknown"/);
 assert.match(electric.render({...electricNode,width_scale:1.7,height_scale:.8},electricHass),/scale\(1\.7 0\.8\)/);
 assert.match(src,/HASSStudioElectricBoiler\.render\(node,hass\)/);
-assert.match(src,/data-add-preset="electric_modern"/);
+assert(libHtml.includes('data-add-preset="electric_modern"'));
 console.log('OK: modern electric boiler, HA power/load/temp, ring and resizing.');
 
 // Modern fireplace: uploaded SVG with Warmwasser flames.
@@ -399,5 +399,5 @@ assert.doesNotMatch(fireplace.render({...hearth,solid_state:'off'},haModern),/cl
 assert.match(fireplace.render({...hearth,entity:'sensor.missing'},haModern),/>—<\/text>/);
 assert.match(fireplace.render({...hearth,width_scale:1.4,height_scale:.75},haModern),/scale\(1\.4 0\.75\)/);
 assert.match(src,/HASSStudioFireplace\.render\(node,hass\)/);
-assert.match(src,/data-add-preset="fireplace_modern"/);
+assert(libHtml.includes('data-add-preset="fireplace_modern"'));
 console.log('OK: modern fireplace flames, embers, temperature and sizing.');
