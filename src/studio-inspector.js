@@ -4,7 +4,7 @@
  */
 const HASSStudioEditorInspector = (() => {
   const create = ({editor, L, properties, esc, opts, registry, pickLang,
-    get, selectedObject, getSelection, getSelectedPartId, variantShape}) => {
+    get, selectedObject, getSelection, getSelectedPartId, getExpandedPartId, variantShape}) => {
     const entityList=()=>{
       const states=editor._hass?.states||{};
       return Object.keys(states).sort().slice(0,2000).map(id=>
@@ -26,12 +26,27 @@ const HASSStudioEditorInspector = (() => {
     const styleOptions=[['warmwasser','Warmwasser (default)'],['studio','Studio (simple)']];
     const sides=[['left',L.left],['right',L.right],['inside',L.inside]];
     const colorsList=[['hot',L.hot],['cold',L.cold],['solar',L.solarFlow],['return',L.returnFlow]];
+    const openSections=new Map();
+    const sectionAttr=id=>openSections.get(id)===false?'':' open';
+    const sectionIcon=(name)=>'<ha-icon icon="'+name+'" aria-hidden="true"></ha-icon>';
+    const partIcons={sensor:'mdi:thermometer',heater:'mdi:flash',coil:'mdi:heating-coil',
+      baffle_horizontal:'mdi:minus',baffle_vertical:'mdi:minus',inner_tank:'mdi:water-boiler'};
     const renderProps=()=>{
+      // UI state is deliberately not persisted in studio_layout.
+      for(const details of properties.querySelectorAll('details[data-section]'))
+        openSections.set(details.dataset.section,details.open);
       const selection=getSelection();
       const model=get(),obj=selectedObject(model);
       let markup='<h3>'+esc(L.properties)+'</h3>';
       if(!obj){properties.innerHTML=markup+'<p>'+esc(L.choose)+'</p>';return;}
-      markup+='<section>'+field(L.name,'label',obj.label);
+      const lang=pickLang(editor._config,editor._hass);
+      const deviceName=selection.type==='pipe'?(L.pipe||'Rura'):
+        (registry.resolve(obj.type,obj.variant)?.device?.[lang]||L[obj.type]||obj.type);
+      markup+='<div class="ss-inspector-heading">'+sectionIcon(selection.type==='pipe'?'mdi:pipe':(registry.categoryIcons[registry.resolve(obj.type,obj.variant)?.category]||'mdi:cube-outline'))+
+        '<span>'+esc(obj.label||deviceName)+'</span></div>'+
+        '<details class="ss-section-details" data-section="device"'+sectionAttr('device')+'><summary>'+
+        sectionIcon('mdi:tune-variant')+'<span>'+esc(obj.type==='tank'?(L.tankSettings||'Ustawienia zbiornika'):(L.properties||'Właściwości'))+'</span>'+
+        sectionIcon('mdi:chevron-down')+'</summary><section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
@@ -105,28 +120,36 @@ const HASSStudioEditorInspector = (() => {
           markup+=field(L.solarOnDelta,'solar_on_delta',obj.solar_on_delta,'number',null,'min="1" max="40" step="0.5"');
           markup+=field(L.solarOffDelta,'solar_off_delta',obj.solar_off_delta,'number',null,'min="0" max="39" step="0.5"');
         }
-        markup+='</section><section><h4>'+esc(L.entities)+'</h4>'+
+        markup+='</section></details><details class="ss-section-details" data-section="entities"'+sectionAttr('entities')+'><summary>'+
+           sectionIcon('mdi:chart-timeline-variant')+'<span>'+esc(L.entities)+'</span>'+sectionIcon('mdi:chevron-down')+
+           '</summary><section>'+
           obj.entities.map((en,index)=>'<div class="ss-row">'+
             entityField(en.entity,'multiEntity',index)+
             '<button type="button" data-delete-entity="'+index+'">×</button></div>'+
             field(L.label,'multiLabel',en.label,'text',null,'data-index="'+index+'"')).join('')+
-          '<button type="button" data-action="entity">'+esc(L.addEntity)+'</button></section>';
+          '<button type="button" data-action="entity">'+esc(L.addEntity)+'</button></section></details>';
         if(obj.type==='tank'||obj.type==='solar'){
           const isModular=obj.type==='tank'&&obj.variant==='modular';
-          markup+='<section><h4>'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'</h4>'+
-            '<div class="ss-part-list" role="group" aria-label="'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'">'+
-            obj.parts.map((part,i)=>'<button type="button" class="ss-part-pick'+
-              (part.id===getSelectedPartId()?' ss-part-active':'')+'" data-select-part="'+esc(part.id)+'" aria-pressed="'+
-              (part.id===getSelectedPartId()?'true':'false')+'">'+
-              esc(part.label||((L[part.kind]||part.kind)+' '+(i+1)))+
-              (part.entity?' · '+esc(part.entity):'')+'</button>').join('')+'</div>'+
-            (obj.parts.some(part=>part.id===getSelectedPartId())?'<h4>'+esc(L.properties)+'</h4>':'')+
-          obj.parts.map((item,index)=>item.id!==getSelectedPartId()?'':'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+(isModular?' · '+esc(L.partLayer)+' '+index:'')+'</strong>'+
-            (isModular?'<button type="button" title="'+esc(L.partLayerDown)+'" aria-label="'+esc(L.partLayerDown)+'" data-layer-down="'+index+'"'+(index===0?' disabled':'')+'>↓</button>'+
-              '<button type="button" title="'+esc(L.partLayerUp)+'" aria-label="'+esc(L.partLayerUp)+'" data-layer-up="'+index+'"'+(index===obj.parts.length-1?' disabled':'')+'>↑</button>':'')+
-            '<button type="button" data-delete-part="'+index+'">×</button></div>'+
-            (obj.type==='solar'?'':field(L.graphic,'partKind',item.kind,'text',
-              (isModular?[['sensor',L.sensor],['heater',L.heater],['coil',L.coil],['baffle_horizontal',L.baffle_horizontal],['baffle_vertical',L.baffle_vertical],['inner_tank',L.inner_tank]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]]),'data-index="'+index+'"'))+
+          markup+='<details class="ss-section-details" data-section="parts"'+sectionAttr('parts')+'><summary>'+
+            sectionIcon('mdi:layers-outline')+'<span>'+esc(obj.type==='solar'?L.solarSensors:(L.internalParts||'Elementy wewnętrzne'))+
+            '</span><span class="ss-part-count">'+obj.parts.length+'</span>'+sectionIcon('mdi:chevron-down')+'</summary>'+
+            '<section><div class="ss-part-cards">'+obj.parts.map((item,index)=>
+              '<div class="ss-part-card'+(item.id===getSelectedPartId()?' ss-part-active':'')+'">'+
+              '<button type="button" class="ss-part-pick" data-select-part="'+esc(item.id)+'" aria-pressed="'+
+                (item.id===getSelectedPartId()?'true':'false')+'" aria-expanded="'+(item.id===getExpandedPartId()?'true':'false')+'">'+
+                sectionIcon(partIcons[item.kind]||'mdi:cube-outline')+
+                '<span class="ss-part-caption"><strong>'+esc(item.label||((L[item.kind]||item.kind)+' '+(index+1)))+
+                '</strong><small>'+esc(item.entity||((L[item.kind]||item.kind)+' · '+(index+1)))+'</small></span>'+
+                sectionIcon(item.id===getExpandedPartId()?'mdi:chevron-up':'mdi:chevron-down')+
+              '</button>'+
+              (item.id!==getExpandedPartId()?'':'<div class="ss-part-fields">'+
+                '<div class="ss-row ss-part-actions"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+
+                (isModular?' · '+esc(L.partLayer)+' '+index:'')+'</strong>'+
+                (isModular?'<button type="button" title="'+esc(L.partLayerDown)+'" aria-label="'+esc(L.partLayerDown)+'" data-layer-down="'+index+'"'+(index===0?' disabled':'')+'>↓</button>'+
+                  '<button type="button" title="'+esc(L.partLayerUp)+'" aria-label="'+esc(L.partLayerUp)+'" data-layer-up="'+index+'"'+(index===obj.parts.length-1?' disabled':'')+'>↑</button>':'')+
+                '<button type="button" aria-label="'+esc(L.remove)+'" data-delete-part="'+index+'">×</button></div>'+
+                (obj.type==='solar'?'':field(L.graphic,'partKind',item.kind,'text',
+                  (isModular?[['sensor',L.sensor],['heater',L.heater],['coil',L.coil],['baffle_horizontal',L.baffle_horizontal],['baffle_vertical',L.baffle_vertical],['inner_tank',L.inner_tank]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]]),'data-index="'+index+'"'))+
             field(L.visual,'partVariant',item.variant,'text',
               [['warmwasser','Warmwasser'],['compact',L.compact||'Compact'],['extended',L.extended||'Extended']],
               'data-index="'+index+'"')+
@@ -143,10 +166,11 @@ const HASSStudioEditorInspector = (() => {
             (isModular && item.kind.startsWith('baffle_')?field(L.permeability,'partPermeability',item.permeability,'range',null,'min="0" max="1" step="0.05" data-index="'+index+'"'):'')+
             (item.kind==='sensor'?field(L.sensorScale,'partDisplayScale',item.display_scale,'range',null,
               'min="0.5" max="2" step="0.1" data-index="'+index+'"'):'')+
-            '<label>'+esc(L.entity)+entityField(item.entity,'partEntity',index)+'</label>'
-          ).join('')+
+            '<label>'+esc(L.entity)+entityField(item.entity,'partEntity',index)+'</label>'+
+              '</div>')+'</div>'
+            ).join('')+'</div>'+
           '<div class="ss-add-parts">'+(obj.type==='solar'?[['sensor',L.sensor]]:(isModular?[['sensor',L.sensor],['heater',L.heater],['coil',L.coil],['baffle_horizontal',L.baffle_horizontal],['baffle_vertical',L.baffle_vertical],['inner_tank',L.inner_tank]]:[['sensor',L.sensor],['heater',L.heater],['coil',L.coil]])).map(v=>
-            '<button type="button" data-add-part="'+v[0]+'">+ '+esc(v[1])+'</button>').join('')+'</div></section>';
+            '<button type="button" data-add-part="'+v[0]+'">+ '+esc(v[1])+'</button>').join('')+'</div></section></details>';
         }
       }else{
         markup+=field(L.pipeColor,'color',obj.color,'text',colorsList);
@@ -173,7 +197,9 @@ const HASSStudioEditorInspector = (() => {
           '<div class="ss-add-parts"><button type="button" data-add-accessory="pump">+ '+esc(L.pump)+'</button>'+
           '<button type="button" data-add-accessory="valve">+ '+esc(L.valve)+'</button></div></section>';
       }
+      const scroll=properties.scrollTop;
       properties.innerHTML=markup+'<datalist id="ss-entity-list">'+entityList()+'</datalist>';
+      properties.scrollTop=scroll;
       // Every entity field gets an HA-like search list from the first typed character.
       const popup=document.createElement('div');
       popup.className='ss-entities';popup.hidden=true;
