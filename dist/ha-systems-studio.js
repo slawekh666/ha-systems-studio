@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.14-dev';
+const VERSION = '0.4.15-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {

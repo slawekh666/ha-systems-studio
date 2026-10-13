@@ -1,12 +1,14 @@
 # Versioning and distribution (HACS dashboard card)
 
-The authoritative development version is `VERSION` (currently **0.4.14-dev**). `scripts/build.py` embeds it into the distributed `dist/ha-systems-studio.js`. `scripts/check.py` checks that the package and docs agree with `VERSION`; `node scripts/test_studio.js` covers selected rendering and state logic. The designer header shows the embedded code version.
+The authoritative development version is `VERSION` (currently **0.4.15-dev**). `scripts/build.py` embeds it into the distributed `dist/ha-systems-studio.js`. `scripts/check.py` checks that the package and docs agree with `VERSION`; `node scripts/test_studio.js` covers selected rendering and state logic. The designer header shows the embedded code version.
 
 The GitHub `main` mirror and GitHub Releases serve **different purposes**:
 
 - **Testing the latest `main`:** a developer may select the `main` branch and redownload it in HACS. A Release is not required for this workflow.
 - **Versioned updates through HACS:** tag the exact commit and publish a matching **GitHub Release**. A tag on its own is not a published release. The unsupported `version` field must not be added to `hacs.json`.
 - **Update information / Uaktualnij dane** refreshes repository metadata. It is not proof that the installed `ha-systems-studio.js` has been replaced. Use **Redownload / Pobierz ponownie** if the card still uses an older bundle, followed by a browser refresh.
+
+**0.4.15-dev status:** development build for Home Assistant browser acceptance testing; do not publish a stable GitHub Release until the actual dashboard is tested. After testing, prepare an RC or stable version with a matching tag and GitHub Release.
 
 ## Development workflow
 
