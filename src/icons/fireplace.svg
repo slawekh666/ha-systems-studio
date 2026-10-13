@@ -71,8 +71,8 @@
         <text id="stoveTempDisplay" x="556" y="350" font-size="30" font-family="monospace" font-weight="700" fill="#eef8ff">65.0°C</text>
         <g id="displayBars" transform="translate(666 316)">
           <rect x="0" y="18" width="10" height="14" rx="2" fill="#19b8ff" id="displayBar1" opacity=".22"/>
-          <rect x="18" y="10" width="10" height="22" rx="2" fill="#28c0ff" id="displayBar1" opacity=".22"/>
-          <rect x="36" y="2" width="10" height="30" rx="2" fill="#55d4ff" id="displayBar1" opacity=".22"/>
+          <rect x="18" y="10" width="10" height="22" rx="2" fill="#28c0ff" id="displayBar2" opacity=".22"/>
+          <rect x="36" y="2" width="10" height="30" rx="2" fill="#55d4ff" id="displayBar3" opacity=".22"/>
           <circle cx="70" cy="8" r="3" fill="#44b8ff"/>
           <circle cx="70" cy="22" r="3" fill="#2875c9"/>
         </g>

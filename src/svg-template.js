@@ -44,9 +44,10 @@ const HASSStudioSvg = (() => {
     let result = template;
     for (const [id, content] of Object.entries(slots)) {
       if (!/^[a-z][a-zA-Z0-9_-]*$/.test(id)) throw new Error('Invalid SVG slot name');
-      const marker = '<g id="' + id + '"></g>';
-      if (result.split(marker).length !== 2) throw new Error('Expected one empty SVG slot: ' + id);
-      result = result.replace(marker, '<g id="' + id + '">' + content + '</g>');
+      const pattern = new RegExp('(<g\b[^>]*\bid="' + id + '"[^>]*>)(\s*)(<\/g>)', 'g');
+      const occurrences = [...result.matchAll(pattern)];
+      if (occurrences.length !== 1) throw new Error('Expected one empty SVG slot: ' + id);
+      result = result.replace(pattern, (_, opening, space, closing) => opening + content + closing);
     }
     return result;
   };
