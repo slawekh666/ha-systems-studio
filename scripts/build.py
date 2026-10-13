@@ -116,7 +116,7 @@ def build() -> None:
         'solid-fuel-stove.js', 'pellet-stove.js', 'heat-pump-stove.js',
         'gas-boiler.js', 'electric-boiler.js', 'fireplace.js',
         'device-registry.js', 'studio-layout.js', 'studio-canvas.js',
-        'studio-inspector.js', 'studio-custom.js',
+        'studio-inspector.js', 'studio-library.js', 'studio-custom.js',
     )
     paths = [ROOT / 'src' / name for name in source_names]
     for path in paths:
