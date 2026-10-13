@@ -54,3 +54,7 @@ devices; do not couple distinct burner and electrical state semantics.
 The complete Studio UI in `studio-custom.js` should eventually be split into
 separate designer, state, canvas and controls modules, with one small entrypoint.
 Do that as a separate change with regression and HA browser tests.
+
+## Device SVG artwork
+
+Modern artwork lives in `src/icons/`: gas-boiler, solid-fuel-stove, pellet-stove, heat-pump-stove, electric-boiler and fireplace. Open these `.svg` files directly in VS Code or an SVG viewer; each has standalone display data. The renderer's JS provides live values from Home Assistant. Renderers share `src/svg-template.js` to apply id-keyed values, insert generated animation markup and namespace SVG IDs. `scripts/build.py` embeds all source files in a single HACS JS bundle; do not edit `dist` by hand.

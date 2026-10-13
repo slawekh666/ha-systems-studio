@@ -80,7 +80,7 @@ a{color:#8ad7ff}code{color:#edc182}
 <script src="../src/solid-fuel-stove.js"></script>
 <script src="../src/pellet-stove.js"></script>
 <script src="../src/heat-pump-stove.js"></script>
-<script>window.HASSStudioIconTemplates = {gasBoiler: null};</script>
+<script>window.HASSStudioIconTemplates = {};</script>
 <script src="../src/svg-template.js"></script>
 <script src="../src/gas-boiler.js"></script>
 <script src="../src/electric-boiler.js"></script>
@@ -89,6 +89,14 @@ a{color:#8ad7ff}code{color:#edc182}
 (function(){
 "use strict";
 const $=id=>document.getElementById(id);
+const assetByIcon = {
+  solid: ['solidFuel', 'solid-fuel-stove'],
+  pellet: ['pellet', 'pellet-stove'],
+  heatpump: ['heatPump', 'heat-pump-stove'],
+  gas: ['gasBoiler', 'gas-boiler'],
+  electric: ['electricBoiler', 'electric-boiler'],
+  fireplace: ['fireplace', 'fireplace']
+};
 const models={
 solid:{file:"src/solid-fuel-stove.js",api:HASSStudioSolidFuel,bounds:{x:12,y:-105,width:110,height:318}},
 pellet:{file:"src/pellet-stove.js",api:HASSStudioPellet},
@@ -144,10 +152,11 @@ function props(){
 }
 async function draw(){
  try{
-  if ($("icon").value === "gas" && !HASSStudioIconTemplates.gasBoiler) {
-   const response = await fetch("../src/icons/gas-boiler.svg", {cache: "no-store"});
-   if (!response.ok) throw new Error("Nie można wczytać SVG kotła gazowego: " + response.status);
-   HASSStudioIconTemplates.gasBoiler = HASSStudioSvg.fragment(await response.text());
+  const asset = assetByIcon[$("icon").value];
+  if (asset && !HASSStudioIconTemplates[asset[0]]) {
+    const response = await fetch("../src/icons/" + asset[1] + ".svg", {cache: "no-store"});
+    if (!response.ok) throw new Error("Nie można wczytać SVG: " + response.status);
+    HASSStudioIconTemplates[asset[0]] = HASSStudioSvg.fragment(await response.text());
   }
   const def=models[$("icon").value], data=props(), {node,hass}=data;
   $("source").textContent=def.file;

@@ -146,8 +146,23 @@ console.log('OK: independent visible scaling, complete spiral, arc-length gradie
 
 
 // Modern solid-fuel boiler: uploaded stove body + Warmwasser fire classes.
+const svgLib = fs.readFileSync('src/svg-template.js', 'utf8');
+const assetNames = {
+  solidFuel: 'solid-fuel-stove', pellet: 'pellet-stove',
+  heatPump: 'heat-pump-stove', gasBoiler: 'gas-boiler',
+  electricBoiler: 'electric-boiler', fireplace: 'fireplace'
+};
+const assets = Object.fromEntries(
+  Object.entries(assetNames).map(([key, name]) => {
+    const xml = fs.readFileSync('src/icons/' + name + '.svg', 'utf8');
+    assert.doesNotMatch(xml, /__[A-Z0-9_]+__/);
+    return [key, xml.replace(/^\s*<svg\b[^>]*>/, '').replace(/<\/svg>\s*$/, '')];
+  })
+);
+const assetJs = 'const HASSStudioIconTemplates = ' + JSON.stringify(assets) + ';';
+const iconPrelude = svgLib + '\n' + assetJs + '\n';
 const solidSrc=fs.readFileSync('src/solid-fuel-stove.js','utf8');
-const solid=vm.runInNewContext(solidSrc+'\nHASSStudioSolidFuel;', {});
+const solid=vm.runInNewContext(iconPrelude+solidSrc+'\nHASSStudioSolidFuel;', {});
 const modern={id:'smodern1',type:'boiler',variant:'solid_fuel',entity:'sensor.boiler',
   solid_fuel:'wood',solid_state:'auto',solid_glow:78,burner_on_temp:50,burner_off_temp:35};
 const haModern={states:{'sensor.boiler':{state:'65',attributes:{unit_of_measurement:'°C'}},
@@ -203,7 +218,7 @@ console.log('OK: independent solid-fuel dimensions, proportional scale retained,
 
 // Modern pellet boiler: source SVG, Warmwasser flames, shared combustion state.
 const pelletSource=fs.readFileSync('src/pellet-stove.js','utf8');
-const pellet=vm.runInNewContext(solidSrc+'\n'+pelletSource+'\nHASSStudioPellet;', {});
+const pellet=vm.runInNewContext(iconPrelude+solidSrc+'\n'+pelletSource+'\nHASSStudioPellet;', {});
 const pelletNode={id:'pelletA',type:'boiler',variant:'pellet_modern',entity:'sensor.boiler',
   solid_state:'auto',solid_glow:76,burner_on_temp:50,burner_off_temp:35,
   width_scale:1,height_scale:1};
@@ -248,7 +263,7 @@ console.log('OK: modern pellet renderer, Warmwasser flames/embers, shared state,
 
 // Heat pump: HA watts/kilowatts, fan RPM or %, missing values and stop.
 const heatPumpSource=fs.readFileSync('src/heat-pump-stove.js','utf8');
-const hp=vm.runInNewContext(heatPumpSource+'\nHASSStudioHeatPump;',{});
+const hp=vm.runInNewContext(iconPrelude+heatPumpSource+'\nHASSStudioHeatPump;',{});
 const hpNode={id:'hp1',type:'boiler',variant:'heatpump_modern',hp_power_entity:'sensor.power',hp_fan_entity:'sensor.fan',hp_max_rpm:1800,hp_glow:65,width_scale:1,height_scale:1};
 const hpState={states:{'sensor.power':{state:'1800',attributes:{unit_of_measurement:'W'}},'sensor.fan':{state:'900',attributes:{unit_of_measurement:'rpm'}}}};
 assert.equal(hp.power(hpState,'sensor.power'),1.8);
@@ -265,13 +280,7 @@ console.log('OK: modern heat pump power and fan state.');
 
 // Modern gas boiler: measured modulation %, temperature and no invented values.
 const gasSrc=fs.readFileSync('src/gas-boiler.js','utf8');
-const gasXml=fs.readFileSync('src/icons/gas-boiler.svg','utf8');
-const svgLib=fs.readFileSync('src/svg-template.js','utf8');
-assert.ok(gasXml.includes('<svg xmlns="http://www.w3.org/2000/svg"'));
-assert.doesNotMatch(gasXml,/__GAS_/);
-const gasAssets='const HASSStudioIconTemplates = {gasBoiler: HASSStudioSvg.fragment(' +
-  JSON.stringify(gasXml) + ')};';
-const gas=vm.runInNewContext(svgLib+'\n'+gasAssets+'\n'+gasSrc+'\nHASSStudioGasBoiler;',{});
+const gas=vm.runInNewContext(iconPrelude+gasSrc+'\nHASSStudioGasBoiler;',{});
 const gasNode={id:'gas1',type:'boiler',variant:'gas_modern',entity:'sensor.boiler',gas_draw_entity:'sensor.mod',gas_glow:62,width_scale:1,height_scale:1};
 const gasState={states:{'sensor.boiler':{state:'65',attributes:{unit_of_measurement:'°C'}},'sensor.mod':{state:'42',attributes:{unit_of_measurement:'%'}},'binary_sensor.burner':{state:'off'}}};
 assert.equal(gas.temperature(gasState,'sensor.boiler'),65);
@@ -298,7 +307,7 @@ console.log('OK: gas boiler modulation, temperature, SVG isolation and resizing.
 
 // Modern electric: actual power, water temperature and 260-degree load ring.
 const electricSrc=fs.readFileSync('src/electric-boiler.js','utf8');
-const electric=vm.runInNewContext(electricSrc+'\nHASSStudioElectricBoiler;',{});
+const electric=vm.runInNewContext(iconPrelude+electricSrc+'\nHASSStudioElectricBoiler;',{});
 const electricNode={id:'electric1',type:'boiler',variant:'electric_modern',
   electric_power_entity:'sensor.watts',entity:'sensor.water',
   electric_max_kw:8,electric_glow:60,width_scale:1,height_scale:1};
@@ -326,7 +335,7 @@ console.log('OK: modern electric boiler, HA power/load/temp, ring and resizing.'
 
 // Modern fireplace: uploaded SVG with Warmwasser flames.
 const fireplaceSrc=fs.readFileSync('src/fireplace.js','utf8');
-const fireplace=vm.runInNewContext(solidSrc+'\n'+fireplaceSrc+'\nHASSStudioFireplace;',{});
+const fireplace=vm.runInNewContext(iconPrelude+solidSrc+'\n'+fireplaceSrc+'\nHASSStudioFireplace;',{});
 const hearth={id:'hearth1',type:'boiler',variant:'fireplace_modern',entity:'sensor.boiler',solid_state:'burning',solid_glow:65,width_scale:1,height_scale:1};
 const flameSvg=fireplace.render(hearth,haModern);
 assert.match(flameSvg,/class="ss-modern-fireplace" data-combustion="burning"/);
