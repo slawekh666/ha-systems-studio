@@ -980,6 +980,76 @@ if (!window.customCards.some((x) => x.type === 'ha-systems-studio'))
 console.info(`%c WARMWASSER-SCHEMA-CARD %c ${VERSION} `, 'background:#ff4b3e;color:#fff;font-weight:700', 'background:#333;color:#fff');
 
 
+/* Shared, read-only Home Assistant state adapters.
+ * Unknown/unavailable values are never replaced by demo measurements.
+ * No HA service calls, timers or subscriptions.
+ */
+const HASSStudioHA = (() => {
+  const entity = (h, id) => id && typeof id === 'string' ? h?.states?.[id] || null : null;
+  const reading = (h, id) => {
+    const item = entity(h, id);
+    const value = item?.state;
+    if (typeof value !== 'string' && typeof value !== 'number') return null;
+    const text = String(value).trim();
+    if (!text || !Number.isFinite(Number(text))) return null;
+    return { value: Number(text), unit: String(item.attributes?.unit_of_measurement ?? '').trim() };
+  };
+  const temperature = (h, id) => {
+    const r = reading(h, id);
+    if (!r || !['', '°C', 'C', '°F', 'F'].includes(r.unit)) return null;
+    const c = r.unit === '°F' || r.unit === 'F' ? (r.value - 32) * 5 / 9 : r.value;
+    return c >= -40 && c <= 150 ? c : null;
+  };
+  const powerKw = (h, id) => {
+    const r = reading(h, id);
+    if (!r || r.value < 0) return null;
+    if (r.unit === 'W') return r.value / 1000;
+    if (r.unit === 'kW') return r.value;
+    return null;
+  };
+  const percentage = (h, id, allowUnitless = true) => {
+    const r = reading(h, id);
+    if (!r || !(r.unit === '%' || r.unit === 'percent' || (allowUnitless && r.unit === ''))) return null;
+    return r.value >= 0 && r.value <= 100 ? r.value : null;
+  };
+  const active = (h, id, extraStates = []) => {
+    const value = String(entity(h, id)?.state ?? '').trim().toLowerCase();
+    return ['on', 'open', 'active', 'running', 'heating', ...extraStates].includes(value);
+  };
+  return Object.freeze({ entity, reading, temperature, powerKw, percentage, active });
+})();
+
+
+/* Read-only SVG animation state resolution.
+ * Modes 'on' and 'off' are persisted in studio_layout; 'auto' follows HA.
+ * This module never controls or writes to Home Assistant entities.
+ */
+const HASSStudioAnimation = (() => {
+  const clamp = (v, a, b, fallback) =>
+    v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v))
+      ? Math.max(a, Math.min(b, Number(v))) : fallback;
+  const flowActive = (mode, h, entity, extraStates = []) =>
+    mode === 'on' || (mode !== 'off' && HASSStudioHA.active(h, entity, extraStates));
+  const combustion = (node, h) => {
+    // Existing saved manual settings take priority over HA.
+    if (['burning', 'embers', 'off'].includes(node.solid_state)) return node.solid_state;
+    const state = HASSStudioHA.entity(h, node.burner_entity);
+    if (state) {
+      const value = String(state.state).toLowerCase();
+      if (['on', 'burning', 'active', 'running', 'heating', 'fire'].includes(value)) return 'burning';
+      if (['embers', 'smoldering', 'cooling', 'glowing'].includes(value)) return 'embers';
+      // Keep historical behavior for explicit off/unknown HA states.
+      return 'off';
+    }
+    const t = HASSStudioHA.temperature(h, node.entity);
+    const upper = clamp(node.burner_on_temp, 20, 90, 35);
+    const lower = Math.min(upper - .5, clamp(node.burner_off_temp, 10, 89, 32));
+    return t === null ? 'off' : t >= upper ? 'burning' : t >= lower ? 'embers' : 'off';
+  };
+  return Object.freeze({ flowActive, combustion });
+})();
+
+
 /* Warmwasser-style SVG functions, adapted from mariofritzer's MIT implementation. */
 const HASSStudioGraphics = (() => {
   const id = n=>'ww'+String(n.id).replace(/[^a-z0-9]/gi,'').slice(0,24);
@@ -1220,16 +1290,9 @@ const HASSStudioTank = (() => {
   const clamp = (v,lo,hi,fallback=lo) => num(v) ? Math.max(lo,Math.min(hi,Number(v))) : fallback;
   const safe = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const ident = v => String(v).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,42);
-  const state = (h,e) => e && h?.states?.[e] ? h.states[e] : null;
-  const active = (h,e) => ['on','active','heat','heating','running','open'].includes(String(state(h,e)?.state||'').toLowerCase());
-  const temperature = (h,e) => {
-    const s=state(h,e),v=s?.state;
-    if (!num(v) || ['unknown','unavailable'].includes(String(v))) return null;
-    const unit=s?.attributes?.unit_of_measurement;
-    if (unit && !['°C','C','°F','F'].includes(unit)) return null;
-    const c=unit==='°F'||unit==='F' ? (Number(v)-32)*5/9 : Number(v);
-    return c>=-40 && c<=150 ? c : null;
-  };
+  const state = HASSStudioHA.entity;
+  const active = (h,e) => HASSStudioHA.active(h,e,['heat']);
+  const temperature = HASSStudioHA.temperature;
   const color = t => {
     if (!num(t)) return '#506780';
     const palette=[[0,[28,88,218]],[20,[25,162,228]],[40,[132,87,217]],[60,[224,65,136]],[80,[239,49,63]],[100,[255,108,44]]];
@@ -1400,7 +1463,7 @@ const HASSStudioTank = (() => {
       return '<path d="M'+a.x.toFixed(3)+' '+a.y.toFixed(3)+'L'+pt.x.toFixed(3)+' '+pt.y.toFixed(3)+
         '" stroke="'+c+'" stroke-width="3" stroke-linecap="round" fill="none"/>';
     }).join('');
-    const running=p.flow_mode==='on'||(p.flow_mode!=='off'&&active(h,p.entity));
+    const running=HASSStudioAnimation.flowActive(p.flow_mode,h,p.entity,['heat']);
     return '<g class="ss-tank-coil"'+(p.entity?' data-more="'+safe(p.entity)+'"':'')+' clip-path="url(#'+base+'WaterClip)">'+
       '<path d="'+d+'" fill="none" stroke="#17243c" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>'+
       '<g class="ss-tank-coil-gradient" data-start="#1a9df9" data-end="'+endColor+'">'+colorful+'</g>'+
@@ -1594,27 +1657,8 @@ const HASSStudioSolidFuel=(()=>{
   // Editable artwork: src/icons/solid-fuel-stove.svg
   const clamp=(v,a,b,d)=>Number.isFinite(Number(v))?Math.max(a,Math.min(b,Number(v))):d;
   const safe=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const raw=(h,e)=>e?h?.states?.[e]:null;
-  const temperature=(h,e)=>{
-    const item=raw(h,e),v=item?.state,u=item?.attributes?.unit_of_measurement;
-    if(v==null||String(v).trim()===''||!Number.isFinite(Number(v))||(u&&!['°C','C','°F','F'].includes(u)))return null;
-    const t=(u==='°F'||u==='F')?(Number(v)-32)*5/9:Number(v);
-    return t>=-40&&t<=150?t:null;
-  };
-  const resolveState=(node,h)=>{
-    if(['burning','embers','off'].includes(node.solid_state))return node.solid_state;
-    const entity=raw(h,node.burner_entity);
-    if(entity){
-      const s=String(entity.state).toLowerCase();
-      if(['on','burning','active','running','heating','fire'].includes(s))return 'burning';
-      if(['embers','smoldering','cooling','glowing'].includes(s))return 'embers';
-      // An explicit off/unknown state is not overridden by a hot water reading.
-      return 'off';
-    }
-    const t=temperature(h,node.entity),upper=clamp(node.burner_on_temp,20,90,35);
-    const lower=Math.min(upper-.5,clamp(node.burner_off_temp,10,89,32));
-    return t===null?'off':t>=upper?'burning':t>=lower?'embers':'off';
-  };
+  const temperature=HASSStudioHA.temperature;
+  const resolveState=HASSStudioAnimation.combustion;
   // Geometry and three nested paths follow the original Warmwasser flame renderer.
   const flame=(x,y,w,ht,speed)=>{
     const d=(r,h)=>'M'+(-r)+' 0C'+(-r-2)+' '+(-h*.45)+' '+(-r*.15)+' '+(-h*.6)+' '+(r*.1)+' '+(-h)+
@@ -1750,22 +1794,8 @@ const HASSStudioPellet = (() => {
 const HASSStudioHeatPump = (()=>{
   // Source artwork: src/icons/heat-pump-stove.svg
   const clamp=(v,lo,hi,fallback)=>Number.isFinite(Number(v))?Math.max(lo,Math.min(hi,Number(v))):fallback;
-  const finiteReading=(h,id)=>{
-    const item=id&&h?.states?.[id];
-    if(!item || typeof item.state!=='string'&&typeof item.state!=='number')return null;
-    const value=String(item.state).trim();
-    if(!value||!Number.isFinite(Number(value)))return null;
-    return {value:Number(value),unit:String(item.attributes?.unit_of_measurement||'').trim()};
-  };
-  const power=(h,id)=>{
-    const reading=finiteReading(h,id);
-    if(!reading||reading.value<0)return null;
-    let kw;
-    if(reading.unit==='W')kw=reading.value/1000;
-    else if(reading.unit==='kW')kw=reading.value;
-    else return null; // Do not silently interpret energy (kWh), current (A) or unlabeled values.
-    return Number.isFinite(kw)?kw:null;
-  };
+  const finiteReading=HASSStudioHA.reading;
+  const power=HASSStudioHA.powerKw;
   const fan=(h,id,maxRpm=1800)=>{
     const reading=finiteReading(h,id);
     if(!reading||reading.value<0)return null;
@@ -1834,30 +1864,10 @@ const HASSStudioGasBoiler=(()=>{
   // Geometry is edited in src/icons/gas-boiler.svg; values are supplied by HA.
 
   const clamp=(v,min,max,def)=>typeof v!=='boolean'&&v!=null&&v!==''&&Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):def;
-  const reading=(h,e)=>{
-    const o=e&&h?.states?.[e];
-    if(!o||typeof o.state!=='string'&&typeof o.state!=='number')return null;
-    const v=String(o.state).trim();
-    if(!v||!Number.isFinite(Number(v)))return null;
-    return {value:Number(v),unit:String(o.attributes?.unit_of_measurement||'').trim()};
-  };
-  const temperature=(h,e)=>{
-    const r=reading(h,e);if(!r||!['','°C','C','°F','F'].includes(r.unit))return null;
-    const value=r.unit==='°F'||r.unit==='F'?(r.value-32)*5/9:r.value;
-    return value>=-40&&value<=150?value:null;
-  };
-  const modulation=(h,e)=>{
-    const r=reading(h,e);
-    // This percentage is burner MODULATION, not actual gas flow in m3/h.
-    // HA integrations may represent percentages as a bare number.
-    if(!r||!['','%','percent'].includes(r.unit)||r.value<0||r.value>100)return null;
-    return r.value;
-  };
-  const burnerEnabled=(h,e)=>{
-    if(!e)return true;
-    const o=h?.states?.[e];if(!o)return false;
-    return ['on','burning','heating','active','running','open'].includes(String(o.state).toLowerCase());
-  };
+  const reading=HASSStudioHA.reading;
+  const temperature=HASSStudioHA.temperature;
+  const modulation=(h,e)=>HASSStudioHA.percentage(h,e,true);
+  const burnerEnabled=(h,e)=>!e||HASSStudioHA.active(h,e,['burning']);
   const geometry=n=>{
     const sx=clamp(n?.width_scale,.5,2.4,1),sy=clamp(n?.height_scale,.5,2.4,1);
     const cx=66,cy=56;
@@ -1920,23 +1930,9 @@ const HASSStudioGasBoiler=(()=>{
 const HASSStudioElectricBoiler=(()=>{
   // Source artwork: src/icons/electric-boiler.svg
   const clamp=(v,min,max,otherwise)=>v!==''&&v!=null&&typeof v!=='boolean'&&Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):otherwise;
-  const read=(h,e)=>{
-    const item=e&&h?.states?.[e],value=item?.state;
-    if(value===undefined||value===null||typeof value==='boolean'||String(value).trim()===''||!Number.isFinite(Number(value)))return null;
-    return {value:Number(value),unit:String(item.attributes?.unit_of_measurement??'').trim()};
-  };
-  const power=(h,e)=>{
-    const r=read(h,e);if(!r||r.value<0)return null;
-    if(r.unit==='W')return r.value/1000;
-    if(r.unit==='kW')return r.value;
-    return null;
-  };
-  const temperature=(h,e)=>{
-    const r=read(h,e);
-    if(!r||!['','°C','C','°F','F'].includes(r.unit))return null;
-    const t=r.unit==='°F'||r.unit==='F'?(r.value-32)*5/9:r.value;
-    return t>=-40&&t<=150?t:null;
-  };
+  const read=HASSStudioHA.reading;
+  const power=HASSStudioHA.powerKw;
+  const temperature=HASSStudioHA.temperature;
   const load=(h,node)=>{
     if(node.electric_load_entity){
       const r=read(h,node.electric_load_entity);
@@ -2413,7 +2409,7 @@ const HASSStudioDeviceRegistry = (() => {
     const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(node.variant)))
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
     const pipes=data.pipes.map(pipe=>{
-      const d=pipePath(pipe.points),enabled=pipe.flow_mode==='on'||(pipe.flow_mode==='auto'&&HASSStudioGraphics.on(hass,pipe.flow_entity));
+      const d=pipePath(pipe.points),enabled=HASSStudioAnimation.flowActive(pipe.flow_mode,hass,pipe.flow_entity);
       const endcap=(first)=>{
         if(first&&pipe.cap_start===false||!first&&pipe.cap_end===false)return '';
         const pts=pipe.points,at=first?pts[0]:pts[pts.length-1],near=first?pts[1]:pts[pts.length-2];
@@ -3042,3 +3038,4 @@ const HASSStudioDeviceRegistry = (() => {
     renderProps();
   };
 })();
+
