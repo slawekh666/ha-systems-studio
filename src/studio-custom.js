@@ -325,24 +325,20 @@
       const model=get(),obj=selectedObject(model);if(!obj)return;
       const index=Number(el.dataset.index);
       const val=el.value;
-      if(key==='scale_mode'&&obj.type==='tank'&&obj.variant==='modular'){
-        if(val==='free'&&obj.scale_mode!=='free'){
-          obj.width_scale=clamp(obj.scale,0.5,2.4,1);
-          obj.height_scale=clamp(obj.scale,0.5,2.4,1);
-          obj.scale=1;
-        }else if(val!=='free'&&obj.scale_mode==='free'){
-          obj.scale=clamp(Math.sqrt(obj.width_scale*obj.height_scale),0.5,2.4,1);
-          obj.width_scale=1;obj.height_scale=1;
-        }
-        obj.scale_mode=val==='free'?'free':'proportional';
+      if(key==='aspect_locked'&&obj.type==='tank'&&obj.variant==='modular'){
+        obj.aspect_locked=val==='true';
       }else if(['width_scale','height_scale'].includes(key)&&obj.type==='tank'&&obj.variant==='modular'){
-        if(obj.scale_mode!=='free'){
-          obj.width_scale=obj.scale;
-          obj.height_scale=obj.scale;
-          obj.scale=1;
-          obj.scale_mode='free';
+        const previous=obj[key];
+        const next=clamp(val,.5,2.4,previous);
+        if(obj.aspect_locked){
+          const other=key==='width_scale'?'height_scale':'width_scale';
+          const ratio=previous>0?next/previous:1;
+          const companion=obj[other]*ratio;
+          if(companion>=.5&&companion<=2.4)obj[other]=companion;
+          else {obj.aspect_locked=false;}
         }
-        obj[key]=clamp(val,.5,2.4,obj[key]);
+        obj[key]=next;
+        obj.scale_mode='free';
       }else if(['width_scale','height_scale'].includes(key)&&obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)){
         // Independent from the proportional whole-node scale.
         obj[key]=clamp(val,.5,2.4,obj[key]);
@@ -391,6 +387,10 @@
       const button=event.target.closest('button');
       if(!button||!selection)return;
       const model=get(),obj=selectedObject(model);if(!obj)return;
+      if(button.dataset.action==='reset-tank-aspect' && obj.type==='tank'&&obj.variant==='modular'){
+        obj.width_scale=1;obj.height_scale=1;obj.scale_mode='free';obj.aspect_locked=true;
+        commit(model);render();return;
+      }
       if(button.hasAttribute('data-select-part')){
         if(obj.parts?.some(part=>part.id===button.dataset.selectPart)){
           selectedPartId=button.dataset.selectPart;

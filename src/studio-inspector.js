@@ -69,16 +69,15 @@ const HASSStudioEditorInspector = (() => {
           HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+HASSStudioGraphics.defs(obj,editor._hass)+'</defs>'+
           (obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,editor._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,editor._hass):previewPellet?HASSStudioPellet.render(obj,editor._hass):previewHP?HASSStudioHeatPump.render(obj,editor._hass):previewGas?HASSStudioGasBoiler.render(obj,editor._hass):previewElectric?HASSStudioElectricBoiler.render(obj,editor._hass):previewFireplace?HASSStudioFireplace.render(obj,editor._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,editor._hass):variantShape(obj))+'</svg></div>';
         const freeScale=obj.type==='tank'&&obj.variant==='modular'&&obj.scale_mode==='free';
-        if(obj.type==='tank'&&obj.variant==='modular')
-          markup+=field(L.tankScaleMode,'scale_mode',obj.scale_mode,'text',
-            [['proportional',L.tankScaleProportional],['free',L.tankScaleFree]]);
         if(obj.type==='tank'&&obj.variant==='modular'){
-          // Axis sliders are never hidden. Editing either one automatically unlocks proportions.
-          if(!freeScale)markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
-          markup+=field(L.tankWidthScale,'width_scale',freeScale?obj.width_scale:obj.scale,
-            'range',null,'min="0.5" max="2.4" step="0.05"')+
-            field(L.tankHeightScale,'height_scale',freeScale?obj.height_scale:obj.scale,
-            'range',null,'min="0.5" max="2.4" step="0.05"');
+          markup+=field(L.scale+' ('+Math.round(obj.scale*100)+'%)','scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.05"')+
+            field(L.tankWidthScale+' ('+Math.round(obj.width_scale*100)+'%)','width_scale',obj.width_scale,
+              'range',null,'min="0.5" max="2.4" step="0.05"')+
+            field(L.tankHeightScale+' ('+Math.round(obj.height_scale*100)+'%)','height_scale',obj.height_scale,
+              'range',null,'min="0.5" max="2.4" step="0.05"')+
+            field(L.tankScaleMode,'aspect_locked',obj.aspect_locked?'true':'false','text',
+              [['true',L.tankScaleProportional],['false',L.tankScaleFree]])+
+            '<button type="button" data-action="reset-tank-aspect">'+esc(L.tankScaleProportional)+' 1:1</button>';
         }else{
           markup+=field(L.scale,'scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"');
           if(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)){

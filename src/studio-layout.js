@@ -40,6 +40,7 @@ const HASSStudioLayout = (() => {
       x:clamp(v.x,0,W-120,40),y:clamp(v.y,0,H-140,40),
       scale:clamp(v.scale,0.5,2.4,1),
       scale_mode:v.type==='tank' && v.variant==='modular' && v.scale_mode==='free'?'free':'proportional',
+       aspect_locked:typeof v.aspect_locked==='boolean'?v.aspect_locked:v.scale_mode!=='free',
       width_scale:clamp(v.width_scale,0.5,2.4,1),height_scale:clamp(v.height_scale,0.5,2.4,1),
       // Use uniform scale for both full render and interactive drag.
       burner_entity:validEntity(v.burner_entity)?v.burner_entity:'',
