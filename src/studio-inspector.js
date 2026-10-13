@@ -22,7 +22,7 @@ const HASSStudioEditorInspector = (() => {
         (index!==undefined?' data-index="'+index+'"':'')+
         ' value="'+esc(value||'')+'" placeholder="sensor..." autocomplete="off"/>';
     };
-    const variantOptions=(node)=>registry.variantOptions(node.type,pickLang(editor._config,editor._hass));
+    const variantOptions=(node)=>registry.variantOptionsForNode(node,pickLang(editor._config,editor._hass));
     const styleOptions=[['warmwasser','Warmwasser (default)'],['studio','Studio (simple)']];
     const sides=[['left',L.left],['right',L.right],['inside',L.inside]];
     const colorsList=[['hot',L.hot],['cold',L.cold],['solar',L.solarFlow],['return',L.returnFlow]];
