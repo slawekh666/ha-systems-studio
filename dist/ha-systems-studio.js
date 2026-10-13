@@ -2430,7 +2430,7 @@ const HASSStudioCanvas = (() => {
  */
 const HASSStudioEditorInspector = (() => {
   const create = ({editor, L, properties, esc, opts, registry, pickLang,
-    get, selectedObject, getSelection, variantShape}) => {
+    get, selectedObject, getSelection, getSelectedPartId, variantShape}) => {
     const entityList=()=>{
       const states=editor._hass?.states||{};
       return Object.keys(states).sort().slice(0,2000).map(id=>
@@ -2540,7 +2540,14 @@ const HASSStudioEditorInspector = (() => {
         if(obj.type==='tank'||obj.type==='solar'){
           const isModular=obj.type==='tank'&&obj.variant==='modular';
           markup+='<section><h4>'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'</h4>'+
-          obj.parts.map((item,index)=>'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+(isModular?' · '+esc(L.partLayer)+' '+index:'')+'</strong>'+
+            '<div class="ss-part-list" role="group" aria-label="'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'">'+
+            obj.parts.map((part,i)=>'<button type="button" class="ss-part-pick'+
+              (part.id===getSelectedPartId()?' ss-part-active':'')+'" data-select-part="'+esc(part.id)+'" aria-pressed="'+
+              (part.id===getSelectedPartId()?'true':'false')+'">'+
+              esc(part.label||((L[part.kind]||part.kind)+' '+(i+1)))+
+              (part.entity?' · '+esc(part.entity):'')+'</button>').join('')+'</div>'+
+            (obj.parts.some(part=>part.id===getSelectedPartId())?'<h4>'+esc(L.properties)+'</h4>':'')+
+          obj.parts.map((item,index)=>item.id!==getSelectedPartId()?'':'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+(isModular?' · '+esc(L.partLayer)+' '+index:'')+'</strong>'+
             (isModular?'<button type="button" title="'+esc(L.partLayerDown)+'" aria-label="'+esc(L.partLayerDown)+'" data-layer-down="'+index+'"'+(index===0?' disabled':'')+'>↓</button>'+
               '<button type="button" title="'+esc(L.partLayerUp)+'" aria-label="'+esc(L.partLayerUp)+'" data-layer-up="'+index+'"'+(index===obj.parts.length-1?' disabled':'')+'>↑</button>':'')+
             '<button type="button" data-delete-part="'+index+'">×</button></div>'+
@@ -2806,6 +2813,9 @@ const HASSStudioEditorLibrary=(()=>{
       '.ss-props label,.ss-props .ss-row{min-width:0}.ss-props .ss-row strong{overflow-wrap:anywhere}'+
       '.ss-props .ss-add-parts{display:flex;flex-wrap:wrap;gap:6px;min-width:0;width:100%}'+
       '.ss-props .ss-add-parts button{flex:0 1 auto;max-width:100%;white-space:normal;overflow-wrap:anywhere}'+
+      '.ss-part-list{display:flex;flex-direction:column;gap:4px;max-height:210px;overflow-y:auto}'+
+      '.ss-props button.ss-part-pick{text-align:left;padding:8px;white-space:normal;overflow-wrap:anywhere;font-size:12px}'+
+      '.ss-part-pick.ss-part-active{outline:2px solid var(--primary-color,#168bce)}'+
       '.ss-selected{outline:1px solid var(--primary-color)}'+
       '.ss-preview{border:1px solid var(--divider-color,#555);border-radius:8px;display:grid;place-items:center;padding:8px}'+
       '.ss-entities{max-height:210px;overflow-y:auto;border:1px solid var(--divider-color,#555);border-radius:8px}'+
@@ -2845,7 +2855,7 @@ const HASSStudioEditorLibrary=(()=>{
         grip.addEventListener('pointercancel',end);
       });
     }
-    let selection=null,drag=null,zoom=1;
+    let selection=null,drag=null,zoom=1,selectedPartId=null;
     const get=()=>normalized(this._config);
     const commit=(model)=>{
       this._config={...this._config,studio_layout:model};
@@ -2858,7 +2868,7 @@ const HASSStudioEditorLibrary=(()=>{
     };
     const renderProps=HASSStudioEditorInspector.create({
       editor:this,L,properties,esc,opts,registry,pickLang,get,selectedObject,
-      getSelection:()=>selection,variantShape
+      getSelection:()=>selection,getSelectedPartId:()=>selectedPartId,variantShape
     });
     const render=()=>{
       stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
@@ -2867,7 +2877,7 @@ const HASSStudioEditorLibrary=(()=>{
       renderProps();
     };
     const setSelected=(type,id)=>{
-      selection={type,id};render();
+      selection={type,id};selectedPartId=type==='node'?get().nodes.find(n=>n.id===id)?.parts?.[0]?.id||null:null;render();
     };
     const point=(ev,svg)=>{
       const p=svg.createSVGPoint();p.x=ev.clientX;p.y=ev.clientY;
@@ -2949,7 +2959,7 @@ const HASSStudioEditorLibrary=(()=>{
       const model=get();
       if(selection.type==='node')model.nodes=model.nodes.filter(n=>n.id!==selection.id);
       else model.pipes=model.pipes.filter(n=>n.id!==selection.id);
-      selection=null;commit(model);render();
+      selection=null;selectedPartId=null;commit(model);render();
     });
     root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add,button.dataset.variant||'')));
     root.querySelectorAll('[data-add-preset]').forEach(button=>button.addEventListener('click',()=>create('boiler',button.dataset.addPreset)));
@@ -3025,6 +3035,12 @@ const HASSStudioEditorLibrary=(()=>{
       const button=event.target.closest('button');
       if(!button||!selection)return;
       const model=get(),obj=selectedObject(model);if(!obj)return;
+      if(button.hasAttribute('data-select-part')){
+        if(obj.parts?.some(part=>part.id===button.dataset.selectPart)){
+          selectedPartId=button.dataset.selectPart;renderProps();
+        }
+        return;
+      }
       const index=Number(button.dataset.deletePart||button.dataset.deleteAccessory||button.dataset.deleteEntity);
       if(button.hasAttribute('data-layer-up')&&obj.parts){
         const i=Number(button.dataset.layerUp);
@@ -3034,16 +3050,20 @@ const HASSStudioEditorLibrary=(()=>{
         const i=Number(button.dataset.layerDown);
         if(i>0&&i<obj.parts.length)[obj.parts[i],obj.parts[i-1]]=[obj.parts[i-1],obj.parts[i]];
         else return;
-      }else if(button.hasAttribute('data-delete-part'))obj.parts.splice(index,1);
+      }else if(button.hasAttribute('data-delete-part')){
+        const removed=obj.parts.splice(index,1)[0];
+        if(removed?.id===selectedPartId)selectedPartId=obj.parts[Math.min(index,obj.parts.length-1)]?.id||null;
+      }
       else if(button.hasAttribute('data-delete-accessory'))obj.accessories.splice(index,1);
       else if(button.hasAttribute('data-delete-entity'))obj.entities.splice(index,1);
       else if(button.dataset.addPart){
         if(obj.parts.length>=40)return;
         const kind=obj.type==='solar'?'sensor':button.dataset.addPart;
         const sensorCount=obj.parts.filter(part=>part.kind==='sensor').length+1;
-        obj.parts.push({id:freshId('i'),kind,label:obj.type==='solar'?'Kolektor':kind==='sensor'?'T'+sensorCount:'',
+        const newPart={id:freshId('i'),kind,label:obj.type==='solar'?'Kolektor':kind==='sensor'?'T'+sensorCount:'',
           side:obj.type==='solar'?'right':'left',height:obj.type==='solar'?80:50,
-          display_scale:1,variant:'warmwasser',entity:'',x:50,length:58,width:60,turns:12,power:75,mode:'auto',flow_mode:'auto',flow_direction:'forward',flow_speed:1,permeability:kind==='baffle_horizontal'?.35:0,container:'main',power_entity:''});
+          display_scale:1,variant:'warmwasser',entity:'',x:50,length:58,width:60,turns:12,power:75,mode:'auto',flow_mode:'auto',flow_direction:'forward',flow_speed:1,permeability:kind==='baffle_horizontal'?.35:0,container:'main',power_entity:''};
+        obj.parts.push(newPart);selectedPartId=newPart.id;
       }else if(button.dataset.addAccessory){
         if(obj.accessories.length>=20)return;
         obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,label:'',position:50,entity:''});
@@ -3064,19 +3084,22 @@ const HASSStudioEditorLibrary=(()=>{
       if(event.button!==0)return;
       const hit=event.target.closest?.('.ss-handle');
       if(hit){
-        selection={type:'pipe',id:hit.dataset.id};
+        selection={type:'pipe',id:hit.dataset.id};selectedPartId=null;
         drag={type:'point',id:hit.dataset.id,index:Number(hit.dataset.point),pointer:event.pointerId};
       }else{
         const node=event.target.closest?.('.ss-node');
         if(node){
           selection={type:'node',id:node.dataset.id};
+          const partHit=event.target.closest?.('[data-part-id]');
+          selectedPartId=partHit?.dataset.partId||get().nodes.find(n=>n.id===node.dataset.id)?.parts?.[0]?.id||null;
+          if(partHit){renderProps();return;}
           const model=get(),obj=selectedObject(model),svg=stage.querySelector('svg'),p=point(event,svg);
           if(!obj)return;
           drag={type:'node',id:obj.id,offsetX:p.x-obj.x,offsetY:p.y-obj.y,pointer:event.pointerId};
         }else{
           const pipe=event.target.closest?.('.ss-pipe');
           if(pipe){setSelected('pipe',pipe.dataset.id);return;}
-          selection=null;render();return;
+          selection=null;selectedPartId=null;render();return;
         }
       }
       stage.querySelector('svg')?.setPointerCapture(event.pointerId);
