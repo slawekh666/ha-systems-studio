@@ -39,11 +39,23 @@ const HASSStudioSvg = (() => {
     return rendered;
   };
 
+  /** Fill a named empty SVG group with renderer-generated animation SVG. */
+  const inject = (template, slots) => {
+    let result = template;
+    for (const [id, content] of Object.entries(slots)) {
+      if (!/^[a-z][a-zA-Z0-9_-]*$/.test(id)) throw new Error('Invalid SVG slot name');
+      const marker = '<g id="' + id + '"></g>';
+      if (result.split(marker).length !== 2) throw new Error('Expected one empty SVG slot: ' + id);
+      result = result.replace(marker, '<g id="' + id + '">' + content + '</g>');
+    }
+    return result;
+  };
+
   /** Namespace every SVG id/reference so repeated cards cannot collide. */
   const namespaceIds = (svg, prefix) => svg
     .replace(/(\bid=")([^"]+)(")/g, (_, a, id, z) => a + prefix + id + z)
     .replace(/url\(#([^)]+)\)/g, (_, id) => 'url(#' + prefix + id + ')')
     .replace(/(\b(?:href|xlink:href)="#)([^"]+)(")/g, (_, a, id, z) => a + prefix + id + z);
 
-  return Object.freeze({ fragment, apply, namespaceIds });
+  return Object.freeze({ fragment, apply, inject, namespaceIds });
 })();
