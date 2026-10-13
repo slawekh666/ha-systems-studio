@@ -41,8 +41,8 @@ const HASSStudioFireplace=(()=>{
       .replace(/url\(#([^)]+)\)/g,(_,k)=>'url(#'+id+k+')');
     const bounds=geometry(node);
     return '<g class="ss-modern-fireplace" data-combustion="'+mode+'">'+
-      '<g class="ss-fireplace-dimensions" transform="translate(80 57) scale('+bounds.sx+' '+bounds.sy+') translate(-80 -57)">'+
-      '<g transform="translate(0 -115) scale(.133 .262)">'+svg+'</g></g></g>';
+      '<g class="ss-fireplace-dimensions" transform="translate(80 57) scale('+bounds.sx+' '+bounds.sy+') translate(-120 -30)">'+
+      '<g transform="translate(0 -115) scale(.2 .2)">'+svg+'</g></g></g>';
   };
   const styles='<style>@media(prefers-reduced-motion:reduce){.ss-modern-fireplace .ss-fire,.ss-modern-fireplace .ss-embers{animation:none!important}}</style>';
   return {render,styles,combustion,geometry};

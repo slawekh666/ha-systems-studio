@@ -51,7 +51,7 @@ const HASSStudioPellet = (() => {
     const {sx,sy}=geometry(node);
     return '<g class="ss-modern-pellet" data-combustion="'+mode+'">'+
       '<g class="ss-pellet-dimensions" transform="translate(97 46) scale('+sx+' '+sy+') translate(-97 -46)">'+
-      '<g transform="translate(12 -104) scale(.164 .265) translate(-84 -82)">'+image+'</g></g></g>';
+      '<g transform="translate(12 -84) scale(.2 .2) translate(-84 -82)">'+image+'</g></g></g>';
   };
   const styles='<style>@media(prefers-reduced-motion:reduce){.ss-modern-pellet .ss-fire,.ss-modern-pellet .ss-embers{animation:none!important}}</style>';
   return {render,styles,geometry,combustion};

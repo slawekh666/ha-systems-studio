@@ -69,7 +69,7 @@ const HASSStudioHeatPump = (()=>{
       .replace(/url\(#([^)]+)\)/g,(_,id)=>'url(#'+prefix+id+')');
     return '<g class="ss-modern-heat-pump" data-fan="'+(speed===null?'unknown':pct.toFixed(1))+'" data-power="'+(kw===null?'unknown':kw.toFixed(2))+'">'+
       '<g class="ss-hp-dimensions" transform="translate(108.32 9.96) scale('+sx+' '+sy+') translate(-108.32 -9.96)">'+
-      '<g transform="translate(8 -75) scale(.16 .16)">'+image+'</g></g></g>';
+      '<g transform="translate(45 -45) scale(.1 .1)">'+image+'</g></g></g>';
   };
   const styles='<style>'+
     '@keyframes ssHPSpin{to{transform:rotate(360deg)}}'+
