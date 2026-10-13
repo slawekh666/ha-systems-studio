@@ -147,6 +147,9 @@
       '.ss-props label,.ss-props .ss-row{min-width:0}.ss-props .ss-row strong{overflow-wrap:anywhere}'+
       '.ss-props .ss-add-parts{display:flex;flex-wrap:wrap;gap:6px;min-width:0;width:100%}'+
       '.ss-props .ss-add-parts button{flex:0 1 auto;max-width:100%;white-space:normal;overflow-wrap:anywhere}'+
+      '.ss-part-list{display:flex;flex-direction:column;gap:4px;max-height:210px;overflow-y:auto}'+
+      '.ss-props button.ss-part-pick{text-align:left;padding:8px;white-space:normal;overflow-wrap:anywhere;font-size:12px}'+
+      '.ss-part-pick.ss-part-active{outline:2px solid var(--primary-color,#168bce)}'+
       '.ss-selected{outline:1px solid var(--primary-color)}'+
       '.ss-preview{border:1px solid var(--divider-color,#555);border-radius:8px;display:grid;place-items:center;padding:8px}'+
       '.ss-entities{max-height:210px;overflow-y:auto;border:1px solid var(--divider-color,#555);border-radius:8px}'+
@@ -421,7 +424,9 @@
         const node=event.target.closest?.('.ss-node');
         if(node){
           selection={type:'node',id:node.dataset.id};
-          selectedPartId=get().nodes.find(n=>n.id===node.dataset.id)?.parts?.[0]?.id||null;
+          const partHit=event.target.closest?.('[data-part-id]');
+          selectedPartId=partHit?.dataset.partId||get().nodes.find(n=>n.id===node.dataset.id)?.parts?.[0]?.id||null;
+          if(partHit){renderProps();return;}
           const model=get(),obj=selectedObject(model),svg=stage.querySelector('svg'),p=point(event,svg);
           if(!obj)return;
           drag={type:'node',id:obj.id,offsetX:p.x-obj.x,offsetY:p.y-obj.y,pointer:event.pointerId};
