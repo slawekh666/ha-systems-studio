@@ -4,7 +4,7 @@
  */
 const HASSStudioEditorInspector = (() => {
   const create = ({editor, L, properties, esc, opts, registry, pickLang,
-    get, selectedObject, getSelection, variantShape}) => {
+    get, selectedObject, getSelection, getSelectedPartId, variantShape}) => {
     const entityList=()=>{
       const states=editor._hass?.states||{};
       return Object.keys(states).sort().slice(0,2000).map(id=>
@@ -114,7 +114,14 @@ const HASSStudioEditorInspector = (() => {
         if(obj.type==='tank'||obj.type==='solar'){
           const isModular=obj.type==='tank'&&obj.variant==='modular';
           markup+='<section><h4>'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'</h4>'+
-          obj.parts.map((item,index)=>'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+(isModular?' · '+esc(L.partLayer)+' '+index:'')+'</strong>'+
+            '<div class="ss-part-list" role="group" aria-label="'+esc(obj.type==='solar'?L.solarSensors:L.sensors)+'">'+
+            obj.parts.map((part,i)=>'<button type="button" class="ss-part-pick'+
+              (part.id===getSelectedPartId()?' ss-part-active':'')+'" data-select-part="'+esc(part.id)+'" aria-pressed="'+
+              (part.id===getSelectedPartId()?'true':'false')+'">'+
+              esc(part.label||((L[part.kind]||part.kind)+' '+(i+1)))+
+              (part.entity?' · '+esc(part.entity):'')+'</button>').join('')+'</div>'+
+            (obj.parts.some(part=>part.id===getSelectedPartId())?'<h4>'+esc(L.properties)+'</h4>':'')+
+          obj.parts.map((item,index)=>item.id!==getSelectedPartId()?'':'<div class="ss-row"><strong>'+esc((L[item.kind]||item.kind)+' '+(index+1))+(isModular?' · '+esc(L.partLayer)+' '+index:'')+'</strong>'+
             (isModular?'<button type="button" title="'+esc(L.partLayerDown)+'" aria-label="'+esc(L.partLayerDown)+'" data-layer-down="'+index+'"'+(index===0?' disabled':'')+'>↓</button>'+
               '<button type="button" title="'+esc(L.partLayerUp)+'" aria-label="'+esc(L.partLayerUp)+'" data-layer-up="'+index+'"'+(index===obj.parts.length-1?' disabled':'')+'>↑</button>':'')+
             '<button type="button" data-delete-part="'+index+'">×</button></div>'+
