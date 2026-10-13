@@ -2164,6 +2164,58 @@ const HASSStudioDeviceRegistry = (() => {
     const graphic=variantMap.get(type+':'+variant);
     return graphic ? Object.freeze({...graphic,type,category:families[graphic.family].category,device:families[graphic.family]}):null;
   };
+  // Curated choices for the left library. Each entry creates a supported
+  // legacy node/pipe variant; no new device data format is introduced.
+  // A family appears once when its alternatives are only graphic styles.
+  const libraryPresets = Object.freeze([
+    ['boiler','solid_fuel','solid_fuels'],
+    ['boiler','pellet_modern','solid_fuels'],
+    ['boiler','gas_modern'],
+    ['boiler','electric_modern'],
+    ['boiler','oil'],
+    ['boiler','heatpump_modern'],
+    ['boiler','fireplace_modern'],
+    ['tank','modular'],
+    ['solar','flat'],
+    ['pump','circulation'],
+    ['pump','inline'],
+    ['valve','two_way'],
+    ['valve','three_way'],
+    ['sensor','temperature'],
+    ['sensor','pressure'],
+    ['pipe',null]
+  ]);
+  const subgroups = Object.freeze({
+    solid_fuels: Object.freeze({pl:'Kotły na paliwo stałe',en:'Solid-fuel boilers'})
+  });
+  const presetNames = Object.freeze({
+    'pump:circulation':{pl:'Pompa obiegowa',en:'Circulation pump'},
+    'pump:inline':{pl:'Pompa przelotowa',en:'Inline pump'},
+    'valve:two_way':{pl:'Zawór dwudrogowy',en:'Two-way valve'},
+    'valve:three_way':{pl:'Zawór trójdrogowy',en:'Three-way valve'},
+    'sensor:temperature':{pl:'Czujnik temperatury',en:'Temperature sensor'},
+    'sensor:pressure':{pl:'Czujnik ciśnienia',en:'Pressure sensor'}
+  });
+  const libraryEntries = (lang='pl') => libraryPresets.map(([type,variant,subgroup]) => {
+    const choice=variant===null
+      ? {type,family:'pipe',category:'connections',device:families.pipe}
+      : resolve(type,variant);
+    if(!choice) throw new Error('Missing library device: '+type+':'+variant);
+    const language=lang==='en'?'en':'pl';
+    const label=presetNames[type+':'+variant]?.[language] || families[choice.family]?.[language]
+      || choice.device[language];
+    return Object.freeze({
+      type,variant,category:choice.category,family:choice.family||'pipe',
+      subgroup:subgroup||null,label,icon:iconFor(type)
+    });
+  });
+  const variantOptionsForNode = (node, lang='pl') => {
+    const device=resolve(node?.type,node?.variant);
+    return device
+      ? variantsFor(node.type).filter(entry=>entry.family===device.family)
+          .map(entry=>[entry.id,entry.label[lang==='en'?'en':'pl']])
+      : variantOptions(node?.type,lang);
+  };
   const catalog = (lang='pl') => Object.keys(families).map(id => Object.freeze({
     id,category:families[id].category,label:families[id][lang==='en'?'en':'pl'],
     variants:types.flatMap(type => variantsFor(type).filter(item=>item.family===id).map(item=>item.id))
