@@ -26,30 +26,14 @@ a{color:#8ad7ff}code{color:#edc182}
 </style>
 </head>
 <body>
-<header><h1>Systems Studio · podgląd ikon SVG</h1><small>Źródło: rzeczywiste pliki <code>src/*.js</code>, bez HA</small></header>
+<header><h1>Systems Studio · podgląd ikon SVG</h1><small>Rejestr urządzeń + pliki <code>src/*.js</code> i <code>src/icons/*.svg</code>, bez HA</small></header>
 <main>
 <aside>
 <label for="icon">Ikona / moduł</label>
-<select id="icon">
-<option value="solid">Kocioł na paliwo stałe — nowy</option>
-<option value="pellet">Kocioł pelletowy — nowy</option>
-<option value="heatpump">Pompa ciepła — nowa</option>
-<option value="gas">Kocioł gazowy — nowy</option>
-<option value="electric">Kocioł elektryczny — nowy</option>
-<option value="fireplace">Kominek — nowy</option>
-<option value="tank">Zbiornik modułowy — nowy</option>
-<optgroup label="Starsze ikony Warmwasser">
-<option value="old-boiler">Kocioł — Warmwasser</option>
-<option value="old-tank">Zbiornik — Warmwasser</option>
-<option value="old-solar">Solar — Warmwasser</option>
-<option value="old-pump">Pompa — Warmwasser</option>
-<option value="old-valve">Zawór — Warmwasser</option>
-<option value="old-sensor">Czujnik — Warmwasser</option>
-</optgroup>
-</select>
+<select id="icon"></select>
 <label>Plik źródłowy</label>
 <div class="source" id="source">src/solid-fuel-stove.js</div>
-<p class="mini">Edytuj ten plik w lewej kolumnie VS Code. Po zapisaniu <kbd>Ctrl+S</kbd> podgląd odświeży Live Preview.</p>
+<p class="mini">Edytuj wskazany plik w VS Code. Po zapisaniu <kbd>Ctrl+S</kbd> odśwież podgląd (Live Preview / Live Server). Do wczytania plików SVG potrzebny jest serwer HTTP, nie otwieranie pliku przez <code>file://</code>.</p>
 <div class="controls">
 <div><label for="temperature">Temperatura (°C)</label><div class="reading"><input id="temperature" type="range" min="10" max="95" value="65"><output id="temperatureValue"></output></div></div>
 <div><label for="power">Moc (kW)</label><div class="reading"><input id="power" type="range" min="0" max="10" step=".1" value="4.5"><output id="powerValue"></output></div></div>
@@ -75,13 +59,17 @@ a{color:#8ad7ff}code{color:#edc182}
 </section>
 </main>
 <script>window.esc=function(value){return String(value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");};</script>
+<script src="../src/ha-state.js"></script>
+<script src="../src/animation-state.js"></script>
+<script src="../src/device-registry.js"></script>
 <script src="../src/warmwasser-shapes.js"></script>
 <script src="../src/studio-tank.js"></script>
+<script src="../src/svg-template.js"></script>
+<script>window.HASSStudioIconTemplates = Object.create(null);</script>
 <script src="../src/solid-fuel-stove.js"></script>
 <script src="../src/pellet-stove.js"></script>
 <script src="../src/heat-pump-stove.js"></script>
-<script>window.HASSStudioIconTemplates = {};</script>
-<script src="../src/svg-template.js"></script>
+
 <script src="../src/gas-boiler.js"></script>
 <script src="../src/electric-boiler.js"></script>
 <script src="../src/fireplace.js"></script>
@@ -89,29 +77,63 @@ a{color:#8ad7ff}code{color:#edc182}
 (function(){
 "use strict";
 const $=id=>document.getElementById(id);
-const assetByIcon = {
-  solid: ['solidFuel', 'solid-fuel-stove'],
-  pellet: ['pellet', 'pellet-stove'],
-  heatpump: ['heatPump', 'heat-pump-stove'],
-  gas: ['gasBoiler', 'gas-boiler'],
-  electric: ['electricBoiler', 'electric-boiler'],
-  fireplace: ['fireplace', 'fireplace']
+// This preview uses the same registry as the editor so new variants appear automatically.
+const registry=HASSStudioDeviceRegistry;
+const renderers=Object.freeze({
+  warmwasser:{api:HASSStudioGraphics,file:"src/warmwasser-shapes.js"},
+  modularTank:{api:HASSStudioTank,file:"src/studio-tank.js"},
+  solidFuel:{api:HASSStudioSolidFuel,file:"src/solid-fuel-stove.js",asset:"solid-fuel-stove"},
+  pellet:{api:HASSStudioPellet,file:"src/pellet-stove.js",asset:"pellet-stove"},
+  heatPump:{api:HASSStudioHeatPump,file:"src/heat-pump-stove.js",asset:"heat-pump-stove"},
+  gasBoiler:{api:HASSStudioGasBoiler,file:"src/gas-boiler.js",asset:"gas-boiler"},
+  electricBoiler:{api:HASSStudioElectricBoiler,file:"src/electric-boiler.js",asset:"electric-boiler"},
+  fireplace:{api:HASSStudioFireplace,file:"src/fireplace.js",asset:"fireplace"}
+});
+const fallbackBounds={
+  boiler:{x:-18,y:-110,width:180,height:300},
+  tank:{x:-30,y:-10,width:205,height:215},
+  solar:{x:-20,y:-15,width:170,height:180},
+  pump:{x:0,y:0,width:125,height:130},
+  valve:{x:0,y:0,width:125,height:130},
+  sensor:{x:0,y:0,width:125,height:130}
 };
-const models={
-solid:{file:"src/solid-fuel-stove.js",api:HASSStudioSolidFuel,bounds:{x:12,y:-105,width:110,height:318}},
-pellet:{file:"src/pellet-stove.js",api:HASSStudioPellet},
-heatpump:{file:"src/heat-pump-stove.js",api:HASSStudioHeatPump},
-gas:{file:"src/icons/gas-boiler.svg (grafika) + src/gas-boiler.js (HA)",api:HASSStudioGasBoiler},
-electric:{file:"src/electric-boiler.js",api:HASSStudioElectricBoiler},
-fireplace:{file:"src/fireplace.js",api:HASSStudioFireplace},
-tank:{file:"src/studio-tank.js",api:HASSStudioTank,bounds:{x:-5,y:-10,width:145,height:175}},
-"old-boiler":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"boiler",bounds:{x:-18,y:-8,width:180,height:270}},
-"old-tank":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"tank",bounds:{x:-30,y:-8,width:205,height:215}},
-"old-solar":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"solar",bounds:{x:-20,y:-15,width:170,height:180}},
-"old-pump":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"pump",bounds:{x:0,y:0,width:125,height:130}},
-"old-valve":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"valve",bounds:{x:0,y:0,width:125,height:130}},
-"old-sensor":{file:"src/warmwasser-shapes.js",api:HASSStudioGraphics,type:"sensor",bounds:{x:0,y:0,width:125,height:130}}
-};
+const models=Object.create(null),groups=[];
+for(const type of ['boiler','tank','solar','pump','valve','sensor']){
+  const variants=registry.variantsFor(type);
+  const options=variants.map(variant=>{
+    const renderer=renderers[variant.renderer];
+    if(!renderer)throw new Error('Nieznany renderer: '+variant.renderer);
+    const key=type+':'+variant.id;
+    models[key]={
+      type,variant:variant.id,renderer:variant.renderer,api:renderer.api,
+      file:variant.svg?'src/icons/'+variant.svg+' + '+renderer.file:renderer.file,
+      assetKey:variant.renderer,asset:renderer.asset||null,
+      bounds:type==='boiler'&&variant.id==='solid_fuel'?{x:12,y:-105,width:110,height:318}:
+        type==='tank'&&variant.id==='modular'?{x:-5,y:-10,width:145,height:175}:fallbackBounds[type]
+    };
+    return '<option value="'+esc(key)+'">'+esc(variant.label.pl)+'</option>';
+  });
+  groups.push('<optgroup label="'+esc(registry.categories[registry.families[variants[0]?.family]?.category]?.pl||type)+'">'+
+    options.join('')+'</optgroup>');
+}
+const select=$("icon");
+select.innerHTML=groups.join('');
+select.value='boiler:solid_fuel';
+const pendingAssets=new Map();
+async function ensureAsset(def){
+  if(!def.asset||Object.prototype.hasOwnProperty.call(HASSStudioIconTemplates,def.assetKey))return;
+  const id=def.assetKey;
+  if(!pendingAssets.has(id)){
+    const promise=fetch('../src/icons/'+def.asset+'.svg',{cache:'no-store'})
+      .then(response=>{
+        if(!response.ok)throw new Error('Nie można wczytać SVG '+def.asset+': HTTP '+response.status);
+        return response.text();
+      }).then(xml=>HASSStudioSvg.fragment(xml))
+      .catch(error=>{pendingAssets.delete(id);throw error;});
+    pendingAssets.set(id,promise);
+  }
+  HASSStudioIconTemplates[id]=await pendingAssets.get(id);
+}
 const canvas=$("canvas"), stage=$("stage"), inspector=$("inspector");
 const styles=[HASSStudioGraphics,HASSStudioTank,HASSStudioSolidFuel,HASSStudioPellet,HASSStudioHeatPump,HASSStudioGasBoiler,HASSStudioElectricBoiler,HASSStudioFireplace]
  .map(x=>x.styles||"").join("");
@@ -134,9 +156,10 @@ function props(){
     {id:"heater",kind:"heater",height:28,x:80,side:"right",entity:"switch.preview_heater",power:75}
    ]
  };
- const type=models[kind].type;
- if(type){node.type=type;node.variant=({boiler:"wood",tank:"buffer",solar:"flat",pump:"circulation",valve:"three_way",sensor:"temperature"})[type];}
- if(kind==="tank")node.variant="modular";
+ const def=models[kind];
+ node.type=def.type;
+ node.variant=def.variant;
+ node.scale_mode=def.type==='tank'&&def.variant==='modular'?'free':'proportional';
  const make=(state,unit)=>({state:String(state),attributes:{unit_of_measurement:unit}});
  const hass={states:{
   "sensor.preview_temp":make(temp,"°C"),
@@ -150,26 +173,30 @@ function props(){
  }};
  return {node,hass};
 }
+let drawSerial=0;
 async function draw(){
+ const request=++drawSerial;
  try{
-  const asset = assetByIcon[$("icon").value];
-  if (asset && !HASSStudioIconTemplates[asset[0]]) {
-    const response = await fetch("../src/icons/" + asset[1] + ".svg", {cache: "no-store"});
-    if (!response.ok) throw new Error("Nie można wczytać SVG: " + response.status);
-    HASSStudioIconTemplates[asset[0]] = HASSStudioSvg.fragment(await response.text());
-  }
-  const def=models[$("icon").value], data=props(), {node,hass}=data;
+  const def=models[$("icon").value];
+  if(!def)throw new Error('Nieznany model w podglądzie');
+  await ensureAsset(def);
+  if(request!==drawSerial)return; // Ignore responses from an earlier selection.
+  const {node,hass}=props();
+  for(const id of ["sx","sy"])$(id).disabled=def.renderer==='warmwasser';
   $("source").textContent=def.file;
   const svg=def.api.render(node,hass);
   if(!svg || typeof svg!=="string")throw Error("Renderer nie zwrócił kodu SVG");
   canvas.innerHTML=(def.api.defs?"<defs>"+def.api.defs(node,hass)+"</defs>":"")+svg;
-  const b=(typeof def.api.geometry==="function"?def.api.geometry(node):null)||def.bounds;
+  const dynamic=typeof def.api.geometry==='function'?def.api.geometry(node):null;
+  const b=dynamic&&[dynamic.x,dynamic.y,dynamic.width,dynamic.height].every(Number.isFinite)?dynamic:def.bounds;
+  if(!b||!(b.width>0)||!(b.height>0))throw new Error('Brak poprawnych wymiarów SVG');
   const zoom=num("zoom")/100,pad=Math.max(b.width,b.height)*.1;
   const w=(b.width+pad*2)/zoom,h=(b.height+pad*2)/zoom;
   canvas.setAttribute("viewBox",[(b.x+b.width/2-w/2),(b.y+b.height/2-h/2),w,h].join(" "));
   inspector.classList.remove("error");
   inspector.textContent="Kliknij fragment ikony, żeby sprawdzić tag, id i atrybuty SVG.";
  }catch(error){
+  if(request!==drawSerial)return;
   inspector.classList.add("error");
   inspector.textContent="Błąd renderowania: "+String(error&&error.stack||error);
   canvas.replaceChildren();
