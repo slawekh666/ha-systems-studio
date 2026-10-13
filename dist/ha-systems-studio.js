@@ -3038,4 +3038,3 @@ const HASSStudioDeviceRegistry = (() => {
     renderProps();
   };
 })();
-
