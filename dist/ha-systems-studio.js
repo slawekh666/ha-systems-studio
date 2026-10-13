@@ -2169,7 +2169,8 @@ const HASSStudioDeviceRegistry = (() => {
     variants:types.flatMap(type => variantsFor(type).filter(item=>item.family===id).map(item=>item.id))
   }));
   return Object.freeze({categories,families,listTypes,variantsFor,isNodeType,
-    isVariant,defaultVariant,normalizeVariant,iconFor,variantOptions,resolve,catalog});
+    isVariant,defaultVariant,normalizeVariant,iconFor,variantOptions,variantOptionsForNode,
+    resolve,catalog,subgroups,libraryEntries});
 })();
 
 
@@ -2447,7 +2448,7 @@ const HASSStudioEditorInspector = (() => {
         (index!==undefined?' data-index="'+index+'"':'')+
         ' value="'+esc(value||'')+'" placeholder="sensor..." autocomplete="off"/>';
     };
-    const variantOptions=(node)=>registry.variantOptions(node.type,pickLang(editor._config,editor._hass));
+    const variantOptions=(node)=>registry.variantOptionsForNode(node,pickLang(editor._config,editor._hass));
     const styleOptions=[['warmwasser','Warmwasser (default)'],['studio','Studio (simple)']];
     const sides=[['left',L.left],['right',L.right],['inside',L.inside]];
     const colorsList=[['hot',L.hot],['cold',L.cold],['solar',L.solarFlow],['return',L.returnFlow]];
@@ -2625,17 +2626,33 @@ const HASSStudioEditorInspector = (() => {
 })();
 
 
-/* Left equipment library. Preserves existing add-button behavior. */
-const HASSStudioEditorLibrary = (() => {
-  const render = ({types,registry,L,esc}) =>
-      types.map(type=>'<button type="button" data-add="'+type+'"><span aria-hidden="true">'+registry.iconFor(type)+'</span>'+
-        esc(L[type==='pump'?'pumps':type==='valve'?'valves':type==='sensor'?'sensorsMenu':type==='pipe'?'pipes':type])+'</button>').join('')+
-      '<button type="button" data-add-preset="solid_fuel"><span aria-hidden="true">♨</span>'+esc(L.solidModel)+'</button>'+
-      '<button type="button" data-add-preset="pellet_modern"><span aria-hidden="true">♨</span>'+esc(L.pelletModel)+'</button>'+
-      '<button type="button" data-add-preset="heatpump_modern"><span aria-hidden="true">◉</span>'+esc(L.hpModel)+'</button>'+
-      '<button type="button" data-add-preset="gas_modern"><span aria-hidden="true">♨</span>'+esc(L.gasModel)+'</button>'+
-      '<button type="button" data-add-preset="electric_modern"><span aria-hidden="true">⚡</span>'+esc(L.electricModel)+'</button>'+
-      '<button type="button" data-add-preset="fireplace_modern"><span aria-hidden="true">♨</span>'+esc(L.fireplaceModel)+'</button>';
+/* Grouped equipment library; variants are resolved by the device registry. */
+const HASSStudioEditorLibrary=(()=>{
+  const render=({registry,language='pl',esc})=>{
+    const lang=language==='en'?'en':'pl',entries=registry.libraryEntries(lang);
+    const button=item=>{
+      const attrs=item.type==='boiler'?' data-add-preset="'+esc(item.variant)+'"':
+        ' data-add="'+esc(item.type)+'"'+(item.variant?' data-variant="'+esc(item.variant)+'"':'');
+      return '<button type="button" class="ss-lib-item"'+attrs+' aria-label="'+esc(item.label)+'">'+
+        '<span class="ss-lib-icon" aria-hidden="true">'+esc(item.icon)+'</span>'+
+        '<span class="ss-lib-label">'+esc(item.label)+'</span></button>';
+    };
+    return Object.entries(registry.categories).map(([category,names])=>{
+      const items=entries.filter(item=>item.category===category);
+      if(!items.length)return '';
+      const nested=Object.entries(registry.subgroups).map(([group,labels])=>{
+        const subset=items.filter(item=>item.subgroup===group);
+        return subset.length?'<details class="ss-lib-subgroup" open><summary>'+esc(labels[lang])+
+          '<span class="ss-lib-count">'+subset.length+'</span></summary><div class="ss-lib-items">'+
+          subset.map(button).join('')+'</div></details>':'';
+      }).join('');
+      const direct=items.filter(item=>!item.subgroup).map(button).join('');
+      return '<details class="ss-lib-group" data-lib-category="'+esc(category)+'"'+
+        (category==='heat_sources'?' open':'')+'><summary>'+esc(names[lang])+
+        '<span class="ss-lib-count">'+items.length+'</span></summary>'+
+        '<div class="ss-lib-contents">'+nested+direct+'</div></details>';
+    }).join('');
+  };
   return Object.freeze({render});
 })();
 
@@ -2765,6 +2782,17 @@ const HASSStudioEditorLibrary = (() => {
       '.ss-library h3,.ss-props h3{font-size:12px;letter-spacing:.06em;color:var(--secondary-text-color);margin:0 0 12px}'+
       '.ss-library button{display:flex;align-items:center;gap:12px;width:100%;margin-bottom:8px;text-align:left;font-size:13px}'+
       '.ss-library button span{font-size:19px;display:inline-block;width:24px;text-align:center}'+
+      '.ss-library .ss-lib-group{border:1px solid var(--divider-color,#555);border-radius:8px;margin:0 0 8px;overflow:hidden}'+
+      '.ss-library .ss-lib-group>summary,.ss-library .ss-lib-subgroup>summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:10px 8px;font-size:12px;font-weight:600;list-style-position:inside}'+
+      '.ss-library .ss-lib-group>summary{background:var(--secondary-background-color,#18222e)}'+
+      '.ss-library .ss-lib-subgroup{margin:4px 0 8px;border-left:2px solid var(--divider-color,#555)}'+
+      '.ss-library .ss-lib-subgroup>summary{font-size:11px;padding:8px}'+
+      '.ss-library .ss-lib-contents{padding:6px}'+
+      '.ss-library .ss-lib-count{color:var(--secondary-text-color);font-weight:400}'+
+      '.ss-library button.ss-lib-item{gap:8px;padding:8px 6px;margin:0 0 4px;border-color:transparent;background:transparent;white-space:normal}'+
+      '.ss-library button.ss-lib-item:hover,.ss-library button.ss-lib-item:focus-visible{background:var(--secondary-background-color,#18222e);border-color:var(--primary-color,#168bce)}'+
+      '.ss-library .ss-lib-label{font-size:12px;line-height:1.3;display:block;min-width:0;flex:1;overflow-wrap:anywhere}'+
+      '.ss-library .ss-lib-icon{flex:0 0 22px}'+
       '.ss-canvas{min-width:0;min-height:0;overflow:auto;background:var(--secondary-background-color,#18222e);padding:16px}'+
       '.ss-stage{width:max-content;max-width:none}.ss-svg{display:block;width:1200px;height:720px;max-height:none;padding:0;touch-action:none}'+
       '.ss-svg-editor .ss-node{cursor:grab}.ss-svg-editor .ss-pipe-hit{cursor:pointer;pointer-events:stroke}.ss-handle{cursor:move}'+
@@ -2794,7 +2822,7 @@ const HASSStudioEditorLibrary = (() => {
       '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
       '<button id="ss-close" type="button">'+esc(L.close)+'</button></div>'+
       '<div class="ss-grid" id="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+
-      HASSStudioEditorLibrary.render({types,registry,L,esc})+
+      HASSStudioEditorLibrary.render({registry,language:pickLang(this._config,this._hass),esc})+
       '</aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
       '<p class="ss-note">'+esc(L.editHelp)+'</p></main>'+
       '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
@@ -2887,7 +2915,7 @@ const HASSStudioEditorLibrary = (() => {
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,visual:'warmwasser',variant:kind==='boiler'&&registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
+          scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -2923,7 +2951,7 @@ const HASSStudioEditorLibrary = (() => {
       else model.pipes=model.pipes.filter(n=>n.id!==selection.id);
       selection=null;commit(model);render();
     });
-    root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add)));
+    root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add,button.dataset.variant||'')));
     root.querySelectorAll('[data-add-preset]').forEach(button=>button.addEventListener('click',()=>create('boiler',button.dataset.addPreset)));
     properties.addEventListener('change',event=>{
       const el=event.target,key=el.dataset.field;
