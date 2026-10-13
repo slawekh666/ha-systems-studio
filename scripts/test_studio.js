@@ -277,7 +277,7 @@ const gb=pellet.geometry({...pelletNode,width_scale:1.8,height_scale:.65});
 assert.equal(gb.width,186*1.8);
 assert.equal(gb.height,312*.65);
 assert.equal(pellet.geometry(pelletNode).centerX,97);
-assert.match(src,/pellet_modern:'Pellet \(nowoczesny\)'/);
+assert.equal(registry.variantOptions('boiler','pl').find(([id])=>id==='pellet_modern')?.[1],'Pellet (nowoczesny)');
 assert.match(src,/HASSStudioPellet\.render\(node,hass\)/);
 assert.match(src,/data-add-preset="pellet_modern"/);
 assert.match(src,/modernPellet\?HASSStudioPellet\.geometry\(node\)/);
