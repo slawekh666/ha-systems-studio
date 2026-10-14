@@ -79,3 +79,7 @@ Modular tanks preserve `scale`, `width_scale`, `height_scale`, and legacy `scale
 ## 0.4.21-dev — pointer selection and cursor regression fix
 
 - The pointer stays an arrow at rest, switching to a closed-hand cursor while a left-button drag is held. Clicking a pipe now retains the selection and shows its editable vertex handles and right-hand inspector. Whole-pipe drag starts on movement, with pointer capture activated only then to preserve normal clicks and double-click insertion. Actual moves create one undo entry; canceled pointer gestures restore the prior layout. Existing `studio_layout` objects and Warmwasser automatic mode stay compatible.
+
+## 0.4.22-dev — mobile diagram navigation
+
+- The dashboard diagram accepts two-finger pinch and one-finger pan at any allowed zoom (20–800%), including initial Fit (100%) and zoom below 100% after the minus button. The SVG uses `touch-action: none` from initial render, avoiding browser cancellation of the first pinch. The card header remains scrollable in the regular dashboard; scrolling from within the SVG uses diagram pan instead. Plain taps still open HA entity more-info/history and toolbar controls keep their prior behavior. This is viewer-only and does not alter stored layouts or the automatic Warmwasser renderer. Live HA app testing is required.

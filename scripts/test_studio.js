@@ -495,6 +495,56 @@ assert(src.includes('HASSStudioViewerGestures.install('));
 assert(src.includes("view.style.touchAction"));
 console.log('OK: viewer gestures preserve ordinary entity clicks, sustained pan and touch zoom.');
 
+// Mobile navigation regression: touch gestures work immediately at Fit, below 100%
+// and after tapping minus, without converting an ordinary entity tap into pan.
+assert(!gestureSource.includes('const interactive=()=>'));
+assert(gestureSource.includes("classList?.contains?.('ss-svg')"));
+const touchGestureApi=vm.runInNewContext(gestureSource+'\\nHASSStudioViewerGestures;',{});
+const makeEventSource=()=>{
+  const events=new Map();
+  return {events,source:{addEventListener:(type,handler)=>events.set(type,handler),
+    removeEventListener:(type,handler)=>{if(events.get(type)===handler)events.delete(type);}}};
+};
+const tr=makeEventSource(),tw=makeEventSource(),td=makeEventSource();
+const touchSvg={classList:{contains:name=>name==='ss-svg'},
+  getBoundingClientRect:()=>({left:0,top:0,width:600,height:350})};
+const touchView={id:'ss-card-viewport',querySelector:()=>touchSvg};
+let touchCamera=viewport.fresh(1200,700);
+const disconnectTouch=touchGestureApi.install({root:tr.source,win:tw.source,doc:{...td.source,fullscreenElement:null},
+  host:{},viewport,getView:()=>touchView,getDimensions:()=>({width:1200,height:700}),
+  getCamera:()=>touchCamera,setCamera:c=>{touchCamera=c;}});
+const touchEvent=(pointerId,clientX,clientY)=>({pointerId,clientX,clientY,button:0,pointerType:'touch',
+  cancelable:true,composedPath:()=>[touchSvg,touchView],preventDefault(){this.prevented=true;}});
+const tDown=(...args)=>tr.events.get('pointerdown')(touchEvent(...args));
+const tMove=(...args)=>tw.events.get('pointermove')(touchEvent(...args));
+const tUp=(...args)=>tw.events.get('pointerup')(touchEvent(...args));
+const tFit=()=>{tr.events.get('click')({composedPath:()=>[{dataset:{viewAction:'fit'}},touchView],
+  preventDefault(){},stopPropagation(){}});};
+const tMinus=()=>{tr.events.get('click')({composedPath:()=>[{dataset:{viewAction:'out'}},touchView],
+  preventDefault(){},stopPropagation(){}});};
+const tap={clientX:100,clientY:100,composedPath:()=>[touchSvg,touchView],
+  preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.blocked=true;}};
+tDown(1,100,100);tUp(1,100,100);tr.events.get('click')(tap);
+assert.equal(tap.prevented,undefined,'tap for HA entity history must not be swallowed');
+tDown(1,100,100);tMove(1,140,125);
+assert.notEqual(touchCamera.cx,600,'one-finger pan must work at Fit');tUp(1,140,125);
+tFit();assert.equal(touchCamera.zoom,1);
+tDown(1,100,100);tDown(2,200,100);tMove(2,250,100);
+assert(touchCamera.zoom>1,'pinch to zoom must work from Fit without tapping +');
+tUp(1,100,100);tUp(2,250,100);
+tFit();tMinus();assert.equal(touchCamera.zoom,.8);
+const belowFitCenter=touchCamera.cx;
+tDown(3,100,100);tMove(3,140,100);
+assert.notEqual(touchCamera.cx,belowFitCenter,'pan must work after zooming out with minus');tUp(3,140,100);
+tDown(4,100,100);tDown(5,200,100);tMove(5,180,100);
+assert(touchCamera.zoom<.8,'pinch zoom-out must work below 100%');
+tUp(4,100,100);tUp(5,180,100);
+assert(src.includes(".ss-card-viewport svg{")&&src.includes("max-height:none;touch-action:none}"));
+assert(src.includes("if(svg.style.touchAction!=='none')svg.style.touchAction='none'"));
+assert(src.includes("const viewTouchMode=fullscreen?'none':'pan-y'"));
+disconnectTouch();
+console.log('OK: mobile Fit / minus pinch and pan, HA tap history, touch-action lifecycle.');
+
 // Header toolbar must be outside SVG drawing but within full-screen viewer.
 const toolbarSrc=fs.readFileSync('src/studio-custom.js','utf8');
 assert(toolbarSrc.includes('ss-card-header')&&toolbarSrc.includes('ss-card-title'));

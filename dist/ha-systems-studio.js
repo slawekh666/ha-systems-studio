@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.21-dev';
+const VERSION = '0.4.22-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2290,7 +2290,6 @@ const HASSStudioViewerGestures=(()=>{
     let tracking=false;
     const viewInPath=event=>event.composedPath().some(el=>el?.id==='ss-card-viewport');
     const fullscreen=()=>doc.fullscreenElement===getView();
-    const interactive=()=>fullscreen()||(getCamera()?.zoom||1)>1.0001;
     const rectAndSize=()=>{
       const view=getView();
       if(!view)return null;
@@ -2355,10 +2354,12 @@ const HASSStudioViewerGestures=(()=>{
       win.removeEventListener('blur',onCancel);
     };
     const onDown=event=>{
+      // The SVG owns touch navigation at every zoom, even at Fit or below 100%.
+      // Leave the card header to native dashboard scrolling and toolbar clicks.
       if(!viewInPath(event)||
+        !event.composedPath().some(el=>el?.classList?.contains?.('ss-svg'))||
         event.composedPath().some(el=>el?.dataset?.viewAction)||
-        (event.pointerType!=='touch'&&event.button!==0)||
-        !interactive())return;
+        (event.pointerType!=='touch'&&event.button!==0))return;
       pointers.set(event.pointerId,{startX:event.clientX,startY:event.clientY,
         x:event.clientX,y:event.clientY,kind:event.pointerType});
       startTracking();
@@ -3072,7 +3073,7 @@ const HASSStudioEditorLibrary=(()=>{
     const label=esc('Home Assistant System Studio')+(schemeName?' - '+esc(schemeName):'');
     const viewerCss='<style>'+
       '.ss-card-viewport{position:relative;display:flex;flex-direction:column;width:100%;aspect-ratio:'+width+'/'+height+';min-height:0;overflow:hidden;background:var(--secondary-background-color,#17222d);touch-action:pan-y;user-select:none}'+
-      '.ss-card-viewport svg{display:block;flex:1 1 auto;min-height:0;width:100%;height:100%;max-width:none;max-height:none;touch-action:inherit}'+
+      '.ss-card-viewport svg{display:block;flex:1 1 auto;min-height:0;width:100%;height:100%;max-width:none;max-height:none;touch-action:none}'+
       '.ss-card-viewport:fullscreen{width:100vw;height:100vh;aspect-ratio:auto;background:#17222d;touch-action:none}'+
       '.ss-card-viewport:fullscreen svg{touch-action:none}'+
       '.ss-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap;padding:8px 12px;background:var(--card-background-color,#1c1c1c)}'+
@@ -3105,13 +3106,12 @@ const HASSStudioEditorLibrary=(()=>{
     const box=viewport.box(this._studioCardCamera,w,h,width,height);
     svg.setAttribute('viewBox',[box.x,box.y,box.width,box.height].join(' '));
     svg.setAttribute('preserveAspectRatio','none');
-    // Outside fullscreen the dashboard should scroll normally at Fit. Once
-    // zoomed, touchscreen dragging belongs to the diagram, not the dashboard.
-    const navigating=this._studioCardCamera.zoom>1.0001||
-      (typeof document!=='undefined'&&document.fullscreenElement===view);
-    const touchMode=navigating?'none':'pan-y';
-    if(view.style.touchAction!==touchMode)view.style.touchAction=touchMode;
-    if(svg.style.touchAction!==touchMode)svg.style.touchAction=touchMode;
+    // The diagram must own touch input before the first pinch, at ALL zooms.
+    // Only the header/non-drawing area retains dashboard vertical scrolling.
+    const fullscreen=typeof document!=='undefined'&&document.fullscreenElement===view;
+    const viewTouchMode=fullscreen?'none':'pan-y';
+    if(view.style.touchAction!==viewTouchMode)view.style.touchAction=viewTouchMode;
+    if(svg.style.touchAction!=='none')svg.style.touchAction='none';
     if(this._studioCardResizeTarget!==view){
       this._studioCardObserver?.disconnect();
       if(typeof ResizeObserver!=='undefined'){

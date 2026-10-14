@@ -4,7 +4,7 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 ## Current status
 
-**0.4.21-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
+**0.4.22-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
 
 **Update 0.4.15-dev:** the Custom editor now has a grouped equipment library with solid-fuel boiler and pellet boiler separated, device-family-specific graphic variants, a central device registry and shared read-only HA state/animation helpers. The modular tank and solar collector inspector edits one selected part at a time (by stable part ID), including selection from the tank graphic, while keeping legacy `studio_layout` identifiers and manual animation settings. Circuit grouping and additional SVG models remain deferred.
 
@@ -29,7 +29,7 @@ The modern solid-fuel boiler has independent **Width** and **Height** multiplier
 
 **Modern fireplace** from supplied SVG reuses Warmwasser flame/ember effects, real HA temperature, manual/automatic combustion stages, and width/height scaling. Read-only visualization; browser acceptance needed.
 
-The 0.4.21-dev editor keeps the arrow cursor at rest and shows a closed hand only while holding a draggable object. Clicking a pipe selects it, displays bend handles and opens its properties; dragging the line translates the entire pipe, while dragging a handle edits one bend. Clicks without movement do not create undo history.\n\n## Local build in VS Code + WSL
+The 0.4.21-dev editor keeps the arrow cursor at rest and shows a closed hand only while holding a draggable object. Clicking a pipe selects it, displays bend handles and opens its properties; dragging the line translates the entire pipe, while dragging a handle edits one bend. Clicks without movement do not create undo history.\n\n**0.4.22-dev mobile touch fix:** the dashboard SVG accepts two-finger pinch zoom and one-finger pan at Fit and below 100% zoom, not only after pressing +. Normal taps still open HA entity details/history; gestures starting on the SVG are owned by the diagram, so scroll the dashboard from outside the drawing or the card header. Fullscreen and desktop zoom controls are unchanged.\n\n## Local build in VS Code + WSL
 
 ```bash
 python3 scripts/build.py
