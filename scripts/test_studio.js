@@ -484,3 +484,13 @@ assert(src.includes('ss-shortcuts')&&src.includes('ss-help'));
 assert(src.includes('ss-apply-size')&&src.includes('ss-card-viewport'));
 assert(src.includes("event.key==='Delete'")||src.includes("['Delete','Backspace']"));
 console.log('OK: configurable viewport, legacy dimensions, shortcuts and help overlay.');
+
+// Viewer gestures keep native HA entity history clicks intact and allow drag beyond initial target.
+const gestureSource=fs.readFileSync('src/studio-viewer-gestures.js','utf8');
+assert(gestureSource.includes('const install=')&&gestureSource.includes('suppressClick'));
+assert(gestureSource.includes("win.addEventListener('pointermove',onMove"));
+assert(gestureSource.includes('root.addEventListener(\'click\',onClick,true)'));
+assert(gestureSource.includes('if(!dragging && movement<'));
+assert(src.includes('HASSStudioViewerGestures.install('));
+assert(src.includes("view.style.touchAction"));
+console.log('OK: viewer gestures preserve ordinary entity clicks, sustained pan and touch zoom.');
