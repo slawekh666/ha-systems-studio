@@ -4,6 +4,7 @@
  */
 (() => {
   const W=1200,H=720,MAX_NODES=60,MAX_PIPES=80;
+  const viewport=HASSStudioViewport;
   const registry=HASSStudioDeviceRegistry;
   const types=registry.listTypes();
   const words={
@@ -67,11 +68,126 @@
   const {canvasSvg,pipePath,onPipe,variantShape}=HASSStudioCanvas.create({
     W,H,colors,normalized,pickLang,words,clamp,validEntity,esc
   });
+  // Card viewer: fit entire scheme at every responsive width, only zoom after explicit interaction.
   const nativeRender=WarmwasserSchemaCard.prototype._render;
+  const nativeUpdate=WarmwasserSchemaCard.prototype._update;
   WarmwasserSchemaCard.prototype._render=function(){
     if(this._cfg?.layout_mode!=='custom')return nativeRender.call(this);
-    return '<div class="kopf"><div class="l"><div class="t1">'+esc(this._cfg.titel||'Home Assistant Systems Studio')+
-      '</div></div></div>'+canvasSvg(this._cfg,this._hass);
+    const {width,height}=viewport.dimensions(this._cfg);
+    const L=words[pickLang(this._cfg,this._hass)];
+    const label=esc(this._cfg.titel||'Home Assistant Systems Studio');
+    const viewerCss='<style>'+
+      '.ss-card-viewport{position:relative;display:block;width:100%;aspect-ratio:'+width+'/'+height+';min-height:0;overflow:hidden;background:var(--secondary-background-color,#17222d);touch-action:pan-y;user-select:none}'+
+      '.ss-card-viewport svg{display:block;width:100%;height:100%;max-width:none;max-height:none;touch-action:inherit}'+
+      '.ss-card-viewport:fullscreen{width:100vw;height:100vh;aspect-ratio:auto;background:#17222d;touch-action:none}'+
+      '.ss-card-viewport:fullscreen svg{touch-action:none}'+
+      '.ss-view-tools{position:absolute;top:9px;right:9px;display:flex;align-items:center;gap:4px;z-index:2;background:#101925d9;padding:5px;border-radius:9px;opacity:.72;transition:opacity .15s}'+
+      '.ss-card-viewport:is(:hover,:focus-within) .ss-view-tools{opacity:1}'+
+      '.ss-view-tools button{appearance:none;background:#293949;border:1px solid #53677c;border-radius:5px;color:#fff;min-width:32px;min-height:32px;cursor:pointer;font:600 14px sans-serif}'+
+      '.ss-view-tools button:focus-visible{outline:2px solid #52bfff}'+
+      '@media(max-width:600px){.ss-view-tools{top:4px;right:4px;padding:2px;gap:2px}.ss-view-tools button{min-width:28px;min-height:28px}}'+
+      '</style>';
+    return '<div class="kopf"><div class="l"><div class="t1">'+label+'</div></div></div>'+
+      viewerCss+'<div class="ss-card-viewport" id="ss-card-viewport" tabindex="0" aria-label="'+esc(L.editor)+'">'+
+      '<div class="ss-view-tools">'+
+      '<button type="button" data-view-action="out" title="Zoom −" aria-label="Zoom out">−</button>'+
+      '<button type="button" data-view-action="in" title="Zoom +" aria-label="Zoom in">+</button>'+
+      '<button type="button" data-view-action="fit" title="Dopasuj cały schemat" aria-label="Fit diagram">⤢</button>'+
+      '<button type="button" data-view-action="full" title="Pełny ekran" aria-label="Fullscreen">⛶</button></div>'+
+      canvasSvg(this._cfg,this._hass)+'</div>';
+  };
+  const updateCardCamera=function(){
+    const view=this._box?.querySelector('#ss-card-viewport'),svg=view?.querySelector('svg');
+    if(!svg)return;
+    const {width,height}=viewport.dimensions(this._cfg);
+    const rect=view.getBoundingClientRect(),w=Math.max(1,rect.width),h=Math.max(1,rect.height);
+    if(!this._studioCardCamera || this._studioCardShape!==width+'x'+height){
+      this._studioCardCamera=viewport.fresh(width,height);
+      this._studioCardShape=width+'x'+height;
+    }
+    const box=viewport.box(this._studioCardCamera,w,h,width,height);
+    svg.setAttribute('viewBox',[box.x,box.y,box.width,box.height].join(' '));
+    svg.setAttribute('preserveAspectRatio','none');
+    if(this._studioCardResizeTarget!==view){
+      this._studioCardObserver?.disconnect();
+      if(typeof ResizeObserver!=='undefined'){
+        this._studioCardObserver=new ResizeObserver(()=>updateCardCamera.call(this));
+        this._studioCardObserver.observe(view);
+      }
+      this._studioCardResizeTarget=view;
+    }
+  };
+  WarmwasserSchemaCard.prototype._update=function(){
+    nativeUpdate.call(this);
+    if(this._cfg?.layout_mode!=='custom')return;
+    const root=this.shadowRoot;
+    if(root&&!this._studioViewerEvents){
+      this._studioViewerEvents=true;
+      const pointers=new Map();
+      let last=null,pinch=null,dragged=false;
+      const viewOf=ev=>ev.composedPath().find(el=>el?.id==='ss-card-viewport');
+      const currentView=()=>root.getElementById('ss-card-viewport');
+      const dimensions=()=>viewport.dimensions(this._cfg);
+      const zoom=(factor,ev)=>{
+        const view=currentView();if(!view)return;
+        const rect=view.getBoundingClientRect(),{width,height}=dimensions();
+        const x=ev?.clientX!=null?ev.clientX-rect.left:rect.width/2;
+        const y=ev?.clientY!=null?ev.clientY-rect.top:rect.height/2;
+        this._studioCardCamera=viewport.zoomAt(this._studioCardCamera,factor,x,y,rect.width,rect.height,width,height);
+        updateCardCamera.call(this);
+      };
+      root.addEventListener('click',ev=>{
+        if(dragged){dragged=false;ev.stopImmediatePropagation();ev.preventDefault();return;}
+        const action=ev.composedPath().find(el=>el?.dataset?.viewAction)?.dataset.viewAction;
+        if(!action)return;
+        ev.preventDefault();ev.stopPropagation();
+        if(action==='fit'){const {width,height}=dimensions();this._studioCardCamera=viewport.fresh(width,height);updateCardCamera.call(this);}
+        else if(action==='in'||action==='out')zoom(action==='in'?1.25:.8);
+        else if(action==='full'){const view=currentView();
+          if(document.fullscreenElement===view)document.exitFullscreen?.();
+          else view?.requestFullscreen?.();
+        }
+      },true);
+      root.addEventListener('wheel',ev=>{
+        const view=viewOf(ev);
+        if(!view || document.fullscreenElement!==view)return; // Preserve normal dashboard scrolling.
+        ev.preventDefault();zoom(ev.deltaY<0?1.15:1/1.15,ev);
+      },{passive:false});
+      root.addEventListener('pointerdown',ev=>{
+        const view=viewOf(ev);
+        if(!view||ev.composedPath().some(el=>el?.dataset?.viewAction))return;
+        if(ev.pointerType==='touch'&&document.fullscreenElement!==view)return;
+        if(ev.button!==0)return;
+        pointers.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
+        if(pointers.size===2){
+          const pts=[...pointers.values()];pinch={distance:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y)};
+          last=null;return;
+        }
+        if(this._studioCardCamera?.zoom<=1 && document.fullscreenElement!==view)return;
+        last={x:ev.clientX,y:ev.clientY,id:ev.pointerId};
+        view.setPointerCapture?.(ev.pointerId);
+      });
+      root.addEventListener('pointermove',ev=>{
+        const view=currentView();
+        if(!view||!pointers.has(ev.pointerId))return;
+        const old=pointers.get(ev.pointerId);
+        pointers.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
+        if(pointers.size===2 && document.fullscreenElement===view){
+          const pts=[...pointers.values()],distance=Math.max(1,Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y));
+          if(pinch){const center={clientX:(pts[0].x+pts[1].x)/2,clientY:(pts[0].y+pts[1].y)/2};zoom(distance/pinch.distance,center);}
+          pinch={distance};dragged=true;return;
+        }
+        if(last?.id!==ev.pointerId)return;
+        const dx=ev.clientX-last.x,dy=ev.clientY-last.y;
+        if(Math.abs(dx)+Math.abs(dy)>1){const rect=view.getBoundingClientRect(),{width,height}=dimensions();
+          this._studioCardCamera=viewport.pan(this._studioCardCamera,dx,dy,rect.width,rect.height,width,height);
+          dragged=true;updateCardCamera.call(this);}
+        last={x:ev.clientX,y:ev.clientY};
+      });
+      const end=ev=>{pointers.delete(ev.pointerId);if(!pointers.size){last=null;pinch=null;}};
+      root.addEventListener('pointerup',end);root.addEventListener('pointercancel',end);
+    }
+    updateCardCamera.call(this);
   };
   // In automatic mode, retain the complete original Warmwasser settings.
   const nativeSchema=WarmwasserSchemaCardEditor.prototype._mainSchema;
