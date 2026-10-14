@@ -368,7 +368,7 @@
       if(!from.length)return;
       to.push(JSON.stringify(this._config.studio_layout||{}));
       this._config={...this._config,studio_layout:JSON.parse(from.pop())};
-      commit(get(),true);render();
+      this._fire();render();
     };
     const get=()=>normalized(this._config);
     const commit=(model,skipHistory=false)=>{
@@ -550,7 +550,7 @@
       }
     });
     modal.addEventListener('keyup',event=>{if(event.key===' ')spaceHeld=false;});
-    modal.addEventListener('blur',()=>{spaceHeld=false;},true);
+    window.addEventListener('blur',()=>{spaceHeld=false;});
     root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add,button.dataset.variant||'')));
     root.querySelectorAll('[data-add-preset]').forEach(button=>button.addEventListener('click',()=>create('boiler',button.dataset.addPreset)));
     properties.addEventListener('change',event=>{
@@ -672,7 +672,7 @@
       commit(model);render();
     });
     stage.addEventListener('pointerdown',event=>{
-      if(event.button===1||spaceHeld||event.target===stage||event.target.classList?.contains('ss-project-boundary')){
+      if(event.button===1||spaceHeld||event.target===stage||event.target.tagName?.toLowerCase()==='svg'||event.target.classList?.contains('ss-project-boundary')){
         const rect=stage.getBoundingClientRect();
         drag={type:'pan',pointer:event.pointerId,lastX:event.clientX,lastY:event.clientY};
         stage.setPointerCapture(event.pointerId);event.preventDefault();return;
@@ -681,7 +681,7 @@
       const hit=event.target.closest?.('.ss-handle');
       if(hit){
         selection={type:'pipe',id:hit.dataset.id};selectedPartId=null;
-        drag={type:'point',id:hit.dataset.id,index:Number(hit.dataset.point),pointer:event.pointerId};
+        drag={type:'point',id:hit.dataset.id,index:Number(hit.dataset.point),pointer:event.pointerId,previous:JSON.stringify(this._config.studio_layout||{})};
       }else{
         const node=event.target.closest?.('.ss-node');
         if(node){
@@ -692,7 +692,7 @@
           if(partHit){renderProps();return;}
           const model=get(),obj=selectedObject(model),svg=stage.querySelector('svg'),p=point(event,svg);
           if(!obj)return;
-          drag={type:'node',id:obj.id,offsetX:p.x-obj.x,offsetY:p.y-obj.y,pointer:event.pointerId};
+          drag={type:'node',id:obj.id,offsetX:p.x-obj.x,offsetY:p.y-obj.y,pointer:event.pointerId,previous:JSON.stringify(this._config.studio_layout||{})};
         }else{
           const pipe=event.target.closest?.('.ss-pipe');
           if(pipe){setSelected('pipe',pipe.dataset.id);return;}
@@ -704,13 +704,14 @@
     });
     stage.addEventListener('pointermove',event=>{
       if(!drag||event.pointerId!==drag.pointer)return;
-      const svg=stage.querySelector('svg'),model=get(),p=point(event,svg);
+      const svg=stage.querySelector('svg');
       if(drag.type==='pan'){
         const rect=stage.getBoundingClientRect();
         camera=viewport.pan(camera,event.clientX-drag.lastX,event.clientY-drag.lastY,
           Math.max(1,rect.width),Math.max(1,rect.height),sceneW,sceneH,1.06);
         drag.lastX=event.clientX;drag.lastY=event.clientY;applyCamera();return;
       }
+      const model=get(),p=point(event,svg);
       if(drag.type==='node'){
         const n=model.nodes.find(item=>item.id===drag.id);if(!n)return;
         n.x=clamp(Math.round((p.x-drag.offsetX)/5)*5,-5000,10000,n.x);
@@ -725,7 +726,12 @@
     });
     const end=event=>{
       if(!drag||event.pointerId!==drag.pointer)return;
-      const moved=drag.type!=='pan';drag=null;if(moved)commit(get());render();
+      const moved=drag.type!=='pan',previous=drag.previous;drag=null;
+      if(moved){
+        if(previous){undo.push(previous);if(undo.length>60)undo.shift();redo.length=0;}
+        this._fire();
+      }
+      render();
     };
     stage.addEventListener('pointerup',end);
     stage.addEventListener('pointercancel',end);
