@@ -3341,6 +3341,7 @@ const HASSStudioEditorLibrary=(()=>{
       if(event.key.toLowerCase()==='f'&&!event.ctrlKey){event.preventDefault();fit();return;}
       if(event.key==='Escape'){
         if(!help.hidden||!settings.hidden){help.hidden=true;settings.hidden=true;event.preventDefault();event.stopPropagation();return;}
+        event.preventDefault();event.stopPropagation();
         selection=null;selectedPartId=null;expandedPartId=null;render();return;
       }
       const arrows={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
