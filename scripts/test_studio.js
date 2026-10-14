@@ -494,3 +494,11 @@ assert(gestureSource.includes('if(!dragging && movement<'));
 assert(src.includes('HASSStudioViewerGestures.install('));
 assert(src.includes("view.style.touchAction"));
 console.log('OK: viewer gestures preserve ordinary entity clicks, sustained pan and touch zoom.');
+
+// Header toolbar must be outside SVG drawing but within full-screen viewer.
+const toolbarSrc=fs.readFileSync('src/studio-custom.js','utf8');
+assert(toolbarSrc.includes('ss-card-header')&&toolbarSrc.includes('ss-card-title'));
+assert(toolbarSrc.includes('data-view-action="fit"'));
+assert(toolbarSrc.includes('data-view-action="full"'));
+assert(toolbarSrc.indexOf('class="ss-card-header"')<toolbarSrc.indexOf('canvasSvg(this._cfg,this._hass)'));
+console.log('OK: viewer zoom tools live in the card header, outside drawing.');
