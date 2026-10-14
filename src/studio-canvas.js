@@ -11,6 +11,16 @@ const HASSStudioCanvas = (() => {
       ?formatReading(state.state)+(state.attributes?.unit_of_measurement?' '+state.attributes.unit_of_measurement:''):'';
   };
   const pipePath=(points)=>points.map((point,i)=>(i?'L':'M')+point.x+' '+point.y).join(' ');
+  // Translate all vertices by one snapped delta, retaining every bend and angle.
+  // Clamp the common offset (not individual points), so geometry never deforms at bounds.
+  const translatePipePoints=(points,dx,dy)=>{
+    if(!Array.isArray(points)||!points.length)return [];
+    const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
+    const snap=v=>Math.round(v/5)*5;
+    const x=clamp(snap(dx),-5000-Math.min(...xs),10000-Math.max(...xs),0);
+    const y=clamp(snap(dy),-5000-Math.min(...ys),10000-Math.max(...ys),0);
+    return points.map(p=>({x:p.x+x,y:p.y+y}));
+  };
   const onPipe=(pipe,t)=>{
     const points=pipe.points, segments=[];
     let total=0;
@@ -139,7 +149,7 @@ const HASSStudioCanvas = (() => {
       '<g class="ss-devices">'+nodes+'</g><g class="ss-pipe-layer" stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-pipe-handles">'+handles+'</g></svg>';
   };
 
-    return Object.freeze({canvasSvg,pipePath,onPipe,variantShape});
+    return Object.freeze({canvasSvg,pipePath,onPipe,variantShape,translatePipePoints});
   };
   return Object.freeze({create});
 })();
