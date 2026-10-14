@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.17-dev';
+const VERSION = '0.4.18-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2278,6 +2278,184 @@ const HASSStudioViewport=(()=>{
 })();
 
 
+/* Standalone Home Assistant Systems Studio viewport gestures.
+ * Keep ordinary taps/clicks unmodified so HA entity history still opens.
+ * Capture pointers only after crossing the drag threshold.
+ */
+const HASSStudioViewerGestures=(()=>{
+  const install=({root,host,viewport,getView,getDimensions,getCamera,setCamera,
+    win=window,doc=document})=>{
+    const pointers=new Map();
+    let dragging=false,center=null,distance=null,capturedId=null,suppressClick=null;
+    let tracking=false;
+    const viewInPath=event=>event.composedPath().some(el=>el?.id==='ss-card-viewport');
+    const fullscreen=()=>doc.fullscreenElement===getView();
+    const interactive=()=>fullscreen()||(getCamera()?.zoom||1)>1.0001;
+    const rectAndSize=()=>{
+      const view=getView();
+      if(!view)return null;
+      const rect=view.getBoundingClientRect();
+      return {rect,w:Math.max(1,rect.width),h:Math.max(1,rect.height),...getDimensions()};
+    };
+    const pointOf=(event,rect)=>({x:event.clientX-rect.left,y:event.clientY-rect.top});
+    const zoom=(factor,event)=>{
+      const v=rectAndSize();
+      if(!v)return;
+      const at=event?pointOf(event,v.rect):{x:v.w/2,y:v.h/2};
+      setCamera(viewport.zoomAt(getCamera(),factor,at.x,at.y,v.w,v.h,v.width,v.height));
+    };
+    const fit=()=>{
+      const {width,height}=getDimensions();
+      setCamera(viewport.fresh(width,height));
+    };
+    const onClick=event=>{
+      const action=event.composedPath().find(el=>el?.dataset?.viewAction)?.dataset.viewAction;
+      if(action){
+        event.preventDefault();event.stopPropagation();
+        if(action==='in')zoom(1.25);
+        if(action==='out')zoom(.8);
+        if(action==='fit')fit();
+        if(action==='full'){
+          const view=getView();
+          if(doc.fullscreenElement===view)doc.exitFullscreen?.();
+          else view?.requestFullscreen?.();
+        }
+        return;
+      }
+      // A drag may generate a synthetic click. Block that gesture, not the next
+      // intentional tap (and never a toolbar action).
+      if(suppressClick){
+        const s=suppressClick;suppressClick=null;
+        if(Date.now()<s.until && Number.isFinite(event.clientX) &&
+          Math.hypot(event.clientX-s.x,event.clientY-s.y)<24){
+          event.preventDefault();event.stopImmediatePropagation();return;
+        }
+      }
+      // Without a drag, do not interfere with native data-more -> hass-more-info.
+    };
+    const onWheel=event=>{
+      if(!viewInPath(event)||!fullscreen())return;
+      event.preventDefault();zoom(event.deltaY<0?1.15:1/1.15,event);
+    };
+    const startTracking=()=>{
+      if(tracking)return;
+      tracking=true;
+      win.addEventListener('pointermove',onMove,{passive:false});
+      win.addEventListener('pointerup',onEnd);
+      win.addEventListener('pointercancel',onCancel);
+      win.addEventListener('blur',onCancel);
+    };
+    const stopTracking=()=>{
+      if(!tracking)return;
+      tracking=false;
+      win.removeEventListener('pointermove',onMove);
+      win.removeEventListener('pointerup',onEnd);
+      win.removeEventListener('pointercancel',onCancel);
+      win.removeEventListener('blur',onCancel);
+    };
+    const onDown=event=>{
+      if(!viewInPath(event)||
+        event.composedPath().some(el=>el?.dataset?.viewAction)||
+        (event.pointerType!=='touch'&&event.button!==0)||
+        !interactive())return;
+      pointers.set(event.pointerId,{startX:event.clientX,startY:event.clientY,
+        x:event.clientX,y:event.clientY,kind:event.pointerType});
+      startTracking();
+      if(pointers.size===2){
+        const [a,b]=[...pointers.values()];
+        center={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+        distance=Math.max(1,Math.hypot(a.x-b.x,a.y-b.y));
+      }
+    };
+    const onMove=event=>{
+      const previous=pointers.get(event.pointerId);
+      if(!previous)return;
+      const next={...previous,x:event.clientX,y:event.clientY};
+      pointers.set(event.pointerId,next);
+      const v=rectAndSize();
+      if(!v)return;
+      if(pointers.size===2){
+        const [a,b]=[...pointers.values()];
+        const nextCenter={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+        const nextDistance=Math.max(1,Math.hypot(a.x-b.x,a.y-b.y));
+        if(center&&distance){
+          const shift=Math.hypot(nextCenter.x-center.x,nextCenter.y-center.y);
+          const ratio=nextDistance/distance;
+          if(dragging||shift>=3||Math.abs(ratio-1)>.012){
+            let cam=viewport.pan(getCamera(),nextCenter.x-center.x,nextCenter.y-center.y,
+              v.w,v.h,v.width,v.height);
+            const at=pointOf({clientX:nextCenter.x,clientY:nextCenter.y},v.rect);
+            cam=viewport.zoomAt(cam,ratio,at.x,at.y,v.w,v.h,v.width,v.height);
+            dragging=true;setCamera(cam);
+            if(event.cancelable)event.preventDefault();
+          }
+        }
+        center=nextCenter;distance=nextDistance;
+        return;
+      }
+      center=null;distance=null;
+      const dx=next.x-previous.x,dy=next.y-previous.y;
+      const movement=Math.hypot(next.x-next.startX,next.y-next.startY);
+      if(!dragging && movement<(next.kind==='touch'?7:4))return;
+      if(!dragging){
+        dragging=true;
+        // The stable custom card host survives HA state-driven SVG refreshes.
+        // Capturing on pointerdown would steal an ordinary data-more click.
+        if(next.kind==='mouse'&&host?.setPointerCapture){
+          try{host.setPointerCapture(event.pointerId);capturedId=event.pointerId;}
+          catch(_error){capturedId=null;}
+        }
+      }
+      const camera=viewport.pan(getCamera(),dx,dy,v.w,v.h,v.width,v.height);
+      setCamera(camera);
+      if(event.cancelable)event.preventDefault();
+    };
+    const finish=(event)=>{
+      if(!pointers.has(event.pointerId))return;
+      pointers.delete(event.pointerId);
+      if(capturedId===event.pointerId){
+        try{if(host.hasPointerCapture?.(capturedId))host.releasePointerCapture(capturedId);}
+        catch(_error){}
+        capturedId=null;
+      }
+      if(!pointers.size){
+        if(dragging && event.type!=='pointercancel')
+          suppressClick={x:event.clientX,y:event.clientY,until:Date.now()+600};
+        dragging=false;center=null;distance=null;
+        stopTracking();
+      }else{
+        const items=[...pointers.values()];
+        if(items.length===1){
+          // Do not introduce a jump on the first move after a pinch.
+          items[0].startX=items[0].x;items[0].startY=items[0].y;
+        }
+      }
+    };
+    const onEnd=event=>finish(event);
+    const onCancel=event=>{
+      if(event.pointerId!=null)finish(event);
+      else{
+        pointers.clear();dragging=false;center=null;distance=null;
+        stopTracking();
+      }
+    };
+    const onFullscreenChange=()=>setCamera(getCamera());
+    root.addEventListener('click',onClick,true);
+    root.addEventListener('wheel',onWheel,{passive:false});
+    root.addEventListener('pointerdown',onDown);
+    doc.addEventListener?.('fullscreenchange',onFullscreenChange);
+    return ()=>{
+      stopTracking();pointers.clear();
+      root.removeEventListener('click',onClick,true);
+      root.removeEventListener('wheel',onWheel);
+      root.removeEventListener('pointerdown',onDown);
+      doc.removeEventListener?.('fullscreenchange',onFullscreenChange);
+    };
+  };
+  return Object.freeze({install});
+})();
+
+
 /* Schema normalization for existing custom layouts. Keeps saved IDs and fields. */
 const HASSStudioLayout = (() => {
   const W=1200,H=720,MAX_NODES=60,MAX_PIPES=80;
@@ -2912,6 +3090,13 @@ const HASSStudioEditorLibrary=(()=>{
     const box=viewport.box(this._studioCardCamera,w,h,width,height);
     svg.setAttribute('viewBox',[box.x,box.y,box.width,box.height].join(' '));
     svg.setAttribute('preserveAspectRatio','none');
+    // Outside fullscreen the dashboard should scroll normally at Fit. Once
+    // zoomed, touchscreen dragging belongs to the diagram, not the dashboard.
+    const navigating=this._studioCardCamera.zoom>1.0001||
+      (typeof document!=='undefined'&&document.fullscreenElement===view);
+    const touchMode=navigating?'none':'pan-y';
+    if(view.style.touchAction!==touchMode)view.style.touchAction=touchMode;
+    if(svg.style.touchAction!==touchMode)svg.style.touchAction=touchMode;
     if(this._studioCardResizeTarget!==view){
       this._studioCardObserver?.disconnect();
       if(typeof ResizeObserver!=='undefined'){
@@ -2925,71 +3110,14 @@ const HASSStudioEditorLibrary=(()=>{
     nativeUpdate.call(this);
     if(this._cfg?.layout_mode!=='custom')return;
     const root=this.shadowRoot;
-    if(root&&!this._studioViewerEvents){
-      this._studioViewerEvents=true;
-      const pointers=new Map();
-      let last=null,pinch=null,dragged=false;
-      const viewOf=ev=>ev.composedPath().find(el=>el?.id==='ss-card-viewport');
-      const currentView=()=>root.getElementById('ss-card-viewport');
-      const dimensions=()=>viewport.dimensions(this._cfg);
-      const zoom=(factor,ev)=>{
-        const view=currentView();if(!view)return;
-        const rect=view.getBoundingClientRect(),{width,height}=dimensions();
-        const x=ev?.clientX!=null?ev.clientX-rect.left:rect.width/2;
-        const y=ev?.clientY!=null?ev.clientY-rect.top:rect.height/2;
-        this._studioCardCamera=viewport.zoomAt(this._studioCardCamera,factor,x,y,rect.width,rect.height,width,height);
-        updateCardCamera.call(this);
-      };
-      root.addEventListener('click',ev=>{
-        if(dragged){dragged=false;ev.stopImmediatePropagation();ev.preventDefault();return;}
-        const action=ev.composedPath().find(el=>el?.dataset?.viewAction)?.dataset.viewAction;
-        if(!action)return;
-        ev.preventDefault();ev.stopPropagation();
-        if(action==='fit'){const {width,height}=dimensions();this._studioCardCamera=viewport.fresh(width,height);updateCardCamera.call(this);}
-        else if(action==='in'||action==='out')zoom(action==='in'?1.25:.8);
-        else if(action==='full'){const view=currentView();
-          if(document.fullscreenElement===view)document.exitFullscreen?.();
-          else view?.requestFullscreen?.();
-        }
-      },true);
-      root.addEventListener('wheel',ev=>{
-        const view=viewOf(ev);
-        if(!view || document.fullscreenElement!==view)return; // Preserve normal dashboard scrolling.
-        ev.preventDefault();zoom(ev.deltaY<0?1.15:1/1.15,ev);
-      },{passive:false});
-      root.addEventListener('pointerdown',ev=>{
-        const view=viewOf(ev);
-        if(!view||ev.composedPath().some(el=>el?.dataset?.viewAction))return;
-        if(ev.pointerType==='touch'&&document.fullscreenElement!==view)return;
-        if(ev.button!==0)return;
-        pointers.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
-        if(pointers.size===2){
-          const pts=[...pointers.values()];pinch={distance:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y)};
-          last=null;return;
-        }
-        if(this._studioCardCamera?.zoom<=1 && document.fullscreenElement!==view)return;
-        last={x:ev.clientX,y:ev.clientY,id:ev.pointerId};
-        view.setPointerCapture?.(ev.pointerId);
+    if(root&&!this._studioViewerDispose){
+      this._studioViewerDispose=HASSStudioViewerGestures.install({
+        root,host:this,viewport,
+        getView:()=>root.getElementById('ss-card-viewport'),
+        getDimensions:()=>viewport.dimensions(this._cfg),
+        getCamera:()=>this._studioCardCamera,
+        setCamera:camera=>{this._studioCardCamera=camera;updateCardCamera.call(this);}
       });
-      root.addEventListener('pointermove',ev=>{
-        const view=currentView();
-        if(!view||!pointers.has(ev.pointerId))return;
-        const old=pointers.get(ev.pointerId);
-        pointers.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
-        if(pointers.size===2 && document.fullscreenElement===view){
-          const pts=[...pointers.values()],distance=Math.max(1,Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y));
-          if(pinch){const center={clientX:(pts[0].x+pts[1].x)/2,clientY:(pts[0].y+pts[1].y)/2};zoom(distance/pinch.distance,center);}
-          pinch={distance};dragged=true;return;
-        }
-        if(last?.id!==ev.pointerId)return;
-        const dx=ev.clientX-last.x,dy=ev.clientY-last.y;
-        if(Math.abs(dx)+Math.abs(dy)>1){const rect=view.getBoundingClientRect(),{width,height}=dimensions();
-          this._studioCardCamera=viewport.pan(this._studioCardCamera,dx,dy,rect.width,rect.height,width,height);
-          dragged=true;updateCardCamera.call(this);}
-        last={x:ev.clientX,y:ev.clientY};
-      });
-      const end=ev=>{pointers.delete(ev.pointerId);if(!pointers.size){last=null;pinch=null;}};
-      root.addEventListener('pointerup',end);root.addEventListener('pointercancel',end);
     }
     updateCardCamera.call(this);
   };
