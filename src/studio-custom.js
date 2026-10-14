@@ -357,9 +357,22 @@
         grip.addEventListener('pointercancel',end);
       });
     }
-    let selection=null,drag=null,zoom=1,selectedPartId=null,expandedPartId=null;
+    let selection=null,drag=null,selectedPartId=null,expandedPartId=null;
+    const dimensions=()=>viewport.dimensions(this._config);
+    let {width:sceneW,height:sceneH}=dimensions();
+    let camera=viewport.fresh(sceneW,sceneH),spaceHeld=false;
+    const canvasHost=root.querySelector('.ss-canvas');
+    const undo=[],redo=[];
+    const pushHistory=()=>{undo.push(JSON.stringify(this._config.studio_layout||{}));if(undo.length>60)undo.shift();redo.length=0;};
+    const historyStep=(from,to)=>{
+      if(!from.length)return;
+      to.push(JSON.stringify(this._config.studio_layout||{}));
+      this._config={...this._config,studio_layout:JSON.parse(from.pop())};
+      commit(get(),true);render();
+    };
     const get=()=>normalized(this._config);
-    const commit=(model)=>{
+    const commit=(model,skipHistory=false)=>{
+      if(!skipHistory)pushHistory();
       this._config={...this._config,studio_layout:model};
       this._fire();
     };
@@ -372,12 +385,32 @@
       editor:this,L,properties,esc,opts,registry,pickLang,get,selectedObject,
       getSelection:()=>selection,getSelectedPartId:()=>selectedPartId,getExpandedPartId:()=>expandedPartId,variantShape
     });
-    const render=()=>{
-      stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
-      stage.firstElementChild.style.width=(W*zoom)+'px';
-      stage.firstElementChild.style.height=(H*zoom)+'px';
-      renderProps();
+    const applyCamera=()=>{
+      const svg=stage.querySelector('svg');if(!svg)return;
+      const rect=stage.getBoundingClientRect();
+      const b=viewport.box(camera,Math.max(1,rect.width),Math.max(1,rect.height),sceneW,sceneH,1.06);
+      svg.setAttribute('viewBox',[b.x,b.y,b.width,b.height].join(' '));
+      svg.setAttribute('preserveAspectRatio','none');
+      const select=root.getElementById('ss-zoom');
+      if(select && [...select.options].some(o=>Number(o.value)===camera.zoom))select.value=String(camera.zoom);
     };
+    const fit=()=>{
+      ({width:sceneW,height:sceneH}=dimensions());
+      camera=viewport.fresh(sceneW,sceneH);
+      applyCamera();
+    };
+    const zoomAt=(factor,event)=>{
+      const rect=stage.getBoundingClientRect();
+      camera=viewport.zoomAt(camera,factor,event?event.clientX-rect.left:rect.width/2,
+        event?event.clientY-rect.top:rect.height/2,Math.max(1,rect.width),Math.max(1,rect.height),sceneW,sceneH,1.06);
+      applyCamera();
+    };
+    const render=()=>{
+      ({width:sceneW,height:sceneH}=dimensions());
+      stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
+      applyCamera();renderProps();
+    };
+    if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>applyCamera()).observe(stage);
     const setSelected=(type,id)=>{
       selection={type,id};selectedPartId=type==='node'?get().nodes.find(n=>n.id===id)?.parts?.[0]?.id||null:null;expandedPartId=selectedPartId;render();
     };
@@ -454,15 +487,70 @@
       if(open)this.shadowRoot.getElementById('ss-open')?.click();
     });
     root.getElementById('ss-zoom').addEventListener('change',event=>{
-      zoom=Number(event.target.value)||1;render();
+      camera={...camera,zoom:Number(event.target.value)||1,autoFit:false};applyCamera();
     });
-    root.getElementById('ss-delete').addEventListener('click',()=>{
+    root.getElementById('ss-fit').addEventListener('click',fit);
+    root.getElementById('ss-all').addEventListener('click',()=>{
+      const model=get(),bounds=[{x:0,y:0},{x:sceneW,y:sceneH}];
+      model.nodes.forEach(n=>{bounds.push({x:n.x-60*n.scale,y:n.y-110*n.scale},{x:n.x+220*n.scale,y:n.y+350*n.scale});});
+      model.pipes.forEach(pipe=>bounds.push(...pipe.points));
+      const minX=Math.min(...bounds.map(x=>x.x)),maxX=Math.max(...bounds.map(x=>x.x));
+      const minY=Math.min(...bounds.map(x=>x.y)),maxY=Math.max(...bounds.map(x=>x.y));
+      const rect=stage.getBoundingClientRect(),scale=Math.min(rect.width/(maxX-minX+40),rect.height/(maxY-minY+40));
+      camera={cx:(maxX+minX)/2,cy:(maxY+minY)/2,zoom:Math.max(.2,Math.min(8,scale/Math.min(rect.width/sceneW,rect.height/sceneH))),autoFit:false};
+      applyCamera();
+    });
+    root.getElementById('ss-undo').addEventListener('click',()=>historyStep(undo,redo));
+    root.getElementById('ss-redo').addEventListener('click',()=>historyStep(redo,undo));
+    const settings=root.getElementById('ss-settings'),help=root.getElementById('ss-help');
+    root.getElementById('ss-size').addEventListener('click',()=>{
+      settings.hidden=!settings.hidden;help.hidden=true;
+      root.getElementById('ss-width').value=String(dimensions().width);
+      root.getElementById('ss-height').value=String(dimensions().height);
+    });
+    root.getElementById('ss-shortcuts').addEventListener('click',()=>{
+      help.hidden=!help.hidden;settings.hidden=true;
+      root.getElementById('ss-shortcuts').setAttribute('aria-expanded',String(!help.hidden));
+    });
+    root.getElementById('ss-apply-size').addEventListener('click',()=>{
+      const width=Number(root.getElementById('ss-width').value),height=Number(root.getElementById('ss-height').value);
+      if(!Number.isInteger(width)||!Number.isInteger(height)||width<300||height<300||width>5000||height>5000)return;
+      const model=get();model.width=width;model.height=height;commit(model);settings.hidden=true;fit();render();
+    });
+    const deleteSelection=()=>{
       if(!selection)return;
       const model=get();
       if(selection.type==='node')model.nodes=model.nodes.filter(n=>n.id!==selection.id);
       else model.pipes=model.pipes.filter(n=>n.id!==selection.id);
-      selection=null;selectedPartId=null;expandedPartId=null;commit(model);render();
+      commit(model);selection=null;selectedPartId=null;expandedPartId=null;render();
+    };
+    root.getElementById('ss-delete').addEventListener('click',deleteSelection);
+    stage.addEventListener('wheel',event=>{event.preventDefault();zoomAt(event.deltaY<0?1.12:1/1.12,event);},{passive:false});
+    modal.addEventListener('keydown',event=>{
+      const tag=event.target?.tagName?.toLowerCase();
+      if(['input','textarea','select'].includes(tag)||event.target?.isContentEditable)return;
+      if(event.key===' '){spaceHeld=true;event.preventDefault();return;}
+      if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){
+        event.preventDefault();historyStep(event.shiftKey?redo:undo,event.shiftKey?undo:redo);return;
+      }
+      if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='y'){event.preventDefault();historyStep(redo,undo);return;}
+      if(['Delete','Backspace'].includes(event.key)){event.preventDefault();deleteSelection();return;}
+      if(event.key.toLowerCase()==='f'&&!event.ctrlKey){event.preventDefault();fit();return;}
+      if(event.key==='Escape'){
+        if(!help.hidden||!settings.hidden){help.hidden=true;settings.hidden=true;event.preventDefault();event.stopPropagation();return;}
+        selection=null;selectedPartId=null;expandedPartId=null;render();return;
+      }
+      const arrows={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+      if(arrows[event.key]&&selection){
+        event.preventDefault();const delta=event.shiftKey?1:5,v=arrows[event.key],model=get(),obj=selectedObject(model);
+        if(!obj)return;
+        if(selection.type==='node'){obj.x+=v[0]*delta;obj.y+=v[1]*delta;}
+        else obj.points.forEach(q=>{q.x+=v[0]*delta;q.y+=v[1]*delta;});
+        commit(model);render();
+      }
     });
+    modal.addEventListener('keyup',event=>{if(event.key===' ')spaceHeld=false;});
+    modal.addEventListener('blur',()=>{spaceHeld=false;},true);
     root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add,button.dataset.variant||'')));
     root.querySelectorAll('[data-add-preset]').forEach(button=>button.addEventListener('click',()=>create('boiler',button.dataset.addPreset)));
     properties.addEventListener('change',event=>{
@@ -584,6 +672,11 @@
       commit(model);render();
     });
     stage.addEventListener('pointerdown',event=>{
+      if(event.button===1||spaceHeld||event.target===stage||event.target.classList?.contains('ss-project-boundary')){
+        const rect=stage.getBoundingClientRect();
+        drag={type:'pan',pointer:event.pointerId,lastX:event.clientX,lastY:event.clientY};
+        stage.setPointerCapture(event.pointerId);event.preventDefault();return;
+      }
       if(event.button!==0)return;
       const hit=event.target.closest?.('.ss-handle');
       if(hit){
@@ -612,21 +705,27 @@
     stage.addEventListener('pointermove',event=>{
       if(!drag||event.pointerId!==drag.pointer)return;
       const svg=stage.querySelector('svg'),model=get(),p=point(event,svg);
+      if(drag.type==='pan'){
+        const rect=stage.getBoundingClientRect();
+        camera=viewport.pan(camera,event.clientX-drag.lastX,event.clientY-drag.lastY,
+          Math.max(1,rect.width),Math.max(1,rect.height),sceneW,sceneH,1.06);
+        drag.lastX=event.clientX;drag.lastY=event.clientY;applyCamera();return;
+      }
       if(drag.type==='node'){
         const n=model.nodes.find(item=>item.id===drag.id);if(!n)return;
-        n.x=clamp(Math.round((p.x-drag.offsetX)/5)*5,0,W-120,n.x);
-        n.y=clamp(Math.round((p.y-drag.offsetY)/5)*5,0,H-140,n.y);
+        n.x=clamp(Math.round((p.x-drag.offsetX)/5)*5,-5000,10000,n.x);
+        n.y=clamp(Math.round((p.y-drag.offsetY)/5)*5,-5000,10000,n.y);
       }else{
         const pipe=model.pipes.find(item=>item.id===drag.id);
         if(!pipe||!pipe.points[drag.index])return;
-        pipe.points[drag.index]={x:clamp(Math.round(p.x/5)*5,0,W,0),
-          y:clamp(Math.round(p.y/5)*5,0,H,0)};
+        pipe.points[drag.index]={x:clamp(Math.round(p.x/5)*5,-5000,10000,0),
+          y:clamp(Math.round(p.y/5)*5,-5000,10000,0)};
       }
       this._config={...this._config,studio_layout:model};repaint(model);
     });
     const end=event=>{
       if(!drag||event.pointerId!==drag.pointer)return;
-      drag=null;commit(get());render();
+      const moved=drag.type!=='pan';drag=null;if(moved)commit(get());render();
     };
     stage.addEventListener('pointerup',end);
     stage.addEventListener('pointercancel',end);
