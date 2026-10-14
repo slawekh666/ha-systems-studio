@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.17-dev';
+const VERSION = '0.4.18-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2912,6 +2912,13 @@ const HASSStudioEditorLibrary=(()=>{
     const box=viewport.box(this._studioCardCamera,w,h,width,height);
     svg.setAttribute('viewBox',[box.x,box.y,box.width,box.height].join(' '));
     svg.setAttribute('preserveAspectRatio','none');
+    // Outside fullscreen the dashboard should scroll normally at Fit. Once
+    // zoomed, touchscreen dragging belongs to the diagram, not the dashboard.
+    const navigating=this._studioCardCamera.zoom>1.0001||
+      (typeof document!=='undefined'&&document.fullscreenElement===view);
+    const touchMode=navigating?'none':'pan-y';
+    if(view.style.touchAction!==touchMode)view.style.touchAction=touchMode;
+    if(svg.style.touchAction!==touchMode)svg.style.touchAction=touchMode;
     if(this._studioCardResizeTarget!==view){
       this._studioCardObserver?.disconnect();
       if(typeof ResizeObserver!=='undefined'){
@@ -2925,71 +2932,14 @@ const HASSStudioEditorLibrary=(()=>{
     nativeUpdate.call(this);
     if(this._cfg?.layout_mode!=='custom')return;
     const root=this.shadowRoot;
-    if(root&&!this._studioViewerEvents){
-      this._studioViewerEvents=true;
-      const pointers=new Map();
-      let last=null,pinch=null,dragged=false;
-      const viewOf=ev=>ev.composedPath().find(el=>el?.id==='ss-card-viewport');
-      const currentView=()=>root.getElementById('ss-card-viewport');
-      const dimensions=()=>viewport.dimensions(this._cfg);
-      const zoom=(factor,ev)=>{
-        const view=currentView();if(!view)return;
-        const rect=view.getBoundingClientRect(),{width,height}=dimensions();
-        const x=ev?.clientX!=null?ev.clientX-rect.left:rect.width/2;
-        const y=ev?.clientY!=null?ev.clientY-rect.top:rect.height/2;
-        this._studioCardCamera=viewport.zoomAt(this._studioCardCamera,factor,x,y,rect.width,rect.height,width,height);
-        updateCardCamera.call(this);
-      };
-      root.addEventListener('click',ev=>{
-        if(dragged){dragged=false;ev.stopImmediatePropagation();ev.preventDefault();return;}
-        const action=ev.composedPath().find(el=>el?.dataset?.viewAction)?.dataset.viewAction;
-        if(!action)return;
-        ev.preventDefault();ev.stopPropagation();
-        if(action==='fit'){const {width,height}=dimensions();this._studioCardCamera=viewport.fresh(width,height);updateCardCamera.call(this);}
-        else if(action==='in'||action==='out')zoom(action==='in'?1.25:.8);
-        else if(action==='full'){const view=currentView();
-          if(document.fullscreenElement===view)document.exitFullscreen?.();
-          else view?.requestFullscreen?.();
-        }
-      },true);
-      root.addEventListener('wheel',ev=>{
-        const view=viewOf(ev);
-        if(!view || document.fullscreenElement!==view)return; // Preserve normal dashboard scrolling.
-        ev.preventDefault();zoom(ev.deltaY<0?1.15:1/1.15,ev);
-      },{passive:false});
-      root.addEventListener('pointerdown',ev=>{
-        const view=viewOf(ev);
-        if(!view||ev.composedPath().some(el=>el?.dataset?.viewAction))return;
-        if(ev.pointerType==='touch'&&document.fullscreenElement!==view)return;
-        if(ev.button!==0)return;
-        pointers.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
-        if(pointers.size===2){
-          const pts=[...pointers.values()];pinch={distance:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y)};
-          last=null;return;
-        }
-        if(this._studioCardCamera?.zoom<=1 && document.fullscreenElement!==view)return;
-        last={x:ev.clientX,y:ev.clientY,id:ev.pointerId};
-        view.setPointerCapture?.(ev.pointerId);
+    if(root&&!this._studioViewerDispose){
+      this._studioViewerDispose=HASSStudioViewerGestures.install({
+        root,host:this,viewport,
+        getView:()=>root.getElementById('ss-card-viewport'),
+        getDimensions:()=>viewport.dimensions(this._cfg),
+        getCamera:()=>this._studioCardCamera,
+        setCamera:camera=>{this._studioCardCamera=camera;updateCardCamera.call(this);}
       });
-      root.addEventListener('pointermove',ev=>{
-        const view=currentView();
-        if(!view||!pointers.has(ev.pointerId))return;
-        const old=pointers.get(ev.pointerId);
-        pointers.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
-        if(pointers.size===2 && document.fullscreenElement===view){
-          const pts=[...pointers.values()],distance=Math.max(1,Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y));
-          if(pinch){const center={clientX:(pts[0].x+pts[1].x)/2,clientY:(pts[0].y+pts[1].y)/2};zoom(distance/pinch.distance,center);}
-          pinch={distance};dragged=true;return;
-        }
-        if(last?.id!==ev.pointerId)return;
-        const dx=ev.clientX-last.x,dy=ev.clientY-last.y;
-        if(Math.abs(dx)+Math.abs(dy)>1){const rect=view.getBoundingClientRect(),{width,height}=dimensions();
-          this._studioCardCamera=viewport.pan(this._studioCardCamera,dx,dy,rect.width,rect.height,width,height);
-          dragged=true;updateCardCamera.call(this);}
-        last={x:ev.clientX,y:ev.clientY};
-      });
-      const end=ev=>{pointers.delete(ev.pointerId);if(!pointers.size){last=null;pinch=null;}};
-      root.addEventListener('pointerup',end);root.addEventListener('pointercancel',end);
     }
     updateCardCamera.call(this);
   };
