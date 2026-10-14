@@ -468,3 +468,19 @@ for(const name of new Set(renderers)){
   assert(preview.includes(name+':{api:'),'Preview renderer not wired: '+name);
 }
 console.log('OK: standalone icon preview dependencies, registry-backed variants and SVG asset loading.');
+
+// Viewport geometry and backwards-compatible canvas size.
+const viewport=vm.runInNewContext(fs.readFileSync('src/studio-viewport.js','utf8')+'\nHASSStudioViewport;');
+assert.equal(viewport.dimensions({}).height,700);
+assert.equal(viewport.dimensions({studio_layout:{nodes:[],pipes:[]}}).height,720);
+assert.equal(viewport.dimensions({studio_layout:{width:1800,height:950,nodes:[]}}).width,1800);
+const cam=viewport.fresh(1200,700);
+const frame=viewport.box(cam,600,350,1200,700);
+assert.equal(frame.width,1200);assert.equal(frame.height,700);
+const enlarged=viewport.zoomAt(cam,2,300,175,600,350,1200,700);
+assert.equal(enlarged.zoom,2);
+assert.equal(viewport.box(enlarged,600,350,1200,700).width,600);
+assert(src.includes('ss-shortcuts')&&src.includes('ss-help'));
+assert(src.includes('ss-apply-size')&&src.includes('ss-card-viewport'));
+assert(src.includes("event.key==='Delete'")||src.includes("['Delete','Backspace']"));
+console.log('OK: configurable viewport, legacy dimensions, shortcuts and help overlay.');
