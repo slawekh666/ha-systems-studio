@@ -502,3 +502,18 @@ assert(toolbarSrc.includes('data-view-action="fit"'));
 assert(toolbarSrc.includes('data-view-action="full"'));
 assert(toolbarSrc.indexOf('class="ss-card-header"')<toolbarSrc.indexOf('canvasSvg(this._cfg,this._hass)'));
 console.log('OK: viewer zoom tools live in the card header, outside drawing.');
+
+// Scheme labels and complete pipe translation regression checks.
+const pipeLib=vm.runInNewContext(fs.readFileSync('src/studio-canvas.js','utf8')+'\nHASSStudioCanvas;');
+const pipeShift=pipeLib.create({W:1200,H:720,colors:{},normalized:()=>({nodes:[],pipes:[]}),pickLang:()=> 'pl',words:{pl:{}},clamp:(n,lo,hi,fb)=>Number.isFinite(Number(n))?Math.min(hi,Math.max(lo,Number(n))):fb,validEntity:()=>false,esc:String}).translatePipePoints;
+const points=[{x:40,y:50},{x:90,y:50},{x:90,y:150}];
+const shifted=pipeShift(points,23,-12);
+assert.equal(JSON.stringify(shifted),JSON.stringify([{x:65,y:40},{x:115,y:40},{x:115,y:140}]));
+assert.equal(points[0].x,40); // original vertices remain unchanged
+const boundary=pipeShift([{x:9998,y:70},{x:9999,y:70}],20,10);
+assert.equal(boundary[1].x,10000);
+const studio=fs.readFileSync('src/studio-custom.js','utf8');
+assert(studio.includes('id="ss-scheme-name"')&&studio.includes("const label=esc('Home Assistant System Studio')"));
+assert(studio.includes("drag={type:'pipe'")&&studio.includes("drag.type==='pipe'"));
+assert(studio.includes("drag.type!=='pipe'||drag.moved"));
+console.log('OK: scheme title and non-deforming whole-pipe dragging.');

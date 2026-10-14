@@ -70,3 +70,8 @@ Modular tanks preserve `scale`, `width_scale`, `height_scale`, and legacy `scale
 - The editor has a clearly defined scene boundary, independent camera zoom and pan, Fit/Show all buttons, configurable scene size, keyboard shortcuts and a toggleable `?` help overlay. Delete/Backspace removes selection; arrow keys move by 5, Shift+arrow by 1, Ctrl+Z/Y undo/redo, Space+drag and middle-drag pan, F fits and Escape deselects. Inputs keep native keyboard behavior.
 - Camera state is transient and never stored in `studio_layout`.
 - Browser acceptance, including Firefox, touch gestures and old projects, is required before a numbered GitHub release.
+
+## 0.4.20-dev — diagram title and whole-pipe dragging
+
+- Card title is always `Home Assistant System Studio`, optionally followed by ` - <scheme name>`. Edit the scheme name (up to 64 characters) in the editor's diagram settings. Name is stored in `studio_layout.name`, independently from device labels; old diagrams with no name display just the fixed title.
+- In the editor, dragging the pipe line translates every vertex by the same snapped delta (5 scene units), retaining bends, caps, flow animation and relative accessory positions. Dragging a point handle still moves only that point. Single click selects the pipe; double-click still adds a bend. Whole-pipe dragging is undoable.
