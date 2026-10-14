@@ -78,8 +78,8 @@
     const L=words[pickLang(this._cfg,this._hass)];
     const label=esc(this._cfg.titel||'Home Assistant Systems Studio');
     const viewerCss='<style>'+
-      '.ss-card-viewport{position:relative;display:block;width:100%;aspect-ratio:'+width+'/'+height+';min-height:0;overflow:hidden;background:var(--secondary-background-color,#17222d);touch-action:pan-y;user-select:none}'+
-      '.ss-card-viewport svg{display:block;width:100%;height:100%;max-width:none;max-height:none;touch-action:inherit}'+
+      '.ss-card-viewport{position:relative;display:flex;flex-direction:column;width:100%;aspect-ratio:'+width+'/'+height+';min-height:0;overflow:hidden;background:var(--secondary-background-color,#17222d);touch-action:pan-y;user-select:none}'+
+      '.ss-card-viewport svg{display:block;flex:1 1 auto;min-height:0;width:100%;height:100%;max-width:none;max-height:none;touch-action:inherit}'+
       '.ss-card-viewport:fullscreen{width:100vw;height:100vh;aspect-ratio:auto;background:#17222d;touch-action:none}'+
       '.ss-card-viewport:fullscreen svg{touch-action:none}'+
       '.ss-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap;padding:8px 12px;background:var(--card-background-color,#1c1c1c)}'+
@@ -104,7 +104,7 @@
     const view=this._box?.querySelector('#ss-card-viewport'),svg=view?.querySelector('svg');
     if(!svg)return;
     const {width,height}=viewport.dimensions(this._cfg);
-    const rect=view.getBoundingClientRect(),w=Math.max(1,rect.width),h=Math.max(1,rect.height);
+    const rect=svg.getBoundingClientRect(),w=Math.max(1,rect.width),h=Math.max(1,rect.height);
     if(!this._studioCardCamera || this._studioCardShape!==width+'x'+height){
       this._studioCardCamera=viewport.fresh(width,height);
       this._studioCardShape=width+'x'+height;
