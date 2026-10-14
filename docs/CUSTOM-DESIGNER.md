@@ -62,3 +62,11 @@ See [README](../README.md) and [release workflow](RELEASING.md).
 Library categories and groups use native Home Assistant MDI `ha-icon` elements; custom device SVG+JS rendering is unchanged. The right-hand inspector uses collapsible sections and individual active-part cards, selected by stable part IDs. Section expansion state is not stored in `studio_layout`.
 
 Modular tanks preserve `scale`, `width_scale`, `height_scale`, and legacy `scale_mode`. Free width/height adjustment does not reset global scaling. Optional `aspect_locked` governs ratio-locked editing and defaults according to legacy mode. Reset 1:1 restores local width and height to 1 without changing overall scale. Browser testing of expanded panels, device selection bounds, labels, and HA icon support is required.
+
+## v0.4.17-dev — navigation, scene dimensions, keyboard help
+
+- New empty projects default to 1200×700; existing layouts without dimensions retain 1200×720 for compatibility. Saved `studio_layout.width`/`height` may be changed in the editor (300–5000 units). Resizing the scene never deletes or scales devices.
+- The HA viewer initially fits the entire SVG and keeps fitting on browser resize; +/−, Fit and Fullscreen allow explicit close-ups. Mouse wheel zoom is limited to fullscreen so normal dashboard scrolling works. Fullscreen supports touch gestures. Default HA controls remain read-only.
+- The editor has a clearly defined scene boundary, independent camera zoom and pan, Fit/Show all buttons, configurable scene size, keyboard shortcuts and a toggleable `?` help overlay. Delete/Backspace removes selection; arrow keys move by 5, Shift+arrow by 1, Ctrl+Z/Y undo/redo, Space+drag and middle-drag pan, F fits and Escape deselects. Inputs keep native keyboard behavior.
+- Camera state is transient and never stored in `studio_layout`.
+- Browser acceptance, including Firefox, touch gestures and old projects, is required before a numbered GitHub release.

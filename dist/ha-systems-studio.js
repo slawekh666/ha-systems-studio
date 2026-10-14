@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.16-dev';
+const VERSION = '0.4.17-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2240,6 +2240,44 @@ const HASSStudioDeviceRegistry = (() => {
 })();
 
 
+/* Shared, dependency-free diagram viewport calculations. View state never enters studio_layout. */
+const HASSStudioViewport=(()=>{
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+  const dimension=(v,fallback)=>Number.isFinite(Number(v)) && Number(v)>=300 && Number(v)<=5000?Math.round(Number(v)):fallback;
+  const dimensions=config=>{
+    const layout=config?.studio_layout||{};
+    // Existing saved layouts used 1200x720. Only newly created empty layouts use 1200x700.
+    const existing=Array.isArray(layout.nodes)||Array.isArray(layout.pipes)||Array.isArray(layout.edges);
+    return {width:dimension(layout.width,1200),height:dimension(layout.height,existing?720:700)};
+  };
+  const fresh=(w,h)=>({cx:w/2,cy:h/2,zoom:1,autoFit:true});
+  const box=(camera,clientW,clientH,w,h,margin=1)=>{
+    const usableW=Math.max(1,clientW),usableH=Math.max(1,clientH);
+    const fit=Math.min(usableW/w,usableH/h);
+    const scale=fit*clamp(camera.zoom,.2,8)/margin;
+    const width=usableW/scale,height=usableH/scale;
+    return {x:camera.cx-width/2,y:camera.cy-height/2,width,height};
+  };
+  const worldAt=(camera,px,py,clientW,clientH,w,h,margin=1)=>{
+    const b=box(camera,clientW,clientH,w,h,margin);
+    return {x:b.x+px/clientW*b.width,y:b.y+py/clientH*b.height};
+  };
+  const zoomAt=(camera,factor,px,py,clientW,clientH,w,h,margin=1)=>{
+    const anchor=worldAt(camera,px,py,clientW,clientH,w,h,margin);
+    const nextZoom=clamp(camera.zoom*factor,.2,8);
+    const next={...camera,zoom:nextZoom,autoFit:false};
+    const after=worldAt(next,px,py,clientW,clientH,w,h,margin);
+    next.cx+=anchor.x-after.x;next.cy+=anchor.y-after.y;
+    return next;
+  };
+  const pan=(camera,dx,dy,clientW,clientH,w,h,margin=1)=>{
+    const b=box(camera,clientW,clientH,w,h,margin);
+    return {...camera,cx:camera.cx-dx*b.width/clientW,cy:camera.cy-dy*b.height/clientH,autoFit:false};
+  };
+  return Object.freeze({dimensions,dimension,fresh,box,worldAt,zoomAt,pan});
+})();
+
+
 /* Schema normalization for existing custom layouts. Keeps saved IDs and fields. */
 const HASSStudioLayout = (() => {
   const W=1200,H=720,MAX_NODES=60,MAX_PIPES=80;
@@ -2276,10 +2314,11 @@ const HASSStudioLayout = (() => {
   });
   const normalized=(config)=>{
     const source=config?.studio_layout||{};
+    const {width,height}=HASSStudioViewport.dimensions(config);
     const nodes=(Array.isArray(source.nodes)?source.nodes:[]).filter(v=>v && registry.isNodeType(v.type) &&
       typeof v.id==='string').slice(0,MAX_NODES).map(v=>({
       id:v.id.slice(0,32),type:v.type,
-      x:clamp(v.x,0,W-120,40),y:clamp(v.y,0,H-140,40),
+      x:clamp(v.x,-5000,10000,40),y:clamp(v.y,-5000,10000,40),
       scale:clamp(v.scale,0.5,2.4,1),
       scale_mode:v.type==='tank' && v.variant==='modular' && v.scale_mode==='free'?'free':'proportional',
        aspect_locked:typeof v.aspect_locked==='boolean'?v.aspect_locked:v.scale_mode!=='free',
@@ -2320,7 +2359,7 @@ const HASSStudioLayout = (() => {
       flow_speed:clamp(v.flow_speed,.35,5,1),cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
       cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
       points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
-        x:clamp(q.x,0,W,100),y:clamp(q.y,0,H,100)})),
+        x:clamp(q.x,-5000,10000,100),y:clamp(q.y,-5000,10000,100)})),
       accessories:(Array.isArray(v.accessories)?v.accessories:[]).slice(0,20).map(normalizeAccessory)
     })).filter(v=>v.points.length>=2);
     // Preserve pipes created in the previous prototype when opening their layout.
@@ -2339,7 +2378,7 @@ const HASSStudioLayout = (() => {
           points:[{x:ax,y:ay},{x:mx,y:ay},{x:mx,y:by},{x:bx,y:by}],accessories:[]});
       });
     }
-    return {nodes,pipes};
+    return {width,height,nodes,pipes};
   };
 
   return Object.freeze({normalized,normalizeItem,normalizeAccessory});
@@ -2428,6 +2467,7 @@ const HASSStudioCanvas = (() => {
   };
   const canvasSvg=(config,hass,editable=false,selected=null)=>{
     const data=normalized(config),language=pickLang(config,hass),L=words[language];
+    const w=data.width,h=data.height;
     const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(node.variant)))
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
     const pipes=data.pipes.map(pipe=>{
@@ -2479,9 +2519,10 @@ const HASSStudioCanvas = (() => {
         (reading&&!tallBoiler?'<g transform="translate(60 '+outline.readingY+') scale('+(1/node.scale)+')"><text text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text></g>':'')+
         '</g>';
     }).join('');
-    return '<svg class="ss-svg'+(editable?' ss-svg-editor':'')+'" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
+    return '<svg class="ss-svg'+(editable?' ss-svg-editor':'')+'" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
       HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
-      '<rect width="'+W+'" height="'+H+'" rx="10" fill="var(--secondary-background-color,#17222d)"/>'+
+      '<rect class="ss-project-boundary" width="'+w+'" height="'+h+'" rx="4" fill="var(--secondary-background-color,#17222d)" stroke="'+
+      (editable?'#52bfff':'none')+'" stroke-width="2" stroke-dasharray="'+(editable?'12 7':'none')+'"/>'+
       '<g class="ss-devices">'+nodes+'</g><g class="ss-pipe-layer" stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-pipe-handles">'+handles+'</g></svg>';
   };
 
@@ -2766,6 +2807,7 @@ const HASSStudioEditorLibrary=(()=>{
  */
 (() => {
   const W=1200,H=720,MAX_NODES=60,MAX_PIPES=80;
+  const viewport=HASSStudioViewport;
   const registry=HASSStudioDeviceRegistry;
   const types=registry.listTypes();
   const words={
@@ -2806,6 +2848,7 @@ const HASSStudioEditorLibrary=(()=>{
       link:'Assign entity',addEntity:'Add entity',label:'Description',default:'Default',
       zoom:'Zoom',noValues:'No data',editor:'System diagram designer'}
   };
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{canvasSettings:'Rozmiar schematu',canvasWidth:'Szerokość',canvasHeight:'Wysokość',apply:'Zastosuj',fit:'Dopasuj schemat',all:'Pokaż wszystkie',help:'Skróty klawiaturowe',undo:'Cofnij',redo:'Ponów',shortcutTitle:'Sterowanie edytorem',shortcutHint:'Skróty nie działają podczas pisania w polach formularzy.',outside:'Zmniejszenie obszaru nie usuwa urządzeń ani rur.'}:{canvasSettings:'Canvas size',canvasWidth:'Width',canvasHeight:'Height',apply:'Apply',fit:'Fit diagram',all:'Show all',help:'Keyboard shortcuts',undo:'Undo',redo:'Redo',shortcutTitle:'Editor controls',shortcutHint:'Shortcuts are disabled while editing form fields.',outside:'Shrinking the canvas does not remove devices or pipes.'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankGlow:'Efekt cieplny grzałek (%)',heaterMode:'Stan grzałki',heaterPower:'Intensywność (%)',heaterWatts:'Encja mocy (W/kW)',partX:'Pozycja pozioma (%)',partLength:'Wysokość / długość (%)',partWidth:'Szerokość (%)',partTurns:'Liczba zwojów',permeability:'Przepuszczalność 0–1',partContainer:'Strefa czujnika',partFlowMode:'Przepływ wężownicy',baffle_horizontal:'Przegroda pozioma',baffle_vertical:'Przegroda pionowa',inner_tank:'Zbiornik wewnętrzny'}:{tankGlow:'Heater visual glow (%)',heaterMode:'Heater status',heaterPower:'Glow intensity (%)',heaterWatts:'Power entity (W/kW)',partX:'Horizontal position (%)',partLength:'Height / length (%)',partWidth:'Width (%)',partTurns:'Coil turns',permeability:'Permeability 0–1',partContainer:'Sensor compartment',partFlowMode:'Coil flow',baffle_horizontal:'Horizontal baffle',baffle_vertical:'Vertical baffle',inner_tank:'Inner tank'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankScaleMode:'Skalowanie zbiornika',tankScaleProportional:'Proporcjonalne',tankScaleFree:'Osobna szerokość i wysokość',tankWidthScale:'Szerokość zbiornika',tankHeightScale:'Wysokość zbiornika'}:{tankScaleMode:'Tank scaling',tankScaleProportional:'Proportional',tankScaleFree:'Independent width and height',tankWidthScale:'Tank width',tankHeightScale:'Tank height'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{partLayer:'Warstwa',partLayerUp:'Przenieś wyżej',partLayerDown:'Przenieś niżej'}:{partLayer:'Layer',partLayerUp:'Move up',partLayerDown:'Move down'});
@@ -2829,11 +2872,126 @@ const HASSStudioEditorLibrary=(()=>{
   const {canvasSvg,pipePath,onPipe,variantShape}=HASSStudioCanvas.create({
     W,H,colors,normalized,pickLang,words,clamp,validEntity,esc
   });
+  // Card viewer: fit entire scheme at every responsive width, only zoom after explicit interaction.
   const nativeRender=WarmwasserSchemaCard.prototype._render;
+  const nativeUpdate=WarmwasserSchemaCard.prototype._update;
   WarmwasserSchemaCard.prototype._render=function(){
     if(this._cfg?.layout_mode!=='custom')return nativeRender.call(this);
-    return '<div class="kopf"><div class="l"><div class="t1">'+esc(this._cfg.titel||'Home Assistant Systems Studio')+
-      '</div></div></div>'+canvasSvg(this._cfg,this._hass);
+    const {width,height}=viewport.dimensions(this._cfg);
+    const L=words[pickLang(this._cfg,this._hass)];
+    const label=esc(this._cfg.titel||'Home Assistant Systems Studio');
+    const viewerCss='<style>'+
+      '.ss-card-viewport{position:relative;display:block;width:100%;aspect-ratio:'+width+'/'+height+';min-height:0;overflow:hidden;background:var(--secondary-background-color,#17222d);touch-action:pan-y;user-select:none}'+
+      '.ss-card-viewport svg{display:block;width:100%;height:100%;max-width:none;max-height:none;touch-action:inherit}'+
+      '.ss-card-viewport:fullscreen{width:100vw;height:100vh;aspect-ratio:auto;background:#17222d;touch-action:none}'+
+      '.ss-card-viewport:fullscreen svg{touch-action:none}'+
+      '.ss-view-tools{position:absolute;top:9px;right:9px;display:flex;align-items:center;gap:4px;z-index:2;background:#101925d9;padding:5px;border-radius:9px;opacity:.72;transition:opacity .15s}'+
+      '.ss-card-viewport:is(:hover,:focus-within) .ss-view-tools{opacity:1}'+
+      '.ss-view-tools button{appearance:none;background:#293949;border:1px solid #53677c;border-radius:5px;color:#fff;min-width:32px;min-height:32px;cursor:pointer;font:600 14px sans-serif}'+
+      '.ss-view-tools button:focus-visible{outline:2px solid #52bfff}'+
+      '@media(max-width:600px){.ss-view-tools{top:4px;right:4px;padding:2px;gap:2px}.ss-view-tools button{min-width:28px;min-height:28px}}'+
+      '</style>';
+    return '<div class="kopf"><div class="l"><div class="t1">'+label+'</div></div></div>'+
+      viewerCss+'<div class="ss-card-viewport" id="ss-card-viewport" tabindex="0" aria-label="'+esc(L.editor)+'">'+
+      '<div class="ss-view-tools">'+
+      '<button type="button" data-view-action="out" title="Zoom −" aria-label="Zoom out">−</button>'+
+      '<button type="button" data-view-action="in" title="Zoom +" aria-label="Zoom in">+</button>'+
+      '<button type="button" data-view-action="fit" title="Dopasuj cały schemat" aria-label="Fit diagram">⤢</button>'+
+      '<button type="button" data-view-action="full" title="Pełny ekran" aria-label="Fullscreen">⛶</button></div>'+
+      canvasSvg(this._cfg,this._hass)+'</div>';
+  };
+  const updateCardCamera=function(){
+    const view=this._box?.querySelector('#ss-card-viewport'),svg=view?.querySelector('svg');
+    if(!svg)return;
+    const {width,height}=viewport.dimensions(this._cfg);
+    const rect=view.getBoundingClientRect(),w=Math.max(1,rect.width),h=Math.max(1,rect.height);
+    if(!this._studioCardCamera || this._studioCardShape!==width+'x'+height){
+      this._studioCardCamera=viewport.fresh(width,height);
+      this._studioCardShape=width+'x'+height;
+    }
+    const box=viewport.box(this._studioCardCamera,w,h,width,height);
+    svg.setAttribute('viewBox',[box.x,box.y,box.width,box.height].join(' '));
+    svg.setAttribute('preserveAspectRatio','none');
+    if(this._studioCardResizeTarget!==view){
+      this._studioCardObserver?.disconnect();
+      if(typeof ResizeObserver!=='undefined'){
+        this._studioCardObserver=new ResizeObserver(()=>updateCardCamera.call(this));
+        this._studioCardObserver.observe(view);
+      }
+      this._studioCardResizeTarget=view;
+    }
+  };
+  WarmwasserSchemaCard.prototype._update=function(){
+    nativeUpdate.call(this);
+    if(this._cfg?.layout_mode!=='custom')return;
+    const root=this.shadowRoot;
+    if(root&&!this._studioViewerEvents){
+      this._studioViewerEvents=true;
+      const pointers=new Map();
+      let last=null,pinch=null,dragged=false;
+      const viewOf=ev=>ev.composedPath().find(el=>el?.id==='ss-card-viewport');
+      const currentView=()=>root.getElementById('ss-card-viewport');
+      const dimensions=()=>viewport.dimensions(this._cfg);
+      const zoom=(factor,ev)=>{
+        const view=currentView();if(!view)return;
+        const rect=view.getBoundingClientRect(),{width,height}=dimensions();
+        const x=ev?.clientX!=null?ev.clientX-rect.left:rect.width/2;
+        const y=ev?.clientY!=null?ev.clientY-rect.top:rect.height/2;
+        this._studioCardCamera=viewport.zoomAt(this._studioCardCamera,factor,x,y,rect.width,rect.height,width,height);
+        updateCardCamera.call(this);
+      };
+      root.addEventListener('click',ev=>{
+        if(dragged){dragged=false;ev.stopImmediatePropagation();ev.preventDefault();return;}
+        const action=ev.composedPath().find(el=>el?.dataset?.viewAction)?.dataset.viewAction;
+        if(!action)return;
+        ev.preventDefault();ev.stopPropagation();
+        if(action==='fit'){const {width,height}=dimensions();this._studioCardCamera=viewport.fresh(width,height);updateCardCamera.call(this);}
+        else if(action==='in'||action==='out')zoom(action==='in'?1.25:.8);
+        else if(action==='full'){const view=currentView();
+          if(document.fullscreenElement===view)document.exitFullscreen?.();
+          else view?.requestFullscreen?.();
+        }
+      },true);
+      root.addEventListener('wheel',ev=>{
+        const view=viewOf(ev);
+        if(!view || document.fullscreenElement!==view)return; // Preserve normal dashboard scrolling.
+        ev.preventDefault();zoom(ev.deltaY<0?1.15:1/1.15,ev);
+      },{passive:false});
+      root.addEventListener('pointerdown',ev=>{
+        const view=viewOf(ev);
+        if(!view||ev.composedPath().some(el=>el?.dataset?.viewAction))return;
+        if(ev.pointerType==='touch'&&document.fullscreenElement!==view)return;
+        if(ev.button!==0)return;
+        pointers.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
+        if(pointers.size===2){
+          const pts=[...pointers.values()];pinch={distance:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y)};
+          last=null;return;
+        }
+        if(this._studioCardCamera?.zoom<=1 && document.fullscreenElement!==view)return;
+        last={x:ev.clientX,y:ev.clientY,id:ev.pointerId};
+        view.setPointerCapture?.(ev.pointerId);
+      });
+      root.addEventListener('pointermove',ev=>{
+        const view=currentView();
+        if(!view||!pointers.has(ev.pointerId))return;
+        const old=pointers.get(ev.pointerId);
+        pointers.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
+        if(pointers.size===2 && document.fullscreenElement===view){
+          const pts=[...pointers.values()],distance=Math.max(1,Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y));
+          if(pinch){const center={clientX:(pts[0].x+pts[1].x)/2,clientY:(pts[0].y+pts[1].y)/2};zoom(distance/pinch.distance,center);}
+          pinch={distance};dragged=true;return;
+        }
+        if(last?.id!==ev.pointerId)return;
+        const dx=ev.clientX-last.x,dy=ev.clientY-last.y;
+        if(Math.abs(dx)+Math.abs(dy)>1){const rect=view.getBoundingClientRect(),{width,height}=dimensions();
+          this._studioCardCamera=viewport.pan(this._studioCardCamera,dx,dy,rect.width,rect.height,width,height);
+          dragged=true;updateCardCamera.call(this);}
+        last={x:ev.clientX,y:ev.clientY};
+      });
+      const end=ev=>{pointers.delete(ev.pointerId);if(!pointers.size){last=null;pinch=null;}};
+      root.addEventListener('pointerup',end);root.addEventListener('pointercancel',end);
+    }
+    updateCardCamera.call(this);
   };
   // In automatic mode, retain the complete original Warmwasser settings.
   const nativeSchema=WarmwasserSchemaCardEditor.prototype._mainSchema;
@@ -2900,8 +3058,16 @@ const HASSStudioEditorLibrary=(()=>{
       '.ss-library button.ss-lib-item:hover,.ss-library button.ss-lib-item:focus-visible{background:var(--secondary-background-color,#18222e);border-color:var(--primary-color,#168bce)}'+
       '.ss-library .ss-lib-label{font-size:12px;line-height:1.3;display:block;min-width:0;flex:1;overflow-wrap:anywhere}'+
       '.ss-library .ss-lib-icon{flex:0 0 20px}'+
-      '.ss-canvas{min-width:0;min-height:0;overflow:auto;background:var(--secondary-background-color,#18222e);padding:16px}'+
-      '.ss-stage{width:max-content;max-width:none}.ss-svg{display:block;width:1200px;height:720px;max-height:none;padding:0;touch-action:none}'+
+      '.ss-canvas{position:relative;min-width:0;min-height:0;overflow:hidden;background:#101820;padding:0;outline:0;touch-action:none}'+
+      '.ss-stage{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}'+
+      '.ss-svg{display:block;width:100%;height:100%;max-width:none;max-height:none;padding:0;touch-action:none;background:#101820}'+
+      '.ss-settings,.ss-help{position:absolute;top:60px;right:15px;z-index:15;background:var(--card-background-color,#263340);border:1px solid var(--divider-color,#64768c);box-shadow:0 12px 35px #0009;border-radius:9px;padding:16px;width:min(340px,calc(100vw - 35px));max-height:calc(100vh - 90px);overflow:auto}'+
+      '.ss-settings[hidden],.ss-help[hidden]{display:none}'+
+      '.ss-settings label{display:grid;gap:5px;font-size:12px;margin-bottom:10px}'+
+      '.ss-settings input{width:100%;box-sizing:border-box;padding:8px;border-radius:7px;background:var(--secondary-background-color,#18222e);color:var(--primary-text-color);border:1px solid var(--divider-color,#555)}'+
+      '.ss-help table{width:100%;border-collapse:collapse;font-size:12px}.ss-help td{padding:7px 5px;border-bottom:1px solid var(--divider-color,#555)}'+
+      '.ss-help kbd{font:inherit;background:var(--secondary-background-color,#18222e);border:1px solid #53667a;padding:2px 5px;border-radius:4px}'+
+      '.ss-bar .ss-viewport-buttons{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.ss-bar .ss-viewport-buttons button{padding:7px 10px}'+
       '.ss-svg-editor .ss-node{cursor:grab}.ss-svg-editor .ss-pipe-hit{cursor:pointer;pointer-events:stroke}.ss-handle{cursor:move}'+
       '.ss-svg-editor .ss-accessory{pointer-events:none}.ss-svg:not(.ss-svg-editor) .ss-pipe{pointer-events:none}'+
       '.ss-svg:not(.ss-svg-editor) [data-more]{cursor:pointer}'+
@@ -2946,13 +3112,34 @@ const HASSStudioEditorLibrary=(()=>{
       '<label>'+esc(L.language)+'<select id="ss-lang">'+opts(langs,this._config.studio_language||'auto')+'</select></label>'+
       '<button type="button" id="ss-open">'+esc(L.open)+'</button></div>'+
       '<dialog class="ss-modal ss-fullscreen" id="ss-modal"><div class="ss-bar"><strong>'+esc(L.editor)+' · v'+esc(VERSION)+'</strong>'+
-      '<label>'+esc(L.zoom)+' <select id="ss-zoom">'+opts([['0.65','65%'],['0.8','80%'],['1','100%'],['1.25','125%'],['1.5','150%']],'1')+'</select></label>'+
+      '<label>'+esc(L.zoom)+' <select id="ss-zoom">'+opts([['0.25','25%'],['0.5','50%'],['0.65','65%'],['0.8','80%'],['1','100%'],['1.25','125%'],['1.5','150%'],['2','200%'],['4','400%']],'1')+'</select></label>'+
+       '<div class="ss-viewport-buttons">'+
+       '<button id="ss-fit" type="button" title="'+esc(L.fit)+'">⤢ '+esc(L.fit)+'</button>'+
+       '<button id="ss-all" type="button" title="'+esc(L.all)+'">▣</button>'+
+       '<button id="ss-undo" type="button" title="'+esc(L.undo)+'">↶</button>'+
+       '<button id="ss-redo" type="button" title="'+esc(L.redo)+'">↷</button>'+
+       '<button id="ss-size" type="button" title="'+esc(L.canvasSettings)+'">⚙</button>'+
+       '<button id="ss-shortcuts" type="button" title="'+esc(L.help)+'" aria-expanded="false" aria-controls="ss-help">?</button></div>'+
       '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
       '<button id="ss-close" type="button">'+esc(L.close)+'</button></div>'+
-      '<div class="ss-grid" id="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+
+      '<div class="ss-settings" id="ss-settings" hidden><strong>'+esc(L.canvasSettings)+'</strong>'+
+       '<label>'+esc(L.canvasWidth)+' (300–5000)<input type="number" min="300" max="5000" step="1" id="ss-width"></label>'+
+       '<label>'+esc(L.canvasHeight)+' (300–5000)<input type="number" min="300" max="5000" step="1" id="ss-height"></label>'+
+       '<p class="ss-note">'+esc(L.outside)+'</p>'+
+       '<button type="button" id="ss-apply-size">'+esc(L.apply)+'</button></div>'+
+       '<div class="ss-help" id="ss-help" hidden><strong>'+esc(L.shortcutTitle)+'</strong>'+
+       '<table><tbody>'+
+       [['Delete / Backspace','Usuń / Delete'],['← ↑ → ↓','Przesuń o 5 / Move 5'],['Shift + ← ↑ → ↓','Przesuń o 1 / Move 1'],
+        ['Rolka / Wheel','Zoom'],['Spacja + przeciągnij / Drag','Przesuń widok / Pan'],
+        ['Środkowy przycisk / Middle drag','Przesuń widok / Pan'],
+        ['Ctrl + Z','Cofnij / Undo'],['Ctrl + Y / Ctrl + Shift + Z','Ponów / Redo'],
+        ['F','Dopasuj / Fit'],['Esc','Odznacz / Deselect'],['?','Pokaż pomoc / Help']].map(row=>
+         '<tr><td><kbd>'+esc(row[0])+'</kbd></td><td>'+esc(row[1])+'</td></tr>').join('')+'</tbody></table>'+
+       '<p class="ss-note">'+esc(L.shortcutHint)+'</p></div>'+
+       '<div class="ss-grid" id="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+
       HASSStudioEditorLibrary.render({registry,language:pickLang(this._config,this._hass),esc})+
       '</aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
-      '<p class="ss-note">'+esc(L.editHelp)+'</p></main>'+
+      '</main>'+
       '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
     const modal=root.getElementById('ss-modal'),stage=root.getElementById('ss-stage'),properties=root.getElementById('ss-props');
     const splitterGrid=root.getElementById('ss-grid');
@@ -2973,9 +3160,22 @@ const HASSStudioEditorLibrary=(()=>{
         grip.addEventListener('pointercancel',end);
       });
     }
-    let selection=null,drag=null,zoom=1,selectedPartId=null,expandedPartId=null;
+    let selection=null,drag=null,selectedPartId=null,expandedPartId=null;
+    const dimensions=()=>viewport.dimensions(this._config);
+    let {width:sceneW,height:sceneH}=dimensions();
+    let camera=viewport.fresh(sceneW,sceneH),spaceHeld=false;
+    const canvasHost=root.querySelector('.ss-canvas');
+    const undo=[],redo=[];
+    const pushHistory=()=>{undo.push(JSON.stringify(this._config.studio_layout||{}));if(undo.length>60)undo.shift();redo.length=0;};
+    const historyStep=(from,to)=>{
+      if(!from.length)return;
+      to.push(JSON.stringify(this._config.studio_layout||{}));
+      this._config={...this._config,studio_layout:JSON.parse(from.pop())};
+      this._fire();render();
+    };
     const get=()=>normalized(this._config);
-    const commit=(model)=>{
+    const commit=(model,skipHistory=false)=>{
+      if(!skipHistory)pushHistory();
       this._config={...this._config,studio_layout:model};
       this._fire();
     };
@@ -2988,12 +3188,32 @@ const HASSStudioEditorLibrary=(()=>{
       editor:this,L,properties,esc,opts,registry,pickLang,get,selectedObject,
       getSelection:()=>selection,getSelectedPartId:()=>selectedPartId,getExpandedPartId:()=>expandedPartId,variantShape
     });
-    const render=()=>{
-      stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
-      stage.firstElementChild.style.width=(W*zoom)+'px';
-      stage.firstElementChild.style.height=(H*zoom)+'px';
-      renderProps();
+    const applyCamera=()=>{
+      const svg=stage.querySelector('svg');if(!svg)return;
+      const rect=stage.getBoundingClientRect();
+      const b=viewport.box(camera,Math.max(1,rect.width),Math.max(1,rect.height),sceneW,sceneH,1.06);
+      svg.setAttribute('viewBox',[b.x,b.y,b.width,b.height].join(' '));
+      svg.setAttribute('preserveAspectRatio','none');
+      const select=root.getElementById('ss-zoom');
+      if(select && [...select.options].some(o=>Number(o.value)===camera.zoom))select.value=String(camera.zoom);
     };
+    const fit=()=>{
+      ({width:sceneW,height:sceneH}=dimensions());
+      camera=viewport.fresh(sceneW,sceneH);
+      applyCamera();
+    };
+    const zoomAt=(factor,event)=>{
+      const rect=stage.getBoundingClientRect();
+      camera=viewport.zoomAt(camera,factor,event?event.clientX-rect.left:rect.width/2,
+        event?event.clientY-rect.top:rect.height/2,Math.max(1,rect.width),Math.max(1,rect.height),sceneW,sceneH,1.06);
+      applyCamera();
+    };
+    const render=()=>{
+      ({width:sceneW,height:sceneH}=dimensions());
+      stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
+      applyCamera();renderProps();
+    };
+    if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>applyCamera()).observe(stage);
     const setSelected=(type,id)=>{
       selection={type,id};selectedPartId=type==='node'?get().nodes.find(n=>n.id===id)?.parts?.[0]?.id||null:null;expandedPartId=selectedPartId;render();
     };
@@ -3070,15 +3290,71 @@ const HASSStudioEditorLibrary=(()=>{
       if(open)this.shadowRoot.getElementById('ss-open')?.click();
     });
     root.getElementById('ss-zoom').addEventListener('change',event=>{
-      zoom=Number(event.target.value)||1;render();
+      camera={...camera,zoom:Number(event.target.value)||1,autoFit:false};applyCamera();
     });
-    root.getElementById('ss-delete').addEventListener('click',()=>{
+    root.getElementById('ss-fit').addEventListener('click',fit);
+    root.getElementById('ss-all').addEventListener('click',()=>{
+      const model=get(),bounds=[{x:0,y:0},{x:sceneW,y:sceneH}];
+      model.nodes.forEach(n=>{bounds.push({x:n.x-60*n.scale,y:n.y-110*n.scale},{x:n.x+220*n.scale,y:n.y+350*n.scale});});
+      model.pipes.forEach(pipe=>bounds.push(...pipe.points));
+      const minX=Math.min(...bounds.map(x=>x.x)),maxX=Math.max(...bounds.map(x=>x.x));
+      const minY=Math.min(...bounds.map(x=>x.y)),maxY=Math.max(...bounds.map(x=>x.y));
+      const rect=stage.getBoundingClientRect(),scale=Math.min(rect.width/(maxX-minX+40),rect.height/(maxY-minY+40));
+      camera={cx:(maxX+minX)/2,cy:(maxY+minY)/2,zoom:Math.max(.2,Math.min(8,scale/Math.min(rect.width/sceneW,rect.height/sceneH))),autoFit:false};
+      applyCamera();
+    });
+    root.getElementById('ss-undo').addEventListener('click',()=>historyStep(undo,redo));
+    root.getElementById('ss-redo').addEventListener('click',()=>historyStep(redo,undo));
+    const settings=root.getElementById('ss-settings'),help=root.getElementById('ss-help');
+    root.getElementById('ss-size').addEventListener('click',()=>{
+      settings.hidden=!settings.hidden;help.hidden=true;
+      root.getElementById('ss-width').value=String(dimensions().width);
+      root.getElementById('ss-height').value=String(dimensions().height);
+    });
+    root.getElementById('ss-shortcuts').addEventListener('click',()=>{
+      help.hidden=!help.hidden;settings.hidden=true;
+      root.getElementById('ss-shortcuts').setAttribute('aria-expanded',String(!help.hidden));
+    });
+    root.getElementById('ss-apply-size').addEventListener('click',()=>{
+      const width=Number(root.getElementById('ss-width').value),height=Number(root.getElementById('ss-height').value);
+      if(!Number.isInteger(width)||!Number.isInteger(height)||width<300||height<300||width>5000||height>5000)return;
+      const model=get();model.width=width;model.height=height;commit(model);settings.hidden=true;fit();render();
+    });
+    const deleteSelection=()=>{
       if(!selection)return;
       const model=get();
       if(selection.type==='node')model.nodes=model.nodes.filter(n=>n.id!==selection.id);
       else model.pipes=model.pipes.filter(n=>n.id!==selection.id);
-      selection=null;selectedPartId=null;expandedPartId=null;commit(model);render();
+      commit(model);selection=null;selectedPartId=null;expandedPartId=null;render();
+    };
+    root.getElementById('ss-delete').addEventListener('click',deleteSelection);
+    stage.addEventListener('wheel',event=>{event.preventDefault();zoomAt(event.deltaY<0?1.12:1/1.12,event);},{passive:false});
+    modal.addEventListener('keydown',event=>{
+      const tag=event.target?.tagName?.toLowerCase();
+      if(['input','textarea','select'].includes(tag)||event.target?.isContentEditable)return;
+      if(event.key===' '){spaceHeld=true;event.preventDefault();return;}
+      if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){
+        event.preventDefault();historyStep(event.shiftKey?redo:undo,event.shiftKey?undo:redo);return;
+      }
+      if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='y'){event.preventDefault();historyStep(redo,undo);return;}
+      if(['Delete','Backspace'].includes(event.key)){event.preventDefault();deleteSelection();return;}
+      if(event.key.toLowerCase()==='f'&&!event.ctrlKey){event.preventDefault();fit();return;}
+      if(event.key==='Escape'){
+        if(!help.hidden||!settings.hidden){help.hidden=true;settings.hidden=true;event.preventDefault();event.stopPropagation();return;}
+        event.preventDefault();event.stopPropagation();
+        selection=null;selectedPartId=null;expandedPartId=null;render();return;
+      }
+      const arrows={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+      if(arrows[event.key]&&selection){
+        event.preventDefault();const delta=event.shiftKey?1:5,v=arrows[event.key],model=get(),obj=selectedObject(model);
+        if(!obj)return;
+        if(selection.type==='node'){obj.x+=v[0]*delta;obj.y+=v[1]*delta;}
+        else obj.points.forEach(q=>{q.x+=v[0]*delta;q.y+=v[1]*delta;});
+        commit(model);render();
+      }
     });
+    modal.addEventListener('keyup',event=>{if(event.key===' ')spaceHeld=false;});
+    window.addEventListener('blur',()=>{spaceHeld=false;});
     root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add,button.dataset.variant||'')));
     root.querySelectorAll('[data-add-preset]').forEach(button=>button.addEventListener('click',()=>create('boiler',button.dataset.addPreset)));
     properties.addEventListener('change',event=>{
@@ -3200,11 +3476,16 @@ const HASSStudioEditorLibrary=(()=>{
       commit(model);render();
     });
     stage.addEventListener('pointerdown',event=>{
+      if(event.button===1||spaceHeld||event.target===stage||event.target.tagName?.toLowerCase()==='svg'||event.target.classList?.contains('ss-project-boundary')){
+        const rect=stage.getBoundingClientRect();
+        drag={type:'pan',pointer:event.pointerId,lastX:event.clientX,lastY:event.clientY};
+        stage.setPointerCapture(event.pointerId);event.preventDefault();return;
+      }
       if(event.button!==0)return;
       const hit=event.target.closest?.('.ss-handle');
       if(hit){
         selection={type:'pipe',id:hit.dataset.id};selectedPartId=null;
-        drag={type:'point',id:hit.dataset.id,index:Number(hit.dataset.point),pointer:event.pointerId};
+        drag={type:'point',id:hit.dataset.id,index:Number(hit.dataset.point),pointer:event.pointerId,previous:JSON.stringify(this._config.studio_layout||{})};
       }else{
         const node=event.target.closest?.('.ss-node');
         if(node){
@@ -3215,7 +3496,7 @@ const HASSStudioEditorLibrary=(()=>{
           if(partHit){renderProps();return;}
           const model=get(),obj=selectedObject(model),svg=stage.querySelector('svg'),p=point(event,svg);
           if(!obj)return;
-          drag={type:'node',id:obj.id,offsetX:p.x-obj.x,offsetY:p.y-obj.y,pointer:event.pointerId};
+          drag={type:'node',id:obj.id,offsetX:p.x-obj.x,offsetY:p.y-obj.y,pointer:event.pointerId,previous:JSON.stringify(this._config.studio_layout||{})};
         }else{
           const pipe=event.target.closest?.('.ss-pipe');
           if(pipe){setSelected('pipe',pipe.dataset.id);return;}
@@ -3227,22 +3508,34 @@ const HASSStudioEditorLibrary=(()=>{
     });
     stage.addEventListener('pointermove',event=>{
       if(!drag||event.pointerId!==drag.pointer)return;
-      const svg=stage.querySelector('svg'),model=get(),p=point(event,svg);
+      const svg=stage.querySelector('svg');
+      if(drag.type==='pan'){
+        const rect=stage.getBoundingClientRect();
+        camera=viewport.pan(camera,event.clientX-drag.lastX,event.clientY-drag.lastY,
+          Math.max(1,rect.width),Math.max(1,rect.height),sceneW,sceneH,1.06);
+        drag.lastX=event.clientX;drag.lastY=event.clientY;applyCamera();return;
+      }
+      const model=get(),p=point(event,svg);
       if(drag.type==='node'){
         const n=model.nodes.find(item=>item.id===drag.id);if(!n)return;
-        n.x=clamp(Math.round((p.x-drag.offsetX)/5)*5,0,W-120,n.x);
-        n.y=clamp(Math.round((p.y-drag.offsetY)/5)*5,0,H-140,n.y);
+        n.x=clamp(Math.round((p.x-drag.offsetX)/5)*5,-5000,10000,n.x);
+        n.y=clamp(Math.round((p.y-drag.offsetY)/5)*5,-5000,10000,n.y);
       }else{
         const pipe=model.pipes.find(item=>item.id===drag.id);
         if(!pipe||!pipe.points[drag.index])return;
-        pipe.points[drag.index]={x:clamp(Math.round(p.x/5)*5,0,W,0),
-          y:clamp(Math.round(p.y/5)*5,0,H,0)};
+        pipe.points[drag.index]={x:clamp(Math.round(p.x/5)*5,-5000,10000,0),
+          y:clamp(Math.round(p.y/5)*5,-5000,10000,0)};
       }
       this._config={...this._config,studio_layout:model};repaint(model);
     });
     const end=event=>{
       if(!drag||event.pointerId!==drag.pointer)return;
-      drag=null;commit(get());render();
+      const moved=drag.type!=='pan',previous=drag.previous;drag=null;
+      if(moved){
+        if(previous){undo.push(previous);if(undo.length>60)undo.shift();redo.length=0;}
+        this._fire();
+      }
+      render();
     };
     stage.addEventListener('pointerup',end);
     stage.addEventListener('pointercancel',end);

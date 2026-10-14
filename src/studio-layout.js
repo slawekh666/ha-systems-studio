@@ -34,10 +34,11 @@ const HASSStudioLayout = (() => {
   });
   const normalized=(config)=>{
     const source=config?.studio_layout||{};
+    const {width,height}=HASSStudioViewport.dimensions(config);
     const nodes=(Array.isArray(source.nodes)?source.nodes:[]).filter(v=>v && registry.isNodeType(v.type) &&
       typeof v.id==='string').slice(0,MAX_NODES).map(v=>({
       id:v.id.slice(0,32),type:v.type,
-      x:clamp(v.x,0,W-120,40),y:clamp(v.y,0,H-140,40),
+      x:clamp(v.x,-5000,10000,40),y:clamp(v.y,-5000,10000,40),
       scale:clamp(v.scale,0.5,2.4,1),
       scale_mode:v.type==='tank' && v.variant==='modular' && v.scale_mode==='free'?'free':'proportional',
        aspect_locked:typeof v.aspect_locked==='boolean'?v.aspect_locked:v.scale_mode!=='free',
@@ -78,7 +79,7 @@ const HASSStudioLayout = (() => {
       flow_speed:clamp(v.flow_speed,.35,5,1),cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
       cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
       points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
-        x:clamp(q.x,0,W,100),y:clamp(q.y,0,H,100)})),
+        x:clamp(q.x,-5000,10000,100),y:clamp(q.y,-5000,10000,100)})),
       accessories:(Array.isArray(v.accessories)?v.accessories:[]).slice(0,20).map(normalizeAccessory)
     })).filter(v=>v.points.length>=2);
     // Preserve pipes created in the previous prototype when opening their layout.
@@ -97,7 +98,7 @@ const HASSStudioLayout = (() => {
           points:[{x:ax,y:ay},{x:mx,y:ay},{x:mx,y:by},{x:bx,y:by}],accessories:[]});
       });
     }
-    return {nodes,pipes};
+    return {width,height,nodes,pipes};
   };
 
   return Object.freeze({normalized,normalizeItem,normalizeAccessory});
