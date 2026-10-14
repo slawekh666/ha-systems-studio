@@ -10,7 +10,6 @@ const HASSStudioViewerGestures=(()=>{
     let tracking=false;
     const viewInPath=event=>event.composedPath().some(el=>el?.id==='ss-card-viewport');
     const fullscreen=()=>doc.fullscreenElement===getView();
-    const interactive=()=>fullscreen()||(getCamera()?.zoom||1)>1.0001;
     const rectAndSize=()=>{
       const view=getView();
       if(!view)return null;
@@ -75,10 +74,12 @@ const HASSStudioViewerGestures=(()=>{
       win.removeEventListener('blur',onCancel);
     };
     const onDown=event=>{
+      // The SVG owns touch navigation at every zoom, even at Fit or below 100%.
+      // Leave the card header to native dashboard scrolling and toolbar clicks.
       if(!viewInPath(event)||
+        !event.composedPath().some(el=>el?.classList?.contains?.('ss-svg'))||
         event.composedPath().some(el=>el?.dataset?.viewAction)||
-        (event.pointerType!=='touch'&&event.button!==0)||
-        !interactive())return;
+        (event.pointerType!=='touch'&&event.button!==0))return;
       pointers.set(event.pointerId,{startX:event.clientX,startY:event.clientY,
         x:event.clientX,y:event.clientY,kind:event.pointerType});
       startTracking();
