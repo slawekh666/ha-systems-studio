@@ -499,7 +499,7 @@ console.log('OK: viewer gestures preserve ordinary entity clicks, sustained pan 
 // and after tapping minus, without converting an ordinary entity tap into pan.
 assert(!gestureSource.includes('const interactive=()=>'));
 assert(gestureSource.includes("classList?.contains?.('ss-svg')"));
-const touchGestureApi=vm.runInNewContext(gestureSource+'\\nHASSStudioViewerGestures;',{});
+const touchGestureApi=vm.runInNewContext(gestureSource+'\nHASSStudioViewerGestures;',{});
 const makeEventSource=()=>{
   const events=new Map();
   return {events,source:{addEventListener:(type,handler)=>events.set(type,handler),
