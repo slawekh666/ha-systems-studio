@@ -45,6 +45,7 @@
       link:'Assign entity',addEntity:'Add entity',label:'Description',default:'Default',
       zoom:'Zoom',noValues:'No data',editor:'System diagram designer'}
   };
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{canvasSettings:'Rozmiar schematu',canvasWidth:'Szerokość',canvasHeight:'Wysokość',apply:'Zastosuj',fit:'Dopasuj schemat',all:'Pokaż wszystkie',help:'Skróty klawiaturowe',undo:'Cofnij',redo:'Ponów',shortcutTitle:'Sterowanie edytorem',shortcutHint:'Skróty nie działają podczas pisania w polach formularzy.',outside:'Zmniejszenie obszaru nie usuwa urządzeń ani rur.'}:{canvasSettings:'Canvas size',canvasWidth:'Width',canvasHeight:'Height',apply:'Apply',fit:'Fit diagram',all:'Show all',help:'Keyboard shortcuts',undo:'Undo',redo:'Redo',shortcutTitle:'Editor controls',shortcutHint:'Shortcuts are disabled while editing form fields.',outside:'Shrinking the canvas does not remove devices or pipes.'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankGlow:'Efekt cieplny grzałek (%)',heaterMode:'Stan grzałki',heaterPower:'Intensywność (%)',heaterWatts:'Encja mocy (W/kW)',partX:'Pozycja pozioma (%)',partLength:'Wysokość / długość (%)',partWidth:'Szerokość (%)',partTurns:'Liczba zwojów',permeability:'Przepuszczalność 0–1',partContainer:'Strefa czujnika',partFlowMode:'Przepływ wężownicy',baffle_horizontal:'Przegroda pozioma',baffle_vertical:'Przegroda pionowa',inner_tank:'Zbiornik wewnętrzny'}:{tankGlow:'Heater visual glow (%)',heaterMode:'Heater status',heaterPower:'Glow intensity (%)',heaterWatts:'Power entity (W/kW)',partX:'Horizontal position (%)',partLength:'Height / length (%)',partWidth:'Width (%)',partTurns:'Coil turns',permeability:'Permeability 0–1',partContainer:'Sensor compartment',partFlowMode:'Coil flow',baffle_horizontal:'Horizontal baffle',baffle_vertical:'Vertical baffle',inner_tank:'Inner tank'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankScaleMode:'Skalowanie zbiornika',tankScaleProportional:'Proporcjonalne',tankScaleFree:'Osobna szerokość i wysokość',tankWidthScale:'Szerokość zbiornika',tankHeightScale:'Wysokość zbiornika'}:{tankScaleMode:'Tank scaling',tankScaleProportional:'Proportional',tankScaleFree:'Independent width and height',tankWidthScale:'Tank width',tankHeightScale:'Tank height'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{partLayer:'Warstwa',partLayerUp:'Przenieś wyżej',partLayerDown:'Przenieś niżej'}:{partLayer:'Layer',partLayerUp:'Move up',partLayerDown:'Move down'});
@@ -254,8 +255,16 @@
       '.ss-library button.ss-lib-item:hover,.ss-library button.ss-lib-item:focus-visible{background:var(--secondary-background-color,#18222e);border-color:var(--primary-color,#168bce)}'+
       '.ss-library .ss-lib-label{font-size:12px;line-height:1.3;display:block;min-width:0;flex:1;overflow-wrap:anywhere}'+
       '.ss-library .ss-lib-icon{flex:0 0 20px}'+
-      '.ss-canvas{min-width:0;min-height:0;overflow:auto;background:var(--secondary-background-color,#18222e);padding:16px}'+
-      '.ss-stage{width:max-content;max-width:none}.ss-svg{display:block;width:1200px;height:720px;max-height:none;padding:0;touch-action:none}'+
+      '.ss-canvas{position:relative;min-width:0;min-height:0;overflow:hidden;background:#101820;padding:0;outline:0;touch-action:none}'+
+      '.ss-stage{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}'+
+      '.ss-svg{display:block;width:100%;height:100%;max-width:none;max-height:none;padding:0;touch-action:none;background:#101820}'+
+      '.ss-settings,.ss-help{position:absolute;top:60px;right:15px;z-index:15;background:var(--card-background-color,#263340);border:1px solid var(--divider-color,#64768c);box-shadow:0 12px 35px #0009;border-radius:9px;padding:16px;width:min(340px,calc(100vw - 35px));max-height:calc(100vh - 90px);overflow:auto}'+
+      '.ss-settings[hidden],.ss-help[hidden]{display:none}'+
+      '.ss-settings label{display:grid;gap:5px;font-size:12px;margin-bottom:10px}'+
+      '.ss-settings input{width:100%;box-sizing:border-box;padding:8px;border-radius:7px;background:var(--secondary-background-color,#18222e);color:var(--primary-text-color);border:1px solid var(--divider-color,#555)}'+
+      '.ss-help table{width:100%;border-collapse:collapse;font-size:12px}.ss-help td{padding:7px 5px;border-bottom:1px solid var(--divider-color,#555)}'+
+      '.ss-help kbd{font:inherit;background:var(--secondary-background-color,#18222e);border:1px solid #53667a;padding:2px 5px;border-radius:4px}'+
+      '.ss-bar .ss-viewport-buttons{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.ss-bar .ss-viewport-buttons button{padding:7px 10px}'+
       '.ss-svg-editor .ss-node{cursor:grab}.ss-svg-editor .ss-pipe-hit{cursor:pointer;pointer-events:stroke}.ss-handle{cursor:move}'+
       '.ss-svg-editor .ss-accessory{pointer-events:none}.ss-svg:not(.ss-svg-editor) .ss-pipe{pointer-events:none}'+
       '.ss-svg:not(.ss-svg-editor) [data-more]{cursor:pointer}'+
@@ -300,13 +309,34 @@
       '<label>'+esc(L.language)+'<select id="ss-lang">'+opts(langs,this._config.studio_language||'auto')+'</select></label>'+
       '<button type="button" id="ss-open">'+esc(L.open)+'</button></div>'+
       '<dialog class="ss-modal ss-fullscreen" id="ss-modal"><div class="ss-bar"><strong>'+esc(L.editor)+' · v'+esc(VERSION)+'</strong>'+
-      '<label>'+esc(L.zoom)+' <select id="ss-zoom">'+opts([['0.65','65%'],['0.8','80%'],['1','100%'],['1.25','125%'],['1.5','150%']],'1')+'</select></label>'+
+      '<label>'+esc(L.zoom)+' <select id="ss-zoom">'+opts([['0.25','25%'],['0.5','50%'],['0.65','65%'],['0.8','80%'],['1','100%'],['1.25','125%'],['1.5','150%'],['2','200%'],['4','400%']],'1')+'</select></label>'+
+       '<div class="ss-viewport-buttons">'+
+       '<button id="ss-fit" type="button" title="'+esc(L.fit)+'">⤢ '+esc(L.fit)+'</button>'+
+       '<button id="ss-all" type="button" title="'+esc(L.all)+'">▣</button>'+
+       '<button id="ss-undo" type="button" title="'+esc(L.undo)+'">↶</button>'+
+       '<button id="ss-redo" type="button" title="'+esc(L.redo)+'">↷</button>'+
+       '<button id="ss-size" type="button" title="'+esc(L.canvasSettings)+'">⚙</button>'+
+       '<button id="ss-shortcuts" type="button" title="'+esc(L.help)+'" aria-expanded="false" aria-controls="ss-help">?</button></div>'+
       '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
       '<button id="ss-close" type="button">'+esc(L.close)+'</button></div>'+
-      '<div class="ss-grid" id="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+
+      '<div class="ss-settings" id="ss-settings" hidden><strong>'+esc(L.canvasSettings)+'</strong>'+
+       '<label>'+esc(L.canvasWidth)+' (300–5000)<input type="number" min="300" max="5000" step="1" id="ss-width"></label>'+
+       '<label>'+esc(L.canvasHeight)+' (300–5000)<input type="number" min="300" max="5000" step="1" id="ss-height"></label>'+
+       '<p class="ss-note">'+esc(L.outside)+'</p>'+
+       '<button type="button" id="ss-apply-size">'+esc(L.apply)+'</button></div>'+
+       '<div class="ss-help" id="ss-help" hidden><strong>'+esc(L.shortcutTitle)+'</strong>'+
+       '<table><tbody>'+
+       [['Delete / Backspace','Usuń / Delete'],['← ↑ → ↓','Przesuń o 5 / Move 5'],['Shift + ← ↑ → ↓','Przesuń o 1 / Move 1'],
+        ['Rolka / Wheel','Zoom'],['Spacja + przeciągnij / Drag','Przesuń widok / Pan'],
+        ['Środkowy przycisk / Middle drag','Przesuń widok / Pan'],
+        ['Ctrl + Z','Cofnij / Undo'],['Ctrl + Y / Ctrl + Shift + Z','Ponów / Redo'],
+        ['F','Dopasuj / Fit'],['Esc','Odznacz / Deselect'],['?','Pokaż pomoc / Help']].map(row=>
+         '<tr><td><kbd>'+esc(row[0])+'</kbd></td><td>'+esc(row[1])+'</td></tr>').join('')+'</tbody></table>'+
+       '<p class="ss-note">'+esc(L.shortcutHint)+'</p></div>'+
+       '<div class="ss-grid" id="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+
       HASSStudioEditorLibrary.render({registry,language:pickLang(this._config,this._hass),esc})+
       '</aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
-      '<p class="ss-note">'+esc(L.editHelp)+'</p></main>'+
+      '</main>'+
       '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
     const modal=root.getElementById('ss-modal'),stage=root.getElementById('ss-stage'),properties=root.getElementById('ss-props');
     const splitterGrid=root.getElementById('ss-grid');
