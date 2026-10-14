@@ -98,7 +98,7 @@ const HASSStudioLayout = (() => {
           points:[{x:ax,y:ay},{x:mx,y:ay},{x:mx,y:by},{x:bx,y:by}],accessories:[]});
       });
     }
-    return {width,height,nodes,pipes};
+    return {width,height,name:String(source.name||'').trim().slice(0,64),nodes,pipes};
   };
 
   return Object.freeze({normalized,normalizeItem,normalizeAccessory});

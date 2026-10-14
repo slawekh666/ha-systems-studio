@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.19-dev';
+const VERSION = '0.4.20-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2557,7 +2557,7 @@ const HASSStudioLayout = (() => {
           points:[{x:ax,y:ay},{x:mx,y:ay},{x:mx,y:by},{x:bx,y:by}],accessories:[]});
       });
     }
-    return {width,height,nodes,pipes};
+    return {width,height,name:String(source.name||'').trim().slice(0,64),nodes,pipes};
   };
 
   return Object.freeze({normalized,normalizeItem,normalizeAccessory});
@@ -2577,6 +2577,16 @@ const HASSStudioCanvas = (() => {
       ?formatReading(state.state)+(state.attributes?.unit_of_measurement?' '+state.attributes.unit_of_measurement:''):'';
   };
   const pipePath=(points)=>points.map((point,i)=>(i?'L':'M')+point.x+' '+point.y).join(' ');
+  // Translate all vertices by one snapped delta, retaining every bend and angle.
+  // Clamp the common offset (not individual points), so geometry never deforms at bounds.
+  const translatePipePoints=(points,dx,dy)=>{
+    if(!Array.isArray(points)||!points.length)return [];
+    const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
+    const snap=v=>Math.round(v/5)*5;
+    const x=clamp(snap(dx),-5000-Math.min(...xs),10000-Math.max(...xs),0);
+    const y=clamp(snap(dy),-5000-Math.min(...ys),10000-Math.max(...ys),0);
+    return points.map(p=>({x:p.x+x,y:p.y+y}));
+  };
   const onPipe=(pipe,t)=>{
     const points=pipe.points, segments=[];
     let total=0;
@@ -2705,7 +2715,7 @@ const HASSStudioCanvas = (() => {
       '<g class="ss-devices">'+nodes+'</g><g class="ss-pipe-layer" stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-pipe-handles">'+handles+'</g></svg>';
   };
 
-    return Object.freeze({canvasSvg,pipePath,onPipe,variantShape});
+    return Object.freeze({canvasSvg,pipePath,onPipe,variantShape,translatePipePoints});
   };
   return Object.freeze({create});
 })();
@@ -3003,7 +3013,7 @@ const HASSStudioEditorLibrary=(()=>{
       pump:'Pompa',valve:'Zawór',pipe:'Rura',pipeColor:'Rodzaj rury',pipeWidth:'Grubość',
       hot:'Ciepła woda',cold:'Zimna woda',solarFlow:'Obieg solarny',returnFlow:'Powrót',
       newBend:'Dodaj punkt załamania',removeBend:'Usuń ostatni punkt',
-      pipeHelp:'Przeciągaj punkty rury. Dwuklik na rurze dodaje nowe załamanie.',
+      pipeHelp:'Przeciągnij linię, aby przesunąć całą rurę. Przeciągnij punkt, aby zmienić jej kształt. Dwuklik dodaje załamanie.',
       accessoryPos:'Położenie na rurze (%)',editHelp:'Wybierz element po lewej i ustaw jego właściwości po prawej.',
       boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',pipes:'Rury',
       link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
@@ -3021,13 +3031,13 @@ const HASSStudioEditorLibrary=(()=>{
       pump:'Pump',valve:'Valve',pipe:'Pipe',pipeColor:'Pipe type',pipeWidth:'Width',
       hot:'Hot water',cold:'Cold water',solarFlow:'Solar circuit',returnFlow:'Return',
       newBend:'Add bend point',removeBend:'Remove last point',
-      pipeHelp:'Drag pipe handles. Double-click the pipe to add a bend.',
+      pipeHelp:'Drag the pipe line to move the whole pipe. Drag a handle to change its shape. Double-click to add a bend.',
       accessoryPos:'Position on pipe (%)',editHelp:'Pick a component on the left; configure it on the right.',
       boiler:'Boilers',tank:'Tanks',solar:'Solar',pumps:'Pumps',valves:'Valves',sensorsMenu:'Sensors',pipes:'Pipes',
       link:'Assign entity',addEntity:'Add entity',label:'Description',default:'Default',
       zoom:'Zoom',noValues:'No data',editor:'System diagram designer'}
   };
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{canvasSettings:'Rozmiar schematu',canvasWidth:'Szerokość',canvasHeight:'Wysokość',apply:'Zastosuj',fit:'Dopasuj schemat',all:'Pokaż wszystkie',help:'Skróty klawiaturowe',undo:'Cofnij',redo:'Ponów',shortcutTitle:'Sterowanie edytorem',shortcutHint:'Skróty nie działają podczas pisania w polach formularzy.',outside:'Zmniejszenie obszaru nie usuwa urządzeń ani rur.'}:{canvasSettings:'Canvas size',canvasWidth:'Width',canvasHeight:'Height',apply:'Apply',fit:'Fit diagram',all:'Show all',help:'Keyboard shortcuts',undo:'Undo',redo:'Redo',shortcutTitle:'Editor controls',shortcutHint:'Shortcuts are disabled while editing form fields.',outside:'Shrinking the canvas does not remove devices or pipes.'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{canvasSettings:'Ustawienia schematu',schemeName:'Nazwa schematu (opcjonalna)',canvasWidth:'Szerokość',canvasHeight:'Wysokość',apply:'Zastosuj',fit:'Dopasuj schemat',all:'Pokaż wszystkie',help:'Skróty klawiaturowe',undo:'Cofnij',redo:'Ponów',shortcutTitle:'Sterowanie edytorem',shortcutHint:'Skróty nie działają podczas pisania w polach formularzy.',outside:'Zmniejszenie obszaru nie usuwa urządzeń ani rur.'}:{canvasSettings:'Diagram settings',schemeName:'Diagram name (optional)',canvasWidth:'Width',canvasHeight:'Height',apply:'Apply',fit:'Fit diagram',all:'Show all',help:'Keyboard shortcuts',undo:'Undo',redo:'Redo',shortcutTitle:'Editor controls',shortcutHint:'Shortcuts are disabled while editing form fields.',outside:'Shrinking the canvas does not remove devices or pipes.'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankGlow:'Efekt cieplny grzałek (%)',heaterMode:'Stan grzałki',heaterPower:'Intensywność (%)',heaterWatts:'Encja mocy (W/kW)',partX:'Pozycja pozioma (%)',partLength:'Wysokość / długość (%)',partWidth:'Szerokość (%)',partTurns:'Liczba zwojów',permeability:'Przepuszczalność 0–1',partContainer:'Strefa czujnika',partFlowMode:'Przepływ wężownicy',baffle_horizontal:'Przegroda pozioma',baffle_vertical:'Przegroda pionowa',inner_tank:'Zbiornik wewnętrzny'}:{tankGlow:'Heater visual glow (%)',heaterMode:'Heater status',heaterPower:'Glow intensity (%)',heaterWatts:'Power entity (W/kW)',partX:'Horizontal position (%)',partLength:'Height / length (%)',partWidth:'Width (%)',partTurns:'Coil turns',permeability:'Permeability 0–1',partContainer:'Sensor compartment',partFlowMode:'Coil flow',baffle_horizontal:'Horizontal baffle',baffle_vertical:'Vertical baffle',inner_tank:'Inner tank'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankScaleMode:'Skalowanie zbiornika',tankScaleProportional:'Proporcjonalne',tankScaleFree:'Osobna szerokość i wysokość',tankWidthScale:'Szerokość zbiornika',tankHeightScale:'Wysokość zbiornika'}:{tankScaleMode:'Tank scaling',tankScaleProportional:'Proportional',tankScaleFree:'Independent width and height',tankWidthScale:'Tank width',tankHeightScale:'Tank height'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{partLayer:'Warstwa',partLayerUp:'Przenieś wyżej',partLayerDown:'Przenieś niżej'}:{partLayer:'Layer',partLayerUp:'Move up',partLayerDown:'Move down'});
@@ -3048,7 +3058,7 @@ const HASSStudioEditorLibrary=(()=>{
   const validEntity=(value)=>typeof value==='string' && isEnt(value);
   const freshId=(prefix)=>prefix+Math.random().toString(36).slice(2,10);
   const normalized=HASSStudioLayout.normalized;
-  const {canvasSvg,pipePath,onPipe,variantShape}=HASSStudioCanvas.create({
+  const {canvasSvg,pipePath,onPipe,variantShape,translatePipePoints}=HASSStudioCanvas.create({
     W,H,colors,normalized,pickLang,words,clamp,validEntity,esc
   });
   // Card viewer: fit entire scheme at every responsive width, only zoom after explicit interaction.
@@ -3058,7 +3068,8 @@ const HASSStudioEditorLibrary=(()=>{
     if(this._cfg?.layout_mode!=='custom')return nativeRender.call(this);
     const {width,height}=viewport.dimensions(this._cfg);
     const L=words[pickLang(this._cfg,this._hass)];
-    const label=esc(this._cfg.titel||'Home Assistant Systems Studio');
+    const schemeName=String(this._cfg.studio_layout?.name||'').trim().slice(0,64);
+    const label=esc('Home Assistant System Studio')+(schemeName?' - '+esc(schemeName):'');
     const viewerCss='<style>'+
       '.ss-card-viewport{position:relative;display:flex;flex-direction:column;width:100%;aspect-ratio:'+width+'/'+height+';min-height:0;overflow:hidden;background:var(--secondary-background-color,#17222d);touch-action:pan-y;user-select:none}'+
       '.ss-card-viewport svg{display:block;flex:1 1 auto;min-height:0;width:100%;height:100%;max-width:none;max-height:none;touch-action:inherit}'+
@@ -3200,7 +3211,7 @@ const HASSStudioEditorLibrary=(()=>{
       '.ss-help table{width:100%;border-collapse:collapse;font-size:12px}.ss-help td{padding:7px 5px;border-bottom:1px solid var(--divider-color,#555)}'+
       '.ss-help kbd{font:inherit;background:var(--secondary-background-color,#18222e);border:1px solid #53667a;padding:2px 5px;border-radius:4px}'+
       '.ss-bar .ss-viewport-buttons{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.ss-bar .ss-viewport-buttons button{padding:7px 10px}'+
-      '.ss-svg-editor .ss-node{cursor:grab}.ss-svg-editor .ss-pipe-hit{cursor:pointer;pointer-events:stroke}.ss-handle{cursor:move}'+
+      '.ss-svg-editor .ss-node{cursor:grab}.ss-svg-editor .ss-pipe-hit{cursor:grab;pointer-events:stroke}.ss-handle{cursor:move}'+
       '.ss-svg-editor .ss-accessory{pointer-events:none}.ss-svg:not(.ss-svg-editor) .ss-pipe{pointer-events:none}'+
       '.ss-svg:not(.ss-svg-editor) [data-more]{cursor:pointer}'+
       '.ss-props section{border-top:1px solid var(--divider-color,#555);padding:12px 0;display:grid;grid-template-columns:minmax(0,1fr);min-width:0;gap:10px}'+
@@ -3255,6 +3266,7 @@ const HASSStudioEditorLibrary=(()=>{
       '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
       '<button id="ss-close" type="button">'+esc(L.close)+'</button></div>'+
       '<div class="ss-settings" id="ss-settings" hidden><strong>'+esc(L.canvasSettings)+'</strong>'+
+       '<label>'+esc(L.schemeName)+'<input type="text" maxlength="64" id="ss-scheme-name" placeholder="Kotłownia"></label>'+
        '<label>'+esc(L.canvasWidth)+' (300–5000)<input type="number" min="300" max="5000" step="1" id="ss-width"></label>'+
        '<label>'+esc(L.canvasHeight)+' (300–5000)<input type="number" min="300" max="5000" step="1" id="ss-height"></label>'+
        '<p class="ss-note">'+esc(L.outside)+'</p>'+
@@ -3442,6 +3454,7 @@ const HASSStudioEditorLibrary=(()=>{
       settings.hidden=!settings.hidden;help.hidden=true;
       root.getElementById('ss-width').value=String(dimensions().width);
       root.getElementById('ss-height').value=String(dimensions().height);
+      root.getElementById('ss-scheme-name').value=get().name;
     });
     root.getElementById('ss-shortcuts').addEventListener('click',()=>{
       help.hidden=!help.hidden;settings.hidden=true;
@@ -3450,7 +3463,9 @@ const HASSStudioEditorLibrary=(()=>{
     root.getElementById('ss-apply-size').addEventListener('click',()=>{
       const width=Number(root.getElementById('ss-width').value),height=Number(root.getElementById('ss-height').value);
       if(!Number.isInteger(width)||!Number.isInteger(height)||width<300||height<300||width>5000||height>5000)return;
-      const model=get();model.width=width;model.height=height;commit(model);settings.hidden=true;fit();render();
+      const model=get();model.width=width;model.height=height;
+      model.name=root.getElementById('ss-scheme-name').value.trim().slice(0,64);
+      commit(model);settings.hidden=true;fit();render();
     });
     const deleteSelection=()=>{
       if(!selection)return;
@@ -3631,7 +3646,15 @@ const HASSStudioEditorLibrary=(()=>{
           drag={type:'node',id:obj.id,offsetX:p.x-obj.x,offsetY:p.y-obj.y,pointer:event.pointerId,previous:JSON.stringify(this._config.studio_layout||{})};
         }else{
           const pipe=event.target.closest?.('.ss-pipe');
-          if(pipe){setSelected('pipe',pipe.dataset.id);return;}
+          if(pipe){
+            const model=get(),obj=model.pipes.find(item=>item.id===pipe.dataset.id);
+            if(!obj)return;
+            const p=point(event,stage.querySelector('svg'));
+            selection={type:'pipe',id:obj.id};selectedPartId=null;expandedPartId=null;
+            drag={type:'pipe',id:obj.id,pointer:event.pointerId,startX:p.x,startY:p.y,
+              points:obj.points.map(q=>({x:q.x,y:q.y})),moved:false,
+              previous:JSON.stringify(this._config.studio_layout||{})};
+          }
           selection=null;selectedPartId=null;expandedPartId=null;render();return;
         }
       }
@@ -3652,6 +3675,13 @@ const HASSStudioEditorLibrary=(()=>{
         const n=model.nodes.find(item=>item.id===drag.id);if(!n)return;
         n.x=clamp(Math.round((p.x-drag.offsetX)/5)*5,-5000,10000,n.x);
         n.y=clamp(Math.round((p.y-drag.offsetY)/5)*5,-5000,10000,n.y);
+      }else if(drag.type==='pipe'){
+        const pipe=model.pipes.find(item=>item.id===drag.id);
+        if(!pipe)return;
+        const translated=translatePipePoints(drag.points,p.x-drag.startX,p.y-drag.startY);
+        if(!translated.some((pt,index)=>pt.x!==pipe.points[index]?.x||pt.y!==pipe.points[index]?.y))return;
+        pipe.points=translated;
+        drag.moved=translated.some((pt,index)=>pt.x!==drag.points[index].x||pt.y!==drag.points[index].y);
       }else{
         const pipe=model.pipes.find(item=>item.id===drag.id);
         if(!pipe||!pipe.points[drag.index])return;
@@ -3662,7 +3692,7 @@ const HASSStudioEditorLibrary=(()=>{
     });
     const end=event=>{
       if(!drag||event.pointerId!==drag.pointer)return;
-      const moved=drag.type!=='pan',previous=drag.previous;drag=null;
+      const moved=drag.type!=='pan'&&(drag.type!=='pipe'||drag.moved),previous=drag.previous;drag=null;
       if(moved){
         if(previous){undo.push(previous);if(undo.length>60)undo.shift();redo.length=0;}
         this._fire();
