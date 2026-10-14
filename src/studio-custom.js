@@ -78,30 +78,33 @@
     const L=words[pickLang(this._cfg,this._hass)];
     const label=esc(this._cfg.titel||'Home Assistant Systems Studio');
     const viewerCss='<style>'+
-      '.ss-card-viewport{position:relative;display:block;width:100%;aspect-ratio:'+width+'/'+height+';min-height:0;overflow:hidden;background:var(--secondary-background-color,#17222d);touch-action:pan-y;user-select:none}'+
-      '.ss-card-viewport svg{display:block;width:100%;height:100%;max-width:none;max-height:none;touch-action:inherit}'+
+      '.ss-card-viewport{position:relative;display:flex;flex-direction:column;width:100%;aspect-ratio:'+width+'/'+height+';min-height:0;overflow:hidden;background:var(--secondary-background-color,#17222d);touch-action:pan-y;user-select:none}'+
+      '.ss-card-viewport svg{display:block;flex:1 1 auto;min-height:0;width:100%;height:100%;max-width:none;max-height:none;touch-action:inherit}'+
       '.ss-card-viewport:fullscreen{width:100vw;height:100vh;aspect-ratio:auto;background:#17222d;touch-action:none}'+
       '.ss-card-viewport:fullscreen svg{touch-action:none}'+
-      '.ss-view-tools{position:absolute;top:9px;right:9px;display:flex;align-items:center;gap:4px;z-index:2;background:#101925d9;padding:5px;border-radius:9px;opacity:.72;transition:opacity .15s}'+
-      '.ss-card-viewport:is(:hover,:focus-within) .ss-view-tools{opacity:1}'+
-      '.ss-view-tools button{appearance:none;background:#293949;border:1px solid #53677c;border-radius:5px;color:#fff;min-width:32px;min-height:32px;cursor:pointer;font:600 14px sans-serif}'+
+      '.ss-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap;padding:8px 12px;background:var(--card-background-color,#1c1c1c)}'+
+      '.ss-card-header .ss-card-title{font-size:16px;font-weight:600;color:var(--primary-text-color);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
+      '.ss-card-header .ss-view-tools{display:flex;align-items:center;gap:4px;flex-shrink:0}'+
+      '.ss-view-tools button{appearance:none;background:var(--secondary-background-color,#293949);border:1px solid var(--divider-color,#53677c);border-radius:5px;color:var(--primary-text-color,#fff);min-width:28px;min-height:28px;padding:3px;cursor:pointer;font:600 14px sans-serif}'+
       '.ss-view-tools button:focus-visible{outline:2px solid #52bfff}'+
-      '@media(max-width:600px){.ss-view-tools{top:4px;right:4px;padding:2px;gap:2px}.ss-view-tools button{min-width:28px;min-height:28px}}'+
+      '.ss-card-viewport:fullscreen{display:flex;flex-direction:column}'+
+      '.ss-card-viewport:fullscreen .ss-card-header{flex:0 0 auto}'+
+      '.ss-card-viewport:fullscreen svg{flex:1 1 auto;min-height:0}'+
+      '@media(max-width:600px){.ss-card-header{gap:4px;padding:6px}.ss-card-header .ss-card-title{font-size:12px}.ss-view-tools{gap:2px}.ss-view-tools button{min-width:27px;min-height:27px}}'+
       '</style>';
-    return '<div class="kopf"><div class="l"><div class="t1">'+label+'</div></div></div>'+
-      viewerCss+'<div class="ss-card-viewport" id="ss-card-viewport" tabindex="0" aria-label="'+esc(L.editor)+'">'+
-      '<div class="ss-view-tools">'+
+    return viewerCss+'<div class="ss-card-viewport" id="ss-card-viewport" tabindex="0" aria-label="'+esc(L.editor)+'">'+
+      '<div class="ss-card-header"><div class="ss-card-title">'+label+'</div><div class="ss-view-tools">'+
       '<button type="button" data-view-action="out" title="Zoom −" aria-label="Zoom out">−</button>'+
       '<button type="button" data-view-action="in" title="Zoom +" aria-label="Zoom in">+</button>'+
       '<button type="button" data-view-action="fit" title="Dopasuj cały schemat" aria-label="Fit diagram">⤢</button>'+
-      '<button type="button" data-view-action="full" title="Pełny ekran" aria-label="Fullscreen">⛶</button></div>'+
+      '<button type="button" data-view-action="full" title="Pełny ekran" aria-label="Fullscreen">⛶</button></div></div>'+
       canvasSvg(this._cfg,this._hass)+'</div>';
   };
   const updateCardCamera=function(){
     const view=this._box?.querySelector('#ss-card-viewport'),svg=view?.querySelector('svg');
     if(!svg)return;
     const {width,height}=viewport.dimensions(this._cfg);
-    const rect=view.getBoundingClientRect(),w=Math.max(1,rect.width),h=Math.max(1,rect.height);
+    const rect=svg.getBoundingClientRect(),w=Math.max(1,rect.width),h=Math.max(1,rect.height);
     if(!this._studioCardCamera || this._studioCardShape!==width+'x'+height){
       this._studioCardCamera=viewport.fresh(width,height);
       this._studioCardShape=width+'x'+height;

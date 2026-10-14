@@ -14,7 +14,8 @@ const HASSStudioViewerGestures=(()=>{
     const rectAndSize=()=>{
       const view=getView();
       if(!view)return null;
-      const rect=view.getBoundingClientRect();
+      const svg=view.querySelector('svg');
+      const rect=(svg||view).getBoundingClientRect();
       return {rect,w:Math.max(1,rect.width),h:Math.max(1,rect.height),...getDimensions()};
     };
     const pointOf=(event,rect)=>({x:event.clientX-rect.left,y:event.clientY-rect.top});
