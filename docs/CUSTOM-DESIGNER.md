@@ -75,3 +75,7 @@ Modular tanks preserve `scale`, `width_scale`, `height_scale`, and legacy `scale
 
 - Card title is always `Home Assistant System Studio`, optionally followed by ` - <scheme name>`. Edit the scheme name (up to 64 characters) in the editor's diagram settings. Name is stored in `studio_layout.name`, independently from device labels; old diagrams with no name display just the fixed title.
 - In the editor, dragging the pipe line translates every vertex by the same snapped delta (5 scene units), retaining bends, caps, flow animation and relative accessory positions. Dragging a point handle still moves only that point. Single click selects the pipe; double-click still adds a bend. Whole-pipe dragging is undoable.
+
+## 0.4.21-dev — pointer selection and cursor regression fix
+
+- The pointer stays an arrow at rest, switching to a closed-hand cursor while a left-button drag is held. Clicking a pipe now retains the selection and shows its editable vertex handles and right-hand inspector. Whole-pipe drag starts on movement, with pointer capture activated only then to preserve normal clicks and double-click insertion. Actual moves create one undo entry; canceled pointer gestures restore the prior layout. Existing `studio_layout` objects and Warmwasser automatic mode stay compatible.

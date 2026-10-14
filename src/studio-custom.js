@@ -210,7 +210,7 @@
       '.ss-library .ss-lib-label{font-size:12px;line-height:1.3;display:block;min-width:0;flex:1;overflow-wrap:anywhere}'+
       '.ss-library .ss-lib-icon{flex:0 0 20px}'+
       '.ss-canvas{position:relative;min-width:0;min-height:0;overflow:hidden;background:#101820;padding:0;outline:0;touch-action:none}'+
-      '.ss-stage{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}'+
+      '.ss-stage{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:default}'+
       '.ss-svg{display:block;width:100%;height:100%;max-width:none;max-height:none;padding:0;touch-action:none;background:#101820}'+
       '.ss-settings,.ss-help{position:absolute;top:60px;right:15px;z-index:15;background:var(--card-background-color,#263340);border:1px solid var(--divider-color,#64768c);box-shadow:0 12px 35px #0009;border-radius:9px;padding:16px;width:min(340px,calc(100vw - 35px));max-height:calc(100vh - 90px);overflow:auto}'+
       '.ss-settings[hidden],.ss-help[hidden]{display:none}'+
@@ -219,7 +219,7 @@
       '.ss-help table{width:100%;border-collapse:collapse;font-size:12px}.ss-help td{padding:7px 5px;border-bottom:1px solid var(--divider-color,#555)}'+
       '.ss-help kbd{font:inherit;background:var(--secondary-background-color,#18222e);border:1px solid #53667a;padding:2px 5px;border-radius:4px}'+
       '.ss-bar .ss-viewport-buttons{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.ss-bar .ss-viewport-buttons button{padding:7px 10px}'+
-      '.ss-svg-editor .ss-node{cursor:grab}.ss-svg-editor .ss-pipe-hit{cursor:grab;pointer-events:stroke}.ss-handle{cursor:move}'+
+      '.ss-svg-editor .ss-node,.ss-svg-editor .ss-pipe-hit,.ss-handle{cursor:default}.ss-svg-editor .ss-pipe-hit{pointer-events:stroke}.ss-stage.ss-dragging,.ss-stage.ss-dragging *{cursor:grabbing!important}'+
       '.ss-svg-editor .ss-accessory{pointer-events:none}.ss-svg:not(.ss-svg-editor) .ss-pipe{pointer-events:none}'+
       '.ss-svg:not(.ss-svg-editor) [data-more]{cursor:pointer}'+
       '.ss-props section{border-top:1px solid var(--divider-color,#555);padding:12px 0;display:grid;grid-template-columns:minmax(0,1fr);min-width:0;gap:10px}'+
@@ -312,7 +312,7 @@
         grip.addEventListener('pointercancel',end);
       });
     }
-    let selection=null,drag=null,selectedPartId=null,expandedPartId=null;
+    let selection=null,drag=null,selectedPartId=null,expandedPartId=null,lastPipePointer=null;
     const dimensions=()=>viewport.dimensions(this._config);
     let {width:sceneW,height:sceneH}=dimensions();
     let camera=viewport.fresh(sceneW,sceneH),spaceHeld=false;
@@ -631,16 +631,22 @@
       commit(model);render();
     });
     stage.addEventListener('pointerdown',event=>{
-      if(event.button===1||spaceHeld||event.target===stage||event.target.tagName?.toLowerCase()==='svg'||event.target.classList?.contains('ss-project-boundary')){
+      lastPipePointer=null;
+      if((event.button===0||event.button===1)&&(event.button===1||spaceHeld||event.target===stage||event.target.tagName?.toLowerCase()==='svg'||event.target.classList?.contains('ss-project-boundary'))){
         const rect=stage.getBoundingClientRect();
         drag={type:'pan',pointer:event.pointerId,lastX:event.clientX,lastY:event.clientY};
+        stage.classList.add('ss-dragging');
         stage.setPointerCapture(event.pointerId);event.preventDefault();return;
       }
       if(event.button!==0)return;
       const hit=event.target.closest?.('.ss-handle');
       if(hit){
-        selection={type:'pipe',id:hit.dataset.id};selectedPartId=null;
-        drag={type:'point',id:hit.dataset.id,index:Number(hit.dataset.point),pointer:event.pointerId,previous:JSON.stringify(this._config.studio_layout||{})};
+        selection={type:'pipe',id:hit.dataset.id};selectedPartId=null;expandedPartId=null;
+        const obj=get().pipes.find(item=>item.id===hit.dataset.id),initial=obj?.points[Number(hit.dataset.point)];
+        if(!initial)return;
+        drag={type:'point',id:hit.dataset.id,index:Number(hit.dataset.point),pointer:event.pointerId,
+          initialX:initial.x,initialY:initial.y,moved:false,previous:JSON.stringify(this._config.studio_layout||{})};
+        stage.classList.add('ss-dragging');
       }else{
         const node=event.target.closest?.('.ss-node');
         if(node){
@@ -651,7 +657,9 @@
           if(partHit){renderProps();return;}
           const model=get(),obj=selectedObject(model),svg=stage.querySelector('svg'),p=point(event,svg);
           if(!obj)return;
-          drag={type:'node',id:obj.id,offsetX:p.x-obj.x,offsetY:p.y-obj.y,pointer:event.pointerId,previous:JSON.stringify(this._config.studio_layout||{})};
+          drag={type:'node',id:obj.id,offsetX:p.x-obj.x,offsetY:p.y-obj.y,pointer:event.pointerId,
+            initialX:obj.x,initialY:obj.y,moved:false,previous:JSON.stringify(this._config.studio_layout||{})};
+          stage.classList.add('ss-dragging');
         }else{
           const pipe=event.target.closest?.('.ss-pipe');
           if(pipe){
@@ -660,8 +668,11 @@
             const p=point(event,stage.querySelector('svg'));
             selection={type:'pipe',id:obj.id};selectedPartId=null;expandedPartId=null;
             drag={type:'pipe',id:obj.id,pointer:event.pointerId,startX:p.x,startY:p.y,
-              points:obj.points.map(q=>({x:q.x,y:q.y})),moved:false,
+              points:obj.points.map(q=>({x:q.x,y:q.y})),moved:false,captured:false,
               previous:JSON.stringify(this._config.studio_layout||{})};
+            lastPipePointer={id:obj.id,x:event.clientX,y:event.clientY,time:event.timeStamp};
+            stage.classList.add('ss-dragging');
+            renderProps();return; // Keep selection and allow pointerup/dblclick on the original pipe.
           }
           selection=null;selectedPartId=null;expandedPartId=null;render();return;
         }
@@ -681,26 +692,36 @@
       const model=get(),p=point(event,svg);
       if(drag.type==='node'){
         const n=model.nodes.find(item=>item.id===drag.id);if(!n)return;
-        n.x=clamp(Math.round((p.x-drag.offsetX)/5)*5,-5000,10000,n.x);
-        n.y=clamp(Math.round((p.y-drag.offsetY)/5)*5,-5000,10000,n.y);
+        const x=clamp(Math.round((p.x-drag.offsetX)/5)*5,-5000,10000,n.x);
+        const y=clamp(Math.round((p.y-drag.offsetY)/5)*5,-5000,10000,n.y);
+        if(x===n.x&&y===n.y)return;
+        n.x=x;n.y=y;drag.moved=x!==drag.initialX||y!==drag.initialY;
       }else if(drag.type==='pipe'){
         const pipe=model.pipes.find(item=>item.id===drag.id);
         if(!pipe)return;
         const translated=translatePipePoints(drag.points,p.x-drag.startX,p.y-drag.startY);
         if(!translated.some((pt,index)=>pt.x!==pipe.points[index]?.x||pt.y!==pipe.points[index]?.y))return;
+        if(!drag.captured){stage.setPointerCapture(event.pointerId);drag.captured=true;}
         pipe.points=translated;
         drag.moved=translated.some((pt,index)=>pt.x!==drag.points[index].x||pt.y!==drag.points[index].y);
       }else{
         const pipe=model.pipes.find(item=>item.id===drag.id);
         if(!pipe||!pipe.points[drag.index])return;
-        pipe.points[drag.index]={x:clamp(Math.round(p.x/5)*5,-5000,10000,0),
-          y:clamp(Math.round(p.y/5)*5,-5000,10000,0)};
+        const x=clamp(Math.round(p.x/5)*5,-5000,10000,0);
+        const y=clamp(Math.round(p.y/5)*5,-5000,10000,0);
+        if(x===pipe.points[drag.index].x&&y===pipe.points[drag.index].y)return;
+        pipe.points[drag.index]={x,y};drag.moved=x!==drag.initialX||y!==drag.initialY;
       }
       this._config={...this._config,studio_layout:model};repaint(model);
     });
     const end=event=>{
       if(!drag||event.pointerId!==drag.pointer)return;
-      const moved=drag.type!=='pan'&&(drag.type!=='pipe'||drag.moved),previous=drag.previous;drag=null;
+      const moved=drag.type!=='pan'&&drag.moved,previous=drag.previous;
+      stage.classList.remove('ss-dragging');drag=null;
+      if(event.type==='pointercancel'){
+        if(previous)this._config={...this._config,studio_layout:JSON.parse(previous)};
+        render();return;
+      }
       if(moved){
         if(previous){undo.push(previous);if(undo.length>60)undo.shift();redo.length=0;}
         this._fire();
@@ -710,8 +731,11 @@
     stage.addEventListener('pointerup',end);
     stage.addEventListener('pointercancel',end);
     stage.addEventListener('dblclick',event=>{
-      const el=event.target.closest?.('.ss-pipe');if(!el)return;
-      const model=get(),pipe=model.pipes.find(item=>item.id===el.dataset.id);
+      const el=event.target.closest?.('.ss-pipe');
+      const fallback=lastPipePointer&&Math.hypot(event.clientX-lastPipePointer.x,event.clientY-lastPipePointer.y)<10&&event.timeStamp-lastPipePointer.time<800
+        ?lastPipePointer.id:null;
+      const pipeId=el?.dataset.id||fallback;if(!pipeId)return;
+      const model=get(),pipe=model.pipes.find(item=>item.id===pipeId);
       if(!pipe||pipe.points.length>=30)return;
       const p=point(event,stage.querySelector('svg'));
       let index=1,best=Infinity;
