@@ -2010,7 +2010,7 @@ const HASSStudioElectricBoiler=(()=>{
     return '<g class="ss-modern-electric-boiler" data-load="'+(percent===null?'unknown':percent.toFixed(1))+
       '" data-power="'+(kw===null?'unknown':kw.toFixed(2))+'">'+
       '<g class="ss-electric-dimensions" transform="translate(70 55) scale('+scale.sx+' '+scale.sy+') translate(-70 -55)">'+
-      '<g transform="translate(20 -102) scale(.13 .255) translate(-158 -132)">'+body+'</g></g></g>';
+      '<g transform="translate(20 -102) scale(.255 .255) translate(-158 -132)">'+body+'</g></g></g>';
   };
   return {render,geometry,power,temperature,load,ringSegments,palette};
 })();
