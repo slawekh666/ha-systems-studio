@@ -14,6 +14,11 @@ const HASSStudioRadiatorPrototype=(()=>{
    setText('tempLarge',Math.round(o.temperature)+'°C');
    setText('openText',Math.round(o.valveOpen)+'%');
    setText('openLarge',Math.round(o.valveOpen)+'%');
+   // Reference screen is narrow: hide the duplicated right-side numbers and their labels.
+   // Ring readings remain legible, and the original editable SVG stays untouched.
+   svg.querySelectorAll('text[x="1040"]').forEach(node=>node.setAttribute('visibility','hidden'));
+   $('tempLarge').setAttribute('visibility','hidden');
+   $('openLarge').setAttribute('visibility','hidden');
    const ring=$('valveRing'),circ=2*Math.PI*44;
    ring.setAttribute('stroke-dasharray',(circ*260/360*o.valveOpen/100).toFixed(2)+' '+circ.toFixed(2));
    for(let i=1;i<=4;i++)$('bar'+i).setAttribute('opacity',o.valveOpen>(i-1)*25?'1':'.18');
