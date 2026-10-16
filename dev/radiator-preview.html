@@ -1,0 +1,46 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grzejnik — prototyp SVG+JS</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,Arial,sans-serif;color:#ecf5ff;background:#06111f}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 15%,#193854,#07131f 50%,#030710)}
+main{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:20px;padding:22px}
+section,aside{border:1px solid #37506b;background:#0c1f32;border-radius:15px;padding:18px}
+h1{font-size:20px;margin:0 0 8px}.note{font-size:12px;color:#acc6dc}
+#stage svg{width:100%;height:auto;max-height:80vh}label{display:block;margin:17px 0 6px;font-size:13px}
+input{width:100%;accent-color:#4cb9ff}button{padding:10px;border:1px solid #47708c;background:#16354b;border-radius:8px;color:white;cursor:pointer}
+.buttons{display:flex;gap:8px;margin-top:18px}#status{color:#ffb1a0;font-size:13px}
+@media(max-width:850px){main{grid-template-columns:1fr;padding:12px}}
+</style></head><body>
+<main><section><h1>Grzejnik — podgląd wektorowy</h1><p class="note">Oryginalny plik SVG zachowany osobno. To prototyp bez integracji z HA.</p><div id="stage" aria-label="Podgląd SVG grzejnika"></div><p id="status" role="status"></p></section>
+<aside><h1>Parametry testowe</h1>
+<label for="temperature">Temperatura: <output id="tempValue">55°C</output></label><input id="temperature" type="range" min="20" max="80" value="55">
+<label for="valveOpen">Otwarcie zaworu: <output id="openValue">42%</output></label><input id="valveOpen" type="range" min="0" max="100" value="42">
+<label for="glow">Poświata: <output id="glowValue">62%</output></label><input id="glow" type="range" min="0" max="100" value="62">
+<label><input type="checkbox" id="display" checked style="width:auto"> Pokaż wyświetlacz</label>
+<div class="buttons"><button data-preset="eco">Eco</button><button data-preset="comfort">Comfort</button><button data-preset="boost">Boost</button></div>
+<p class="note">Wartości są demonstracyjne. Przycisk nie wysyła żadnych poleceń do instalacji.</p></aside></main>
+<script src="./radiator-prototype.js"></script><script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+let svg=null;
+const read=()=>({temperature:Number($('temperature').value),valveOpen:Number($('valveOpen').value),glow:Number($('glow').value),display:$('display').checked});
+const update=()=>{
+ if(!svg)return;
+ const o=read();HASSStudioRadiatorPrototype.apply(svg,o);
+ $('tempValue').textContent=o.temperature+'°C';$('openValue').textContent=o.valveOpen+'%';$('glowValue').textContent=o.glow+'%';
+};
+for(const id of ['temperature','valveOpen','glow','display'])$(id).addEventListener('input',update);
+const presets={eco:[38,18,38],comfort:[55,42,62],boost:[72,88,88]};
+document.querySelectorAll('[data-preset]').forEach(el=>el.addEventListener('click',()=>{
+ const [t,v,g]=presets[el.dataset.preset];$('temperature').value=t;$('valveOpen').value=v;$('glow').value=g;update();
+}));
+fetch('./radiator-reference.svg').then(response=>{if(!response.ok)throw Error('SVG HTTP '+response.status);return response.text();})
+.then(xml=>{const parser=new DOMParser(),doc=parser.parseFromString(xml,'image/svg+xml');
+ if(doc.querySelector('parsererror'))throw Error('Invalid SVG source');
+ svg=document.importNode(doc.documentElement,true);$('stage').append(svg);update();})
+.catch(error=>{$('status').textContent='Nie udało się wczytać grafiki: '+error.message;});
+window.radiatorPreviewAPI={getState:read,setOptions:options=>{
+ for(const [key,value] of Object.entries(options||{})){const el=$(key);if(!el)continue;if(el.type==='checkbox')el.checked=!!value;else el.value=value;}update();
+}};
+})();
+</script></body></html>
