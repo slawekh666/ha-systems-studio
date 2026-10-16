@@ -71,7 +71,7 @@ const HASSStudioManifoldPrototype=(()=>{
     const ticks=Array.from({length:5},(_,j)=>
       '<path d="M7 '+(-36-j*14)+' h6" stroke="#e6f9ff" stroke-width="1"/>').join('');
     return [
-      '<g class="mf-flowmeter" data-circuit="',i+1,'" transform="translate(',x,' 205)">',
+      '<g class="mf-flowmeter" data-circuit="',i+1,'" transform="translate(',x,' 225)">',
       '<rect x="-19" y="-15" width="38" height="25" rx="6" fill="url(#mf-steel)" stroke="#c9d1d9"/>',
       '<path d="M-23 -15 L-16 -26 H16 L23 -15Z" fill="#d6a75a" stroke="#ffdf91"/>',
       '<rect x="-15" y="-104" width="30" height="77" rx="7" fill="#112b3d" stroke="#ebf5ff"/>',
@@ -140,7 +140,7 @@ const HASSStudioManifoldPrototype=(()=>{
       centers.map((x,i)=>c.circuits[i].display?display(x,i,c.circuits[i]):'').join(''),
       '</g>',c.actuatorMode==='common'?commonActuator(75):'','</g>',
       '<g fill="#d4e8fc" font-family="Arial,sans-serif" text-anchor="middle">',
-      '<text x="',box.width/2,'" y="42" font-size="26" font-weight="bold">ROZDZIELACZ CO / PODŁOGÓWKI</text>',
+      '<text x="',box.width/2,'" y="42" font-size="',c.count===1?17:c.count===2?21:26,'" font-weight="bold">ROZDZIELACZ CO / PODŁOGÓWKI</text>',
       '<text x="',box.width/2,'" y="66" fill="#91b9da" font-size="13">',
       c.count,' ',plural,' • zasilanie / powrót • podgląd demonstracyjny</text></g></svg>'
     ].join('');
