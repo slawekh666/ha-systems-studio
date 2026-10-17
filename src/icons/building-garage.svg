@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300" role="img" aria-label="Budynek gospodarczy">
+<defs>
+    <linearGradient id="shed-metal" x1="0" y1="0" x2="1" y2=".92"><stop stop-color="#f5faff"/><stop offset=".29" stop-color="#c6d6ed"/><stop offset=".6" stop-color="#e8f1ff"/><stop offset="1" stop-color="#6f82a5"/></linearGradient>
+    <linearGradient id="shed-metal-dark" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#596985"/><stop offset=".35" stop-color="#283854"/><stop offset="1" stop-color="#11192e"/></linearGradient>
+    <linearGradient id="shed-glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#213f68"/><stop offset=".42" stop-color="#101d37"/><stop offset="1" stop-color="#071324"/></linearGradient>
+    <linearGradient id="shed-blue" x1="0" y1="0" x2=".9" y2="1"><stop stop-color="#a1f7ff"/><stop offset=".25" stop-color="#39c6ff"/><stop offset=".7" stop-color="#145ee0"/><stop offset="1" stop-color="#153883"/></linearGradient>
+    <linearGradient id="shed-green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#bbffd5"/><stop offset=".24" stop-color="#6af7a0"/><stop offset=".75" stop-color="#12a96a"/><stop offset="1" stop-color="#075c5c"/></linearGradient>
+    <linearGradient id="shed-orange" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffef8d"/><stop offset=".28" stop-color="#ffc448"/><stop offset=".66" stop-color="#ff7c32"/><stop offset="1" stop-color="#f23a46"/></linearGradient>
+    <linearGradient id="shed-roof" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#5d708e"/><stop offset=".5" stop-color="#2c3b57"/><stop offset="1" stop-color="#152039"/></linearGradient>
+    <filter id="shed-glow" x="-65%" y="-65%" width="230%" height="230%"><feGaussianBlur stdDeviation="4"/></filter>
+    <filter id="shed-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
+    </defs>
+<!-- Individual visible groups are named for future Home Assistant entity and animation bindings -->
+
+<g id="outbuilding-body"><path d="M66 115 L150 63 L236 115 L236 239 H66 Z" fill="url(#shed-metal-dark)" stroke="#7093bf" stroke-width="3"/>
+<path d="M51 117 L149 51 L251 117 L235 126 L150 68 L69 128 Z" fill="url(#shed-roof)" stroke="#92aecd" stroke-width="2.3"/>
+<path d="M61 121 L149 59 L240 119" fill="none" stroke="#439ffe" opacity=".6" stroke-width="2"/>
+<rect x="72" y="231" width="156" height="11" rx="2" fill="#15213b"/></g>
+<g id="outbuilding-garage"><rect x="91" y="142" width="118" height="95" rx="3" fill="#273954" stroke="#7d9bbb" stroke-width="3"/>
+<rect x="100" y="150" width="100" height="78" rx="1" fill="url(#shed-metal-dark)" stroke="#1a2740" stroke-width="2"/>
+<path d="M101 164 H199" stroke="#7792b8" opacity=".56" stroke-width="2"/><path d="M101 178 H199" stroke="#7792b8" opacity=".56" stroke-width="2"/><path d="M101 192 H199" stroke="#7792b8" opacity=".56" stroke-width="2"/><path d="M101 206 H199" stroke="#7792b8" opacity=".56" stroke-width="2"/><path d="M101 220 H199" stroke="#7792b8" opacity=".56" stroke-width="2"/><rect x="119" y="148" width="63" height="4" rx="1.5" fill="#a6c2dd" opacity=".7"/></g>
+<g id="outbuilding-window"><rect x="139" y="98" width="22" height="20" rx="2" fill="#0b2036" stroke="#97b5d9" stroke-width="3"/>
+<path d="M150 99 V116" stroke="#80b3e4" stroke-width="1.5"/></g>
+</svg>

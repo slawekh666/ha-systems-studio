@@ -69,6 +69,7 @@ const HASSStudioLayout = (() => {
         entity:validEntity(e.entity)?e.entity:'',label:String(e.label||'').slice(0,64)})),
       radiator:v.type==='radiator'?HASSStudioRadiator.normalize(v):undefined,
       manifold:v.type==='manifold'?HASSStudioManifold.normalize(v.manifold||v):undefined,
+      building:v.type==='building'?HASSStudioBuilding.normalize(v):undefined,
       distribution_board:v.type==='distribution_board'?HASSStudioDistributionBoard.normalize(v):undefined,
       ev_charger:v.type==='ev_charger'?HASSStudioEVCharger.normalize(v):undefined,
       inverter:v.type==='inverter'?HASSStudioInverter.normalize(v):undefined,
@@ -83,7 +84,7 @@ const HASSStudioLayout = (() => {
       flow_mode:['auto','on','off'].includes(v.flow_mode)?v.flow_mode:'auto',
       flow_entity:validEntity(v.flow_entity)?v.flow_entity:'',
       flow_direction:v.flow_direction==='reverse'?'reverse':'forward',
-      flow_speed:clamp(v.flow_speed,.35,5,1),cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
+      flow_speed:clamp(v.flow_speed,.35,5,1),...HASSStudioPowerFlow.normalize(v),cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
       cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
       points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
         x:clamp(q.x,-5000,10000,100),y:clamp(q.y,-5000,10000,100)})),

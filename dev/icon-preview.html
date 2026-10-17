@@ -81,6 +81,8 @@ a{color:#8ad7ff}code{color:#edc182}
 <script src="../src/inverter.js"></script>
 <script src="../src/distribution-board.js"></script>
 <script src="../src/ev-charger.js"></script>
+<script src="../src/building.js"></script>
+<script src="../src/power-flow.js"></script>
 <script>
 (function(){
 "use strict";
@@ -102,7 +104,8 @@ const renderers=Object.freeze({
   energyStorage:{api:HASSStudioEnergyStorage,file:"src/energy-storage.js",asset:"energy-storage"},
   inverter:{api:HASSStudioInverter,file:"src/inverter.js",asset:"inverter"},
   distributionBoard:{api:HASSStudioDistributionBoard,file:"src/distribution-board.js",asset:"distribution-board"},
-  evCharger:{api:HASSStudioEVCharger,file:"src/ev-charger.js",asset:"ev-charger"}
+  evCharger:{api:HASSStudioEVCharger,file:"src/ev-charger.js",asset:"ev-charger"},
+  building:{api:HASSStudioBuilding,file:"src/building.js",asset:"building-house"}
 });
 const fallbackBounds={
   boiler:{x:-18,y:-110,width:180,height:300},
@@ -117,10 +120,11 @@ const fallbackBounds={
   energy_storage:{x:0,y:0,width:150,height:150},
   inverter:{x:0,y:0,width:150,height:150},
   distribution_board:{x:0,y:0,width:150,height:150},
-  ev_charger:{x:0,y:0,width:150,height:150}
+  ev_charger:{x:0,y:0,width:150,height:150},
+  building:{x:0,y:0,width:150,height:150}
 };
 const models=Object.create(null),groups=[];
-for(const type of ['boiler','tank','solar','pump','valve','sensor','radiator','manifold','energy_storage','inverter','distribution_board','ev_charger','power_grid']){
+for(const type of ['boiler','tank','solar','pump','valve','sensor','radiator','manifold','energy_storage','inverter','distribution_board','ev_charger','building','power_grid']){
   const variants=registry.variantsFor(type);
   const options=variants.map(variant=>{
     const renderer=renderers[variant.renderer];
@@ -129,7 +133,8 @@ for(const type of ['boiler','tank','solar','pump','valve','sensor','radiator','m
     models[key]={
       type,variant:variant.id,renderer:variant.renderer,api:renderer.api,
       file:variant.svg?'src/icons/'+variant.svg+' + '+renderer.file:renderer.file,
-      assetKey:variant.renderer,asset:renderer.asset||null,
+      assetKey:type==='building'?'building'+variant.id[0].toUpperCase()+variant.id.slice(1):variant.renderer,
+      asset:type==='building'?'building-'+variant.id:renderer.asset||null,
       bounds:type==='boiler'&&variant.id==='solid_fuel'?{x:12,y:-105,width:110,height:318}:
         type==='tank'&&variant.id==='modular'?{x:-5,y:-10,width:145,height:175}:fallbackBounds[type]
     };

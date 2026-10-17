@@ -15,4 +15,5 @@ validate_card:
     - node dev/test-energy-storage.js
     - node dev/test-inverter.js
     - node dev/test-ev-charger.js
+    - node dev/test-buildings-power.js
     - git diff --exit-code -- dist/ha-systems-studio.js

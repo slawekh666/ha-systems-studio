@@ -91,10 +91,22 @@ const HASSStudioCanvas = (() => {
   const canvasSvg=(config,hass,editable=false,selected=null)=>{
     const data=normalized(config),language=pickLang(config,hass),L=words[language];
     const w=data.width,h=data.height;
-    const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !['radiator','manifold','power_grid','energy_storage','inverter','distribution_board','ev_charger'].includes(node.type) && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(node.variant)))
+    const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !['radiator','manifold','power_grid','energy_storage','inverter','distribution_board','ev_charger','building'].includes(node.type) && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(node.variant)))
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
     const pipes=data.pipes.map(pipe=>{
-      const d=pipePath(pipe.points),enabled=HASSStudioAnimation.flowActive(pipe.flow_mode,hass,pipe.flow_entity);
+      const d=pipePath(pipe.points),powerVisual=HASSStudioPowerFlow.visual(pipe,hass);
+      const enabled=powerVisual?powerVisual.active&&pipe.flow_mode!=='off':HASSStudioAnimation.flowActive(pipe.flow_mode,hass,pipe.flow_entity);
+      const motionArrows=()=>{
+        if(!powerVisual||!enabled||powerVisual.pattern!=='arrows')return '';
+        const pts=powerVisual.direction==='reverse'?[...pipe.points].reverse():pipe.points;
+        const track=pipePath(pts),s=powerVisual.size,half=+(s*.52).toFixed(2);
+        const arrow='<path d="M'+(-s)+' '+(-half)+' L0 0 L'+(-s)+' '+half+
+          '" fill="none" stroke="#fff" stroke-width="'+powerVisual.width+
+          '" stroke-linecap="round" stroke-linejoin="round"/>';
+        return [0,1,2].map(i=>'<g class="ss-power-arrow">'+arrow+
+          '<animateMotion path="'+track+'" dur="'+pipe.flow_speed+
+          's" begin="'+(-i*pipe.flow_speed/3).toFixed(3)+'s" repeatCount="indefinite" rotate="auto"/></g>').join('');
+      };
       const endcap=(first)=>{
         if(first&&pipe.cap_start===false||!first&&pipe.cap_end===false)return '';
         const pts=pipe.points,at=first?pts[0]:pts[pts.length-1],near=first?pts[1]:pts[pts.length-2];
@@ -105,7 +117,9 @@ const HASSStudioCanvas = (() => {
       return '<g class="ss-pipe" data-id="'+esc(pipe.id)+'"><path class="ss-pipe-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="#142332" stroke-width="'+(pipe.width+3)+'" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="'+colors[pipe.color]+'" stroke-width="'+pipe.width+'" fill="none"/>'+
-        (enabled?'<path class="ss-line ss-flow" d="'+d+'" style="--ss-speed:'+pipe.flow_speed+'s;animation-direction:'+pipe.flow_direction+'"/>':'')+
+        (enabled&&powerVisual?.pattern==='arrows'?motionArrows():enabled?'<path class="ss-line ss-flow'+(powerVisual?' ss-flow-power ss-flow-'+powerVisual.pattern:'')+'" d="'+d+'"'+
+          (powerVisual?' stroke-width="'+powerVisual.width+'" stroke-dasharray="'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:powerVisual.pattern==='dashes'?(powerVisual.size*2)+' '+powerVisual.interval:(powerVisual.size*3)+' '+powerVisual.interval)+'"':'')+
+          ' style="--ss-speed:'+pipe.flow_speed+'s;'+(powerVisual?HASSStudioPowerFlow.style(powerVisual)+';stroke-width:'+powerVisual.width+';stroke-dasharray:'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:(powerVisual.size*2)+' '+powerVisual.interval):'animation-direction:'+pipe.flow_direction)+'"/>':'')+
         endcap(true)+endcap(false)+'</g>';
     }).join('');
     const accessories=data.pipes.map(pipe=>pipe.accessories.map(item=>symbolOnPipe(item,pipe,hass,language)).join('')).join('');
@@ -123,6 +137,7 @@ const HASSStudioCanvas = (() => {
       const modernGas=node.type==='boiler'&&node.variant==='gas_modern';
       const modernElectric=node.type==='boiler'&&node.variant==='electric_modern';
       const modernFireplace=node.type==='boiler'&&node.variant==='fireplace_modern';
+      const building=node.type==='building';
       const distributionBoard=node.type==='distribution_board',evCharger=node.type==='ev_charger';
       const inverter=node.type==='inverter';
       const energyStorage=node.type==='energy_storage';
@@ -133,7 +148,7 @@ const HASSStudioCanvas = (() => {
       const sx=freeTank||solidBoiler?node.width_scale:1,sy=freeTank||solidBoiler?node.height_scale:1;
       // The solid boiler is stretched about (66,53) in its renderer. Keep
       // selection bounds and external label aligned with that transform.
-      const outline=distributionBoard?HASSStudioDistributionBoard.geometry(node):evCharger?HASSStudioEVCharger.geometry(node):inverter?HASSStudioInverter.geometry(node):energyStorage?HASSStudioEnergyStorage.geometry(node):radiator?HASSStudioRadiator.geometry(node):manifold?HASSStudioManifold.geometry(node):powerGrid?HASSStudioPowerGrid.geometry(node):modernFireplace?HASSStudioFireplace.geometry(node):modernElectric?HASSStudioElectricBoiler.geometry(node):modernGas?HASSStudioGasBoiler.geometry(node):modernHP?HASSStudioHeatPump.geometry(node):modernPellet?HASSStudioPellet.geometry(node):
+      const outline=building?HASSStudioBuilding.geometry(node):distributionBoard?HASSStudioDistributionBoard.geometry(node):evCharger?HASSStudioEVCharger.geometry(node):inverter?HASSStudioInverter.geometry(node):energyStorage?HASSStudioEnergyStorage.geometry(node):radiator?HASSStudioRadiator.geometry(node):manifold?HASSStudioManifold.geometry(node):powerGrid?HASSStudioPowerGrid.geometry(node):modernFireplace?HASSStudioFireplace.geometry(node):modernElectric?HASSStudioElectricBoiler.geometry(node):modernGas?HASSStudioGasBoiler.geometry(node):modernHP?HASSStudioHeatPump.geometry(node):modernPellet?HASSStudioPellet.geometry(node):
         solidBoiler?{x:66+(12-66)*sx,y:53+(-105-53)*sy,width:110*sx,height:318*sy,
           labelY:53+(230-53)*sy,readingY:53+(245-53)*sy}:
         tallBoiler?{x:12,y:-105,width:110,height:318,labelY:230,readingY:245}:
@@ -145,13 +160,13 @@ const HASSStudioCanvas = (() => {
         heatpump_modern:['displayBlock',986,371],gas_modern:['displayFrame',574,1097],
         electric_modern:['controlPanelGroup',560,946],fireplace_modern:['displayGroup',634,332]
       };
-      const visual=(distributionBoard?HASSStudioDistributionBoard.render(node,hass):evCharger?HASSStudioEVCharger.render(node,hass):inverter?HASSStudioInverter.render(node,hass):energyStorage?HASSStudioEnergyStorage.render(node,hass):radiator?HASSStudioRadiator.render(node,hass):manifold?HASSStudioManifold.render(node,hass):powerGrid?HASSStudioPowerGrid.render(node,hass):node.type==='tank'&&node.variant==='modular'?HASSStudioTank.render(node,hass):node.type==='boiler'&&node.variant==='solid_fuel'?HASSStudioSolidFuel.render(node,hass):modernPellet?HASSStudioPellet.render(node,hass):modernHP?HASSStudioHeatPump.render(node,hass):modernGas?HASSStudioGasBoiler.render(node,hass):modernElectric?HASSStudioElectricBoiler.render(node,hass):modernFireplace?HASSStudioFireplace.render(node,hass):node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node));
+      const visual=(building?HASSStudioBuilding.render(node,hass):distributionBoard?HASSStudioDistributionBoard.render(node,hass):evCharger?HASSStudioEVCharger.render(node,hass):inverter?HASSStudioInverter.render(node,hass):energyStorage?HASSStudioEnergyStorage.render(node,hass):radiator?HASSStudioRadiator.render(node,hass):manifold?HASSStudioManifold.render(node,hass):powerGrid?HASSStudioPowerGrid.render(node,hass):node.type==='tank'&&node.variant==='modular'?HASSStudioTank.render(node,hass):node.type==='boiler'&&node.variant==='solid_fuel'?HASSStudioSolidFuel.render(node,hass):modernPellet?HASSStudioPellet.render(node,hass):modernHP?HASSStudioHeatPump.render(node,hass):modernGas?HASSStudioGasBoiler.render(node,hass):modernElectric?HASSStudioElectricBoiler.render(node,hass):modernFireplace?HASSStudioFireplace.render(node,hass):node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node));
       const panel=panels[node.variant];
       const displayMarkup=panel?HASSStudioReadoutScale.namedGroup(visual,panel[0],panel[1],panel[2],node.readout_scale):visual;
       return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale+')">'+
         displayMarkup+
         (editable&&active?'<rect class="ss-selection" x="'+outline.x+'" y="'+outline.y+'" width="'+outline.width+'" height="'+outline.height+'" rx="8" fill="none" stroke="#52bfff" stroke-dasharray="5 4" stroke-width="1.6" pointer-events="none"/>':'')+
-        '<g transform="translate('+(distributionBoard||evCharger||inverter||energyStorage||powerGrid||radiator||manifold||modernPellet||modernHP||modernGas||modernElectric||modernFireplace?outline.centerX:60)+' '+outline.labelY+') scale('+(1/node.scale)+')"><text text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text></g>'+
+        '<g transform="translate('+(building||distributionBoard||evCharger||inverter||energyStorage||powerGrid||radiator||manifold||modernPellet||modernHP||modernGas||modernElectric||modernFireplace?outline.centerX:60)+' '+outline.labelY+') scale('+(1/node.scale)+')"><text text-anchor="middle" fill="var(--primary-text-color,#e5eef5)" font-size="12">'+name+'</text></g>'+
         (reading&&!tallBoiler?'<g transform="translate(60 '+outline.readingY+') scale('+(1/node.scale)+')"><text text-anchor="middle" font-size="11" fill="#7ed3ef">'+esc(reading)+'</text></g>':'')+
         '</g>';
     }).join('');

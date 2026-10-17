@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300" role="img" aria-label="Dom">
+<defs>
+    <linearGradient id="home-metal" x1="0" y1="0" x2="1" y2=".92"><stop stop-color="#f5faff"/><stop offset=".29" stop-color="#c6d6ed"/><stop offset=".6" stop-color="#e8f1ff"/><stop offset="1" stop-color="#6f82a5"/></linearGradient>
+    <linearGradient id="home-metal-dark" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#596985"/><stop offset=".35" stop-color="#283854"/><stop offset="1" stop-color="#11192e"/></linearGradient>
+    <linearGradient id="home-glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#213f68"/><stop offset=".42" stop-color="#101d37"/><stop offset="1" stop-color="#071324"/></linearGradient>
+    <linearGradient id="home-blue" x1="0" y1="0" x2=".9" y2="1"><stop stop-color="#a1f7ff"/><stop offset=".25" stop-color="#39c6ff"/><stop offset=".7" stop-color="#145ee0"/><stop offset="1" stop-color="#153883"/></linearGradient>
+    <linearGradient id="home-green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#bbffd5"/><stop offset=".24" stop-color="#6af7a0"/><stop offset=".75" stop-color="#12a96a"/><stop offset="1" stop-color="#075c5c"/></linearGradient>
+    <linearGradient id="home-orange" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffef8d"/><stop offset=".28" stop-color="#ffc448"/><stop offset=".66" stop-color="#ff7c32"/><stop offset="1" stop-color="#f23a46"/></linearGradient>
+    <linearGradient id="home-roof" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#5d708e"/><stop offset=".5" stop-color="#2c3b57"/><stop offset="1" stop-color="#152039"/></linearGradient>
+    <filter id="home-glow" x="-65%" y="-65%" width="230%" height="230%"><feGaussianBlur stdDeviation="4"/></filter>
+    <filter id="home-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
+    </defs>
+<!-- Individual visible groups are named for future Home Assistant entity and animation bindings -->
+
+<g id="home-body"><path d="M67 120 L150 57 L233 120 L233 241 H67 Z" fill="url(#home-metal)" stroke="#94bce1" stroke-width="2.5"/>
+<path d="M58 125 L150 48 L244 125 L230 130 L150 68 L72 132 Z" fill="url(#home-roof)" stroke="#83b7e6" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M61 124 L149 52 L239 125" fill="none" stroke="#64cdff" stroke-width="8" opacity=".3" filter="url(#home-glow)"/>
+<path d="M61 124 L149 52 L239 125" fill="none" stroke="#6fcdff" stroke-width="2" opacity=".8"/>
+<rect x="176" y="57" width="20" height="35" rx="2" fill="url(#home-metal-dark)" stroke="#91afd3" stroke-width="2"/>
+<rect x="78" y="230" width="145" height="11" rx="3" fill="#334866"/></g>
+<g id="home-windows">
+<rect x="96" y="129" width="36" height="35" rx="2" fill="url(#home-orange)" stroke="#3c5477" stroke-width="5"/><path d="M114 131 V163 M98 146 H130" stroke="#d7e9ff" stroke-width="2"/>
+<rect x="166" y="129" width="36" height="35" rx="2" fill="url(#home-orange)" stroke="#3c5477" stroke-width="5"/><path d="M184 131 V163 M169 146 H200" stroke="#d7e9ff" stroke-width="2"/>
+<path d="M149 84 L164 104 H134 Z" fill="#ffce80" stroke="#749ec5" stroke-width="3"/>
+</g>
+<g id="home-door"><rect x="130" y="179" width="41" height="62" rx="3" fill="url(#home-metal-dark)" stroke="#709cc6" stroke-width="2.5"/>
+<path d="M135 188 L165 188 L165 237 L135 237" fill="none" stroke="#89b7de" opacity=".4"/><circle cx="162" cy="213" r="2.4" fill="#ffc37c"/></g>
+<g id="home-light"><path d="M125 132 H137 V163 H125 Z M196 132 H207 V163 H196 Z" stroke="#ffb84f" opacity=".2" stroke-width="8" filter="url(#home-glow)"/></g>
+
+</svg>

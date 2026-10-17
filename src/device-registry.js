@@ -18,7 +18,7 @@ const HASSStudioDeviceRegistry = (() => {
   const familyIcons=Object.freeze({solid_fuel_boiler:'mdi:fire',pellet_boiler:'mdi:fire',gas_boiler:'mdi:fire',
     electric_boiler:'mdi:flash',oil_boiler:'mdi:fire',heat_pump:'mdi:heat-pump',fireplace:'mdi:fireplace',
     tank:'mdi:water-boiler',solar_collector:'mdi:white-balance-sunny',pump:'mdi:pump',valve:'mdi:valve',
-    sensor:'mdi:thermometer',pipe:'mdi:pipe',energy_storage:'mdi:battery-high',inverter:'mdi:solar-power',distribution_board:'mdi:electrical-services',ev_charger:'mdi:ev-station',power_grid:'mdi:transmission-tower',radiator:'mdi:radiator',manifold:'mdi:pipe-manifold'});
+    sensor:'mdi:thermometer',pipe:'mdi:pipe',building:'mdi:home-city',energy_storage:'mdi:battery-high',inverter:'mdi:solar-power',distribution_board:'mdi:electrical-services',ev_charger:'mdi:ev-station',power_grid:'mdi:transmission-tower',radiator:'mdi:radiator',manifold:'mdi:pipe-manifold'});
   // Common logical identity, independent from the selected drawing.
   const families = Object.freeze({
     solid_fuel_boiler:{category:'heat_sources',pl:'Kocioł na drewno / węgiel',en:'Wood / coal boiler',fuels:['wood','coal'],entities:['entity','burner_entity'],animations:['combustion']},
@@ -35,6 +35,7 @@ const HASSStudioDeviceRegistry = (() => {
     sensor:{category:'measurements',pl:'Czujnik',en:'Sensor',entities:['entity'],animations:[]},
     radiator:{category:'hydraulics',pl:'Grzejnik',en:'Radiator',entities:['temperature_entity','valve_entity'],animations:[]},
     manifold:{category:'hydraulics',pl:'Rozdzielacz CO',en:'Heating manifold',entities:['circuits'],animations:[]},
+    building:{category:'electricity',pl:'Budynek',en:'Building',entities:['power_entity','daily_entity'],animations:['electrical_load']},
     distribution_board:{category:'electricity',pl:'Rozdzielnia elektryczna',en:'Distribution board',entities:[],animations:[]},
     ev_charger:{category:'electricity',pl:'Ładowarka EV',en:'EV charger',entities:['power','session_energy','status','alarm'],animations:['charge']},
     inverter:{category:'electricity',pl:'Falownik fotowoltaiczny',en:'PV inverter',entities:['ac_power','inputs'],animations:[]},
@@ -78,6 +79,7 @@ const HASSStudioDeviceRegistry = (() => {
     sensor:{icon:'♧',variants:[['temperature','sensor','Temperatura','Temperature','warmwasser'],['pressure','sensor','Ciśnienie','Pressure','warmwasser']]},
     radiator:{icon:'▥',variants:[['modern','radiator','Nowoczesny','Modern','radiator','radiator.svg']]},
     manifold:{icon:'≡',variants:[['floor_heating','manifold','Podłogówka','Floor heating','manifold']]},
+    building:{icon:'⌂',variants:[['house','building','Dom','House','building','building-house.svg'],['garage','building','Garaż','Garage','building','building-garage.svg'],['workshop','building','Budynek gospodarczy','Workshop','building','building-workshop.svg']]},
     distribution_board:{icon:'▥',variants:[['modern','distribution_board','Rozdzielnia','Distribution board','distributionBoard','distribution-board.svg']]},
     ev_charger:{icon:'⚡',variants:[['modern','ev_charger','Ładowarka EV','EV charger','evCharger','ev-charger.svg']]},
     inverter:{icon:'▣',variants:[['modern','inverter','Falownik PV','PV inverter','inverter','inverter.svg']]},
@@ -131,6 +133,9 @@ const HASSStudioDeviceRegistry = (() => {
     ['sensor','pressure','sensor_group'],
     ['radiator','modern','radiator_group'],
     ['manifold','floor_heating','manifold_group'],
+    ['building','house','buildings_group'],
+    ['building','garage','buildings_group'],
+    ['building','workshop','buildings_group'],
     ['distribution_board','modern','distribution_group'],
     ['ev_charger','modern','ev_group'],
     ['inverter','modern','inverter_group'],
@@ -148,6 +153,7 @@ const HASSStudioDeviceRegistry = (() => {
     sensor_group: Object.freeze({pl:'Czujniki',en:'Sensors',icon:'mdi:thermometer'}),
     radiator_group: Object.freeze({pl:'Grzejniki',en:'Radiators',icon:'mdi:radiator'}),
     manifold_group: Object.freeze({pl:'Rozdzielacze',en:'Manifolds',icon:'mdi:pipe-manifold'}),
+    buildings_group: Object.freeze({pl:'Budynki',en:'Buildings',icon:'mdi:home-city'}),
     distribution_group: Object.freeze({pl:'Rozdzielnice',en:'Distribution boards',icon:'mdi:electrical-services'}),
     ev_group: Object.freeze({pl:'Ładowarki EV',en:'EV chargers',icon:'mdi:ev-station'}),
     inverter_group: Object.freeze({pl:'Falowniki PV',en:'PV inverters',icon:'mdi:solar-power'}),
