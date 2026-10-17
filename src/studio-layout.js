@@ -67,6 +67,7 @@ const HASSStudioLayout = (() => {
       entity:validEntity(v.entity)?v.entity:'',
       entities:(Array.isArray(v.entities)?v.entities:[]).slice(0,20).map(e=>({
         entity:validEntity(e.entity)?e.entity:'',label:String(e.label||'').slice(0,64)})),
+      power_grid:v.type==='power_grid'?HASSStudioPowerGrid.normalize(v):undefined,
       parts:(Array.isArray(v.parts)?v.parts:[]).slice(0,40).map(normalizeItem)
     }));
     const pipes=(Array.isArray(source.pipes)?source.pipes:[]).slice(0,MAX_PIPES).map(v=>({
