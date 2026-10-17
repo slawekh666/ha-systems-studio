@@ -73,6 +73,7 @@ a{color:#8ad7ff}code{color:#edc182}
 <script src="../src/gas-boiler.js"></script>
 <script src="../src/electric-boiler.js"></script>
 <script src="../src/fireplace.js"></script>
+<script src="../src/power-grid.js"></script>
 <script>
 (function(){
 "use strict";
@@ -87,7 +88,8 @@ const renderers=Object.freeze({
   heatPump:{api:HASSStudioHeatPump,file:"src/heat-pump-stove.js",asset:"heat-pump-stove"},
   gasBoiler:{api:HASSStudioGasBoiler,file:"src/gas-boiler.js",asset:"gas-boiler"},
   electricBoiler:{api:HASSStudioElectricBoiler,file:"src/electric-boiler.js",asset:"electric-boiler"},
-  fireplace:{api:HASSStudioFireplace,file:"src/fireplace.js",asset:"fireplace"}
+  fireplace:{api:HASSStudioFireplace,file:"src/fireplace.js",asset:"fireplace"},
+  powerGrid:{api:HASSStudioPowerGrid,file:"src/power-grid.js",asset:"power-grid-classic"}
 });
 const fallbackBounds={
   boiler:{x:-18,y:-110,width:180,height:300},
@@ -95,10 +97,11 @@ const fallbackBounds={
   solar:{x:-20,y:-15,width:170,height:180},
   pump:{x:0,y:0,width:125,height:130},
   valve:{x:0,y:0,width:125,height:130},
-  sensor:{x:0,y:0,width:125,height:130}
+  sensor:{x:0,y:0,width:125,height:130},
+  power_grid:{x:0,y:0,width:316,height:240}
 };
 const models=Object.create(null),groups=[];
-for(const type of ['boiler','tank','solar','pump','valve','sensor']){
+for(const type of ['boiler','tank','solar','pump','valve','sensor','power_grid']){
   const variants=registry.variantsFor(type);
   const options=variants.map(variant=>{
     const renderer=renderers[variant.renderer];
