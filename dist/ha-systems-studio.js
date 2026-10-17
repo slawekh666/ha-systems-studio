@@ -1831,8 +1831,10 @@ const HASSStudioHeatPump = (()=>{
       labelY:cy+(base.labelY-cy)*sy,centerX:cx,centerY:cy,sx,sy};
   };
   const render=(node,hass)=>{
-    const kw=power(hass,node.hp_power_entity);
-    const speed=fan(hass,node.hp_fan_entity,node.hp_max_rpm);
+    const manual=node.hp_test_mode===true;
+    const kw=manual?clamp(node.hp_manual_kw,0,500,0):power(hass,node.hp_power_entity);
+    const fanPct=manual?clamp(node.hp_manual_fan,0,100,0):null;
+    const speed=manual?{percent:fanPct,label:Math.round(fanPct)+'%',unit:'%'}:fan(hass,node.hp_fan_entity,node.hp_max_rpm);
     const pct=speed?.percent??0, powered=pct>0;
     const kwLabel=kw===null?'—':(kw>=10?kw.toFixed(1):kw.toFixed(2))+' kW';
     const percentLabel=speed===null?'—':speed.label;
@@ -3361,7 +3363,7 @@ const HASSStudioLayout = (() => {
       solid_state:['auto','burning','embers','off'].includes(v.solid_state)?v.solid_state:'auto',
       solid_glow:clamp(v.solid_glow,0,100,78),
       hp_power_entity:validEntity(v.hp_power_entity)?v.hp_power_entity:'',hp_fan_entity:validEntity(v.hp_fan_entity)?v.hp_fan_entity:'',
-      hp_max_rpm:clamp(v.hp_max_rpm,100,20000,1800),hp_glow:clamp(v.hp_glow,0,100,65),
+      hp_max_rpm:clamp(v.hp_max_rpm,100,20000,1800),hp_glow:clamp(v.hp_glow,0,100,65),hp_test_mode:v.hp_test_mode===true,hp_manual_kw:clamp(v.hp_manual_kw,0,500,0),hp_manual_fan:clamp(v.hp_manual_fan,0,100,0),
       gas_draw_entity:validEntity(v.gas_draw_entity)?v.gas_draw_entity:'',gas_glow:clamp(v.gas_glow,0,100,62),
       electric_power_entity:validEntity(v.electric_power_entity)?v.electric_power_entity:'',
       electric_load_entity:validEntity(v.electric_load_entity)?v.electric_load_entity:'',
@@ -3882,7 +3884,9 @@ const HASSStudioEditorInspector = (() => {
           if(obj.variant==='gas_modern')markup+=field(L.gasDraw,'gas_draw_entity',obj.gas_draw_entity,'search',null,'list="ss-entity-list"')+
             field(L.gasGlow,'gas_glow',obj.gas_glow,'range',null,'min="0" max="100" step="5"')+
             '<p class="ss-note">'+esc(L.gasHelp)+'</p>';
-          if(obj.variant==='heatpump_modern')markup+=field(L.hpPower,'hp_power_entity',obj.hp_power_entity,'search',null,'list="ss-entity-list"')+
+          if(obj.variant==='heatpump_modern')markup+=field('Tryb testowy pompy','hp_test_mode',obj.hp_test_mode?'true':'false','text',[['false','Home Assistant'],['true','Symulacja ręczna']])+
+             (obj.hp_test_mode?field('Test mocy (kW)','hp_manual_kw',obj.hp_manual_kw??0,'number',null,'min="0" max="500" step="0.1"')+field('Test wentylatora (%)','hp_manual_fan',obj.hp_manual_fan??0,'number',null,'min="0" max="100" step="1"'):'')+
+             field(L.hpPower,'hp_power_entity',obj.hp_power_entity,'search',null,'list="ss-entity-list"')+
             field(L.hpFan,'hp_fan_entity',obj.hp_fan_entity,'search',null,'list="ss-entity-list"')+
             field(L.hpMaxRpm,'hp_max_rpm',obj.hp_max_rpm,'number',null,'min="100" max="20000" step="100"')+
             field(L.hpGlow,'hp_glow',obj.hp_glow,'range',null,'min="0" max="100" step="5"');
@@ -3891,10 +3895,10 @@ const HASSStudioEditorInspector = (() => {
               field(L.solidState,'solid_state',obj.solid_state,'text',[['auto',L.solidAuto],['burning',L.solidBurning],['embers',L.solidEmbers],['off',L.solidOff]])+
               field(L.solidGlow,'solid_glow',obj.solid_glow,'range',null,'min="0" max="100" step="5"')+
               '<p class="ss-note">'+esc(L.solidHelp)+'</p>';
-          }else markup+=field(L.boilerState,'burner_mode',obj.burner_mode,'text',[['auto',L.flowAuto],['on',L.flowOn],['off',L.flowOff]]);
-          markup+=field(L.burnerEntity,'burner_entity',obj.burner_entity,'search',null,'list="ss-entity-list"');
-          markup+=field(L.burnerOnTemp,'burner_on_temp',obj.burner_on_temp,'number',null,'min="20" max="90" step="1"');
-          markup+=field(L.burnerOffTemp,'burner_off_temp',obj.burner_off_temp,'number',null,'min="10" max="89" step="1"');
+          }else if(['wood','pellet','gas','oil','electric','heatpump','gas_modern'].includes(obj.variant))markup+=field(L.boilerState,'burner_mode',obj.burner_mode,'text',[['auto',L.flowAuto],['on',L.flowOn],['off',L.flowOff]]);
+          if(!['heatpump_modern','electric_modern'].includes(obj.variant))markup+=field(L.burnerEntity,'burner_entity',obj.burner_entity,'search',null,'list="ss-entity-list"');
+          if(!['heatpump_modern','electric_modern'].includes(obj.variant))markup+=field(L.burnerOnTemp,'burner_on_temp',obj.burner_on_temp,'number',null,'min="20" max="90" step="1"');
+          if(!['heatpump_modern','electric_modern'].includes(obj.variant))markup+=field(L.burnerOffTemp,'burner_off_temp',obj.burner_off_temp,'number',null,'min="10" max="89" step="1"');
         }
         if(obj.type==='solar'){
           markup+=field(L.solarPump,'pump_entity',obj.pump_entity,'search',null,'list="ss-entity-list"');
@@ -4476,7 +4480,7 @@ const HASSStudioEditorLibrary=(()=>{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?HASSStudioBuilding.defaults():undefined,entities:[],parts:[]};
+          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?HASSStudioBuilding.defaults():undefined,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -4738,12 +4742,13 @@ const HASSStudioEditorLibrary=(()=>{
       }else if(['flow_power_kw','flow_max_kw','flow_min_width','flow_max_width'].includes(key)){
         const ranges={flow_power_kw:[-10000,10000],flow_max_kw:[.1,10000],flow_min_width:[.5,12],flow_max_width:[.5,16]};
         obj[key]=clamp(val,ranges[key][0],ranges[key][1],HASSStudioPowerFlow.defaults()[key]);
-      }else if(['x','y','scale','width','solid_glow','gas_glow','electric_glow','electric_max_kw','hp_glow','hp_max_rpm','flow_speed','burner_on_temp','burner_off_temp','solar_on_delta','solar_off_delta'].includes(key)){
-        const min={scale:0.5,width_scale:0.5,height_scale:0.5,width:3,solid_glow:0,gas_glow:0,electric_glow:0,electric_max_kw:0.1,hp_glow:0,hp_max_rpm:100,flow_speed:0.35,burner_on_temp:20,burner_off_temp:10,solar_on_delta:1,solar_off_delta:0};
-        const max={scale:2.4,width_scale:2.4,height_scale:2.4,width:14,solid_glow:100,gas_glow:100,electric_glow:100,electric_max_kw:100,hp_glow:100,hp_max_rpm:20000,flow_speed:5,burner_on_temp:90,burner_off_temp:89,solar_on_delta:40,solar_off_delta:39,x:W,y:H};
+      }else if(['x','y','scale','width','solid_glow','gas_glow','electric_glow','electric_max_kw','hp_glow','hp_max_rpm','hp_manual_kw','hp_manual_fan','flow_speed','burner_on_temp','burner_off_temp','solar_on_delta','solar_off_delta'].includes(key)){
+        const min={scale:0.5,width_scale:0.5,height_scale:0.5,width:3,solid_glow:0,gas_glow:0,electric_glow:0,electric_max_kw:0.1,hp_glow:0,hp_max_rpm:100,hp_manual_kw:0,hp_manual_fan:0,flow_speed:0.35,burner_on_temp:20,burner_off_temp:10,solar_on_delta:1,solar_off_delta:0};
+        const max={scale:2.4,width_scale:2.4,height_scale:2.4,width:14,solid_glow:100,gas_glow:100,electric_glow:100,electric_max_kw:100,hp_glow:100,hp_max_rpm:20000,hp_manual_kw:500,hp_manual_fan:100,flow_speed:5,burner_on_temp:90,burner_off_temp:89,solar_on_delta:40,solar_off_delta:39,x:W,y:H};
         obj[key]=clamp(val,min[key]??0,max[key],obj[key]);
-      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity','burner_entity','gas_draw_entity','electric_power_entity','electric_load_entity','hp_power_entity','hp_fan_entity','burner_mode','solid_fuel','solid_state','pump_entity','tank_entity','cap_start','cap_end','flow_power_mode','flow_pattern','flow_power_direction','flow_power_entity'].includes(key)){
+      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity','burner_entity','gas_draw_entity','electric_power_entity','electric_load_entity','hp_power_entity','hp_fan_entity','hp_test_mode','burner_mode','solid_fuel','solid_state','pump_entity','tank_entity','cap_start','cap_end','flow_power_mode','flow_pattern','flow_power_direction','flow_power_entity'].includes(key)){
         if(['entity','flow_entity','burner_entity','gas_draw_entity','electric_power_entity','electric_load_entity','hp_power_entity','hp_fan_entity','pump_entity','tank_entity'].includes(key))obj[key]=validEntity(val)?val:'';
+        else if(key==='hp_test_mode')obj.hp_test_mode=val==='true';
         else if(key==='burner_mode')obj.burner_mode=['auto','on','off'].includes(val)?val:'auto';
         else if(key==='solid_fuel')obj.solid_fuel=val==='coal'?'coal':'wood';
         else if(key==='solid_state')obj.solid_state=['auto','burning','embers','off'].includes(val)?val:'auto';
