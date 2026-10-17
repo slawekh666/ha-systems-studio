@@ -32,13 +32,13 @@ const HASSStudioRadiator=(()=>{
   svg=svg.replace(/(<text\b[^>]*\bid="(tempText|openText)"[^>]*>)([^<]*)(<\/text>)/g,
     (_,a,id,old,z)=>a+replacements[id]+z);
   const status=valveStatus(open);
-  svg=svg.replace(/(<text\\b[^>]*\\bid="valveStatus"[^>]*>)[^<]*(<\\/text>)/,
+  svg=svg.replace(/(<text\b[^>]*\bid="valveStatus"[^>]*>)[^<]*(<\/text>)/,
     (_,head,tail)=>head.replace(/fill="[^"]+"/,'fill="'+status.color+'"')+status.label+tail);
   for(let index=1;index<=4;index++){
     const enabled=open!==null&&open>=[5,25,50,75][index-1];
-    const pattern=new RegExp('(<rect\\\\b[^>]*\\\\bid="bar'+index+'"[^>]*)(\\\\/>)');
+    const pattern=new RegExp('(<rect\\b[^>]*\\bid="bar'+index+'"[^>]*)(\\/>)');
     svg=svg.replace(pattern,(_,head,tail)=>
-      head.replace(/\\sopacity="[^"]*"/,'')+' opacity="'+(enabled?'1':'.16')+'"'+tail);
+      head.replace(/\sopacity="[^"]*"/,'')+' opacity="'+(enabled?'1':'.16')+'"'+tail);
   }
   // Remove duplicated captions, retaining the original design's ring readings.
   svg=svg.replace(/(<text\b[^>]*x="1040"[^>]*>[\s\S]*?<\/text>)/g,'');
