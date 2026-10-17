@@ -66,7 +66,8 @@ const HASSStudioManifold=(()=>{
       'mf-title-text':{'font-size':c.count===1?17:c.count===2?21:26},
       'mf-subtitle-text':{text:c.count+' '+plural+' • zasilanie / powrót'}
     },'heading');
-    const rails=[230,490].map((y,i)=>[
+    // Supply moves closer to the display; display-to-rail gaps match (29 units).
+    const rails=[288,490].map((y,i)=>[
       use('mf-rail-middle',125,y,' scale('+railWidth+' 1)'),
       use('mf-rail-start',125,y),
       use('mf-rail-end',125+railWidth,y),
@@ -77,9 +78,12 @@ const HASSStudioManifold=(()=>{
       const active=c.actuatorMode==='individual'&&loop.actuator;
       return use(active?'mf-valve-actuator':'mf-valve-manual',x,548);
     }).join('');
-    const out=xs.map((x,i)=>
-      '<g class="mf-outlets" data-circuit="'+(i+1)+'">'+
-       use('mf-outlet-upper',x,94)+use('mf-outlet-lower',x,710)+'</g>').join('');
+    const out=xs.map((x,i)=>{
+      const driven=c.actuatorMode==='individual'&&c.circuits[i].actuator;
+      return '<g class="mf-outlets" data-circuit="'+(i+1)+'">'+
+        use('mf-outlet-upper',x,152)+
+        use(driven?'mf-outlet-lower':'mf-outlet-lower-manual',x,680)+'</g>';
+    }).join('');
     const meters=xs.map((x,i)=>{
       const loop=c.circuits[i];
       const water=loop.flow===null?0:number(loop.flow/5*58,0,58,0);
@@ -87,7 +91,7 @@ const HASSStudioManifold=(()=>{
         'mf-flow-fill':{y:-27-water,height:water},
         'mf-flow-text':{text:f(loop.flow)+' l/min'}
       },i+1);
-      return '<g class="mf-flowmeter" data-circuit="'+(i+1)+'" transform="translate('+x+' 225)">'+meter+'</g>';
+      return '<g class="mf-flowmeter" data-circuit="'+(i+1)+'" transform="translate('+x+' 283)">'+meter+'</g>';
     }).join('');
     const displays=xs.map((x,i)=>{
       const loop=c.circuits[i];
