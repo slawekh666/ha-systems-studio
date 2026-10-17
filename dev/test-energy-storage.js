@@ -47,5 +47,5 @@ assert.match(warnSvg,/battery-warning" visibility="hidden"/);
 const alarmSvg=battery.render(node({mode:'manual',manual:{soc:19,power:0}}),null);
 assert.match(alarmSvg,/battery-warning" visibility="visible"/);
 const noData=battery.render(withHass,states({}));
-assert.match(noData,/SOC —/);assert.match(noData,/battery-segment-1" opacity=".16"/);
+assert.match(noData,/SOC —/);assert.match(noData,/battery-segment-1" opacity="0.16"/);
 console.log('Energy storage: SOC thresholds, BMS alarms, 4 segments, signed power and HA unknown values PASS');
