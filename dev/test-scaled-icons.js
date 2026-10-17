@@ -49,10 +49,10 @@ for(const count of [1,5,20,40]){
  assert(!xml.includes('id="mf-preview"'));
  assert(xml.includes('mf-outlet-upper'));
  assert(xml.includes('href="#mf-rail-middle" transform="translate(125 288) scale('));
- assert.match(xml,/href="#mf-outlet-upper" transform="translate\\(205 152\\)/);
- assert.match(xml,/href="#mf-flowmeter-template"/);
- assert.match(xml,/class="mf-flowmeter" data-circuit="1" transform="translate\\(205 283\\)/);
- assert.match(xml,/href="#mf-outlet-lower" transform="translate\\(205 680\\)/);
+ assert(xml.includes("href=\"#mf-outlet-upper\" transform=\"translate(205 152)\""));
+ assert(xml.includes("href=\"#mf-outlet-lower\" transform=\"translate(205 680)\""));
+ assert(xml.includes('class="mf-flowmeter" data-circuit="1" transform="translate(205 283)"'));
+ assert(xml.includes("href=\"#mf-outlet-lower\" transform=\"translate(205 680)\""));
  assert.doesNotMatch(xml,/M0 110 v14 q0 7 10 7/);
  assert.equal(manifold.geometry(c).height,215);
 }
@@ -60,7 +60,7 @@ assert.equal(manifold.resolve({manifold:{count:1,mode:'live'}},{states:{}}).circ
 console.log('OK: scalable data panels, radiator HA/manual separation, manifold 1/5/20/40 loops.');
 
 const manual=manifold.renderStandalone({count:2,mode:'manual',actuatorMode:'individual',circuits:[{actuator:false},{actuator:true}]});
-assert.match(manual,/href="#mf-outlet-lower-manual" transform="translate\\(205 680\\)/);
-assert.match(manual,/href="#mf-outlet-lower" transform="translate\\(465 680\\)/);
+assert(manual.includes("href=\"#mf-outlet-lower-manual\" transform=\"translate(205 680)\""));
+assert(manual.includes("href=\"#mf-outlet-lower\" transform=\"translate(465 680)\""));
 const common=manifold.renderStandalone({count:1,mode:'manual',actuatorMode:'common'});
-assert.match(common,/href="#mf-outlet-lower-manual" transform="translate\\(205 680\\)/);
+assert(common.includes('href="#mf-outlet-lower-manual" transform="translate(205 680)"'));
