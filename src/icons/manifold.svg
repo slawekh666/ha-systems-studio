@@ -54,7 +54,7 @@
     <circle cx="0" cy="0" r="7" fill="#c8dae9"/>
   </g>
   <g id="mf-outlet-lower">
-    <path d="M0 -31 V0" stroke="#9ca9b6" stroke-width="13" stroke-linecap="round"/>
+    <path d="M0 -22 V0" stroke="#9ca9b6" stroke-width="13" stroke-linecap="round"/>
     <circle cx="0" cy="0" r="7" fill="#c8dae9"/>
   </g>
 
@@ -72,6 +72,11 @@
     <path d="M-19 -3 H19" stroke="#ffcebd" stroke-opacity=".65" stroke-width="2"/>
   </g>
 
+  <!-- Longer straight stub for the manual valve, whose housing ends higher. -->
+  <g id="mf-outlet-lower-manual">
+    <path d="M0 -65 V0" stroke="#9ca9b6" stroke-width="13" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="7" fill="#c8dae9"/>
+  </g>
   <g id="mf-valve-manual">
     <path d="M-21 0 L-16 16 H16 L21 0Z" fill="url(#mf-steel)" stroke="#d4e1e9"/>
     <rect x="-11" y="15" width="22" height="30" rx="5" fill="url(#mf-steel)" stroke="#bbc9d6"/>
@@ -85,7 +90,6 @@
     <rect x="-27" y="75" width="54" height="13" fill="url(#mf-blue)"/>
     <rect x="-21" y="46" width="42" height="23" rx="7" fill="#daeaf6"/>
     <text x="0" y="63" fill="#1c496e" text-anchor="middle" font-size="9" font-weight="bold">24 V</text>
-    <path d="M0 110 v14 q0 7 10 7" fill="none" stroke="#3b536a" stroke-width="5"/>
   </g>
   <g id="mf-common-actuator">
     <path d="M-50 13 H42" stroke="#d6a85b" stroke-width="14" stroke-linecap="round"/>
@@ -117,42 +121,42 @@
 <!-- Visible 5-circuit editable reference preview. Runtime omits this group and assembles its own instances. -->
 <g id="mf-preview">
   <use href="#mf-title-template" transform="translate(725 0)"/>
-  <use href="#mf-rail-middle" transform="translate(125 230) scale(1200 1)"/>
+  <use href="#mf-rail-middle" transform="translate(125 288) scale(1200 1)"/>
   <use href="#mf-rail-middle" transform="translate(125 490) scale(1200 1)"/>
-  <use href="#mf-rail-start" transform="translate(125 230)"/>
-  <use href="#mf-rail-end" transform="translate(1325 230)"/>
+  <use href="#mf-rail-start" transform="translate(125 288)"/>
+  <use href="#mf-rail-end" transform="translate(1325 288)"/>
   <use href="#mf-rail-start" transform="translate(125 490)"/>
   <use href="#mf-rail-end" transform="translate(1325 490)"/>
-  <use href="#mf-supply-mark" transform="translate(125 230)"/>
+  <use href="#mf-supply-mark" transform="translate(125 288)"/>
   <use href="#mf-return-mark" transform="translate(125 490)"/>
   
-  <use href="#mf-outlet-upper" transform="translate(205 94)"/>
-  <use href="#mf-outlet-lower" transform="translate(205 710)"/>
-  <use href="#mf-flowmeter-template" transform="translate(205 225)"/>
+  <use href="#mf-outlet-upper" transform="translate(205 152)"/>
+  <use href="#mf-outlet-lower" transform="translate(205 680)"/>
+  <use href="#mf-flowmeter-template" transform="translate(205 283)"/>
   <use href="#mf-valve-actuator" transform="translate(205 548)"/>
   <use href="#mf-display-template" transform="translate(205 418)"/>
 
-  <use href="#mf-outlet-upper" transform="translate(465 94)"/>
-  <use href="#mf-outlet-lower" transform="translate(465 710)"/>
-  <use href="#mf-flowmeter-template" transform="translate(465 225)"/>
+  <use href="#mf-outlet-upper" transform="translate(465 152)"/>
+  <use href="#mf-outlet-lower" transform="translate(465 680)"/>
+  <use href="#mf-flowmeter-template" transform="translate(465 283)"/>
   <use href="#mf-valve-actuator" transform="translate(465 548)"/>
   <use href="#mf-display-template" transform="translate(465 418)"/>
 
-  <use href="#mf-outlet-upper" transform="translate(725 94)"/>
-  <use href="#mf-outlet-lower" transform="translate(725 710)"/>
-  <use href="#mf-flowmeter-template" transform="translate(725 225)"/>
+  <use href="#mf-outlet-upper" transform="translate(725 152)"/>
+  <use href="#mf-outlet-lower" transform="translate(725 680)"/>
+  <use href="#mf-flowmeter-template" transform="translate(725 283)"/>
   <use href="#mf-valve-actuator" transform="translate(725 548)"/>
   <use href="#mf-display-template" transform="translate(725 418)"/>
 
-  <use href="#mf-outlet-upper" transform="translate(985 94)"/>
-  <use href="#mf-outlet-lower" transform="translate(985 710)"/>
-  <use href="#mf-flowmeter-template" transform="translate(985 225)"/>
+  <use href="#mf-outlet-upper" transform="translate(985 152)"/>
+  <use href="#mf-outlet-lower" transform="translate(985 680)"/>
+  <use href="#mf-flowmeter-template" transform="translate(985 283)"/>
   <use href="#mf-valve-actuator" transform="translate(985 548)"/>
   <use href="#mf-display-template" transform="translate(985 418)"/>
 
-  <use href="#mf-outlet-upper" transform="translate(1245 94)"/>
-  <use href="#mf-outlet-lower" transform="translate(1245 710)"/>
-  <use href="#mf-flowmeter-template" transform="translate(1245 225)"/>
+  <use href="#mf-outlet-upper" transform="translate(1245 152)"/>
+  <use href="#mf-outlet-lower" transform="translate(1245 680)"/>
+  <use href="#mf-flowmeter-template" transform="translate(1245 283)"/>
   <use href="#mf-valve-actuator" transform="translate(1245 548)"/>
   <use href="#mf-display-template" transform="translate(1245 418)"/>
 </g>
