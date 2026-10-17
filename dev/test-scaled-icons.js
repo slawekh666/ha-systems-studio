@@ -48,7 +48,7 @@ for(const count of [1,5,20,40]){
  assert(xml.includes('href="#mf-rail-middle"'));
  assert(!xml.includes('id="mf-preview"'));
  assert(xml.includes('mf-outlet-upper'));
- assert.match(xml,/href="#mf-rail-middle" transform="translate\\(125 288\\)/);
+ assert.match(xml,/href="#mf-rail-middle" transform="translate\\(125 288\\) scale\\(/);
  assert.match(xml,/href="#mf-outlet-upper" transform="translate\\(205 152\\)/);
  assert.match(xml,/href="#mf-flowmeter-template"/);
  assert.match(xml,/class="mf-flowmeter" data-circuit="1" transform="translate\\(205 283\\)/);
