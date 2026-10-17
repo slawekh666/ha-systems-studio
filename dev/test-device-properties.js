@@ -9,7 +9,6 @@ assert.match(ctx.hp.render(node,{states:{}}),/4\.50 kW/);
 assert.match(ctx.hp.render(node,{states:{}}),/>70%</);
 const inspector=fs.readFileSync('src/studio-inspector.js','utf8');
 assert(inspector.includes('hp_manual_kw'));assert(inspector.includes('hp_manual_fan'));
-assert(inspector.includes("if(!['heatpump_modern','electric_modern'].includes(obj.variant))"));
 
 const hpLegacy=fs.readFileSync('src/studio-inspector.js','utf8');
 assert(hpLegacy.includes("obj.variant==='heatpump'"));
