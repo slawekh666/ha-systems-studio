@@ -13,7 +13,7 @@ const HASSStudioPowerGrid=(()=>{
   min_voltage:207,max_voltage:253});
  const normalize=(node)=>{
   const d=defaults(),raw=node?.power_grid||{},entities=raw.entities||{},manual=raw.manual||{};
-  return {...d,...raw,variant:node?.variant==='modern'||raw.variant==='modern'?'modern':'classic',
+  return {...d,...raw,variant:['modern','classic'].includes(node?.variant)?node.variant:(raw.variant==='modern'?'modern':'classic'),
    theme:['auto','light','dark'].includes(raw.theme)?raw.theme:'auto',
    panel_position:['left','right','bottom'].includes(raw.panel_position)?raw.panel_position:'right',
    panel_x:num(raw.panel_x,-250,250,0),panel_y:num(raw.panel_y,-250,250,0),
