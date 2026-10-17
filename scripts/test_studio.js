@@ -299,7 +299,7 @@ assert.match(src,/field\(L\.scale,'scale',obj\.scale/);
 assert.match(src,/field\(L\.solidWidth\+'\s*\('\+Math\.round\(obj\.width_scale\*100\)/);
 assert.match(src,/field\(L\.solidHeight\+'\s*\('\+Math\.round\(obj\.height_scale\*100\)/);
 assert.match(src,/obj\.type==='boiler'&&\['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'\]\.includes\(obj\.variant\)\)\{\n\s*\/\/ Independent from/);
-assert(src.includes('const outline=radiator?HASSStudioRadiator.geometry(node):manifold?HASSStudioManifold.geometry(node):powerGrid?HASSStudioPowerGrid.geometry(node)'));
+assert(src.includes('const outline=energyStorage?HASSStudioEnergyStorage.geometry(node):radiator?HASSStudioRadiator.geometry(node):manifold?HASSStudioManifold.geometry(node):powerGrid?HASSStudioPowerGrid.geometry(node)'));
 assert.match(src,/solidBoiler\?\{x:66/);
 assert(src.includes('const previewBox=(isRadiator||isManifold)?'));
 assert.match(src,/previewSolid\?\(\(66/);
