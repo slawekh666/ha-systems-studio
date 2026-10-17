@@ -83,7 +83,7 @@ const HASSStudioManifold=(()=>{
       '" rx="3" fill="#58baff" fill-opacity=".68"/>',
       '<rect x="-15" y="-104" width="30" height="77" rx="7" fill="url(#mf-glass)" stroke="#c0d7e5"/>',
       '<path d="M-8 -98 V-33" stroke="#fff" stroke-opacity=".6" stroke-width="3"/>',ticks,
-      '<text x="0" y="-119" text-anchor="middle" fill="#95dfff" font-size="13" font-weight="700">',
+      '<text x="0" y="-160" text-anchor="middle" fill="#95dfff" font-size="13" font-weight="700">',
       f(c.flow),' l/min</text>',
       '<rect x="-29" y="-7" width="58" height="17" rx="6" fill="url(#mf-red)" stroke="#f6a7a5"/>',
       '<path d="M-19 -3 H19" stroke="#ffcebd" stroke-opacity=".65" stroke-width="2"/></g>'
