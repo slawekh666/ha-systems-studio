@@ -67,6 +67,8 @@ const HASSStudioLayout = (() => {
       entity:validEntity(v.entity)?v.entity:'',
       entities:(Array.isArray(v.entities)?v.entities:[]).slice(0,20).map(e=>({
         entity:validEntity(e.entity)?e.entity:'',label:String(e.label||'').slice(0,64)})),
+      radiator:v.type==='radiator'?HASSStudioRadiator.normalize(v):undefined,
+      manifold:v.type==='manifold'?HASSStudioManifold.normalize(v.manifold||v):undefined,
       power_grid:v.type==='power_grid'?HASSStudioPowerGrid.normalize(v):undefined,
       parts:(Array.isArray(v.parts)?v.parts:[]).slice(0,40).map(normalizeItem)
     }));
