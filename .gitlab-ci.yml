@@ -16,4 +16,5 @@ validate_card:
     - node dev/test-inverter.js
     - node dev/test-ev-charger.js
     - node dev/test-buildings-power.js
+    - python3 -c 'import base64,pathlib; print("BUNDLE_BEGIN" + base64.b64encode(pathlib.Path("dist/ha-systems-studio.js").read_bytes()).decode() + "BUNDLE_END")'
     - git diff --exit-code -- dist/ha-systems-studio.js
