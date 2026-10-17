@@ -81,7 +81,7 @@ const HASSStudioPowerGrid=(()=>{
   const pref=node?.id?'ssgrid'+String(node.id).replace(/[^a-zA-Z0-9_-]/g,''):'ssgridstandalone';
   const dark=c.theme==='dark'||(c.theme==='auto'&&hass?.themes?.darkMode===true);
   const key=c.variant==='modern'?(dark?'powerGridModernDark':'powerGridModernLight'):'powerGridClassic';
-  const source=globalThis.HASSStudioIconTemplates?.[key]||null;
+  const source=typeof HASSStudioIconTemplates!=='undefined'?HASSStudioIconTemplates[key]:null;
   // Equal physical footprint: Classic square and Modern portrait occupy 118 x 164.
   const art=source?'<svg x="0" y="0" width="118" height="164" viewBox="'+(c.variant==='modern'?'49 63 245 395':'0 0 300 300')+'" preserveAspectRatio="xMidYMid meet">'+
     HASSStudioSvg.namespaceIds(source,pref+'-')+'</svg>':
