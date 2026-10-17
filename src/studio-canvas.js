@@ -96,6 +96,17 @@ const HASSStudioCanvas = (() => {
     const pipes=data.pipes.map(pipe=>{
       const d=pipePath(pipe.points),powerVisual=HASSStudioPowerFlow.visual(pipe,hass);
       const enabled=powerVisual?powerVisual.active&&pipe.flow_mode!=='off':HASSStudioAnimation.flowActive(pipe.flow_mode,hass,pipe.flow_entity);
+      const motionArrows=()=>{
+        if(!powerVisual||!enabled||powerVisual.pattern!=='arrows')return '';
+        const pts=powerVisual.direction==='reverse'?[...pipe.points].reverse():pipe.points;
+        const track=pipePath(pts),s=powerVisual.size,half=+(s*.52).toFixed(2);
+        const arrow='<path d="M'+(-s)+' '+(-half)+' L0 0 L'+(-s)+' '+half+
+          '" fill="none" stroke="#fff" stroke-width="'+powerVisual.width+
+          '" stroke-linecap="round" stroke-linejoin="round"/>';
+        return [0,1,2].map(i=>'<g class="ss-power-arrow">'+arrow+
+          '<animateMotion path="'+track+'" dur="'+pipe.flow_speed+
+          's" begin="'+(-i*pipe.flow_speed/3).toFixed(3)+'s" repeatCount="indefinite" rotate="auto"/></g>').join('');
+      };
       const endcap=(first)=>{
         if(first&&pipe.cap_start===false||!first&&pipe.cap_end===false)return '';
         const pts=pipe.points,at=first?pts[0]:pts[pts.length-1],near=first?pts[1]:pts[pts.length-2];
@@ -106,9 +117,9 @@ const HASSStudioCanvas = (() => {
       return '<g class="ss-pipe" data-id="'+esc(pipe.id)+'"><path class="ss-pipe-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="#142332" stroke-width="'+(pipe.width+3)+'" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="'+colors[pipe.color]+'" stroke-width="'+pipe.width+'" fill="none"/>'+
-        (enabled?'<path class="ss-line ss-flow'+(powerVisual?' ss-flow-power ss-flow-'+powerVisual.pattern:'')+'" d="'+d+'"'+
+        (enabled&&powerVisual?.pattern==='arrows'?motionArrows():enabled?'<path class="ss-line ss-flow'+(powerVisual?' ss-flow-power ss-flow-'+powerVisual.pattern:'')+'" d="'+d+'"'+
           (powerVisual?' stroke-width="'+powerVisual.width+'" stroke-dasharray="'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:powerVisual.pattern==='dashes'?(powerVisual.size*2)+' '+powerVisual.interval:(powerVisual.size*3)+' '+powerVisual.interval)+'"':'')+
-          ' style="--ss-speed:'+pipe.flow_speed+'s;'+(powerVisual?HASSStudioPowerFlow.style(powerVisual):'animation-direction:'+pipe.flow_direction)+'"/>':'')+
+          ' style="--ss-speed:'+pipe.flow_speed+'s;'+(powerVisual?HASSStudioPowerFlow.style(powerVisual)+';stroke-width:'+powerVisual.width+';stroke-dasharray:'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:(powerVisual.size*2)+' '+powerVisual.interval):'animation-direction:'+pipe.flow_direction)+'"/>':'')+
         endcap(true)+endcap(false)+'</g>';
     }).join('');
     const accessories=data.pipes.map(pipe=>pipe.accessories.map(item=>symbolOnPipe(item,pipe,hass,language)).join('')).join('');

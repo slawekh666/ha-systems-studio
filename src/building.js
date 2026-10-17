@@ -33,7 +33,7 @@ const HASSStudioBuilding=(()=>{
   if(!d.c.window_glow||d.power===null||d.power===0){
     if(type==='house')graphic=graphic.replace('<g id="home-light">','<g id="home-light" opacity=".10">');
   }
-  const text=x=>HASSStudioSvg.escapeXml(x);
+  const text=x=>String(x).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));
   const label=d.power===null?'—':d.power.toFixed(d.power<10?2:1)+' kW';
   const daily=d.daily===null?'':'<text x="150" y="278" text-anchor="middle" font-size="15" fill="#9ecfe9">'+text(d.daily.toFixed(1)+' kWh / dzień')+'</text>';
   const box=d.c.show_readout?'<g id="building-readout" transform="translate(150 262) scale('+d.c.readout_scale+') translate(-150 -262)">'+
