@@ -20,7 +20,7 @@
 <path d="M98 61 V207" stroke="#64f6b8" stroke-width="2"/>
 <path d="M189 61 V207" stroke="#43efad" stroke-width="4" opacity=".5" filter="url(#ev-glow)"/>
 <path d="M189 61 V207" stroke="#64f6b8" stroke-width="2"/></g>
-<g id="ev-charger-display"><g id="ev-bolt" transform="translate(37 6) scale(.74)"><path d="M148 69 L126 109 H144 L133 140 L164 98 H147 L161 69 Z" fill="url(#ev-green)" stroke="#d9ffe7" stroke-width="1.4"/>
+<g id="ev-charger-display"><g id="ev-bolt" transform="translate(72 27) scale(.48)"><path d="M148 69 L126 109 H144 L133 140 L164 98 H147 L161 69 Z" fill="url(#ev-green)" stroke="#d9ffe7" stroke-width="1.4"/>
 <path d="M148 69 L126 109 H144 L133 140 L164 98 H147 L161 69 Z" fill="#60f6ad" opacity=".4" filter="url(#ev-glow)"/></g>
 <text id="ev-power-text" x="145" y="116" text-anchor="middle" fill="#a9ffdf" font-family="Arial,sans-serif" font-size="16" font-weight="bold">—</text>
 <text x="145" y="128" text-anchor="middle" fill="#9dd4dc" font-family="Arial,sans-serif" font-size="7.6">SESJA</text>
