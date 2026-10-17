@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300" role="img" aria-label="Ładowarka pojazdu elektrycznego">
+<defs>
+    <linearGradient id="ev-metal" x1="0" y1="0" x2="1" y2=".92"><stop stop-color="#f5faff"/><stop offset=".29" stop-color="#c6d6ed"/><stop offset=".6" stop-color="#e8f1ff"/><stop offset="1" stop-color="#6f82a5"/></linearGradient>
+    <linearGradient id="ev-metal-dark" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#596985"/><stop offset=".35" stop-color="#283854"/><stop offset="1" stop-color="#11192e"/></linearGradient>
+    <linearGradient id="ev-glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#213f68"/><stop offset=".42" stop-color="#101d37"/><stop offset="1" stop-color="#071324"/></linearGradient>
+    <linearGradient id="ev-blue" x1="0" y1="0" x2=".9" y2="1"><stop stop-color="#a1f7ff"/><stop offset=".25" stop-color="#39c6ff"/><stop offset=".7" stop-color="#145ee0"/><stop offset="1" stop-color="#153883"/></linearGradient>
+    <linearGradient id="ev-green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#bbffd5"/><stop offset=".24" stop-color="#6af7a0"/><stop offset=".75" stop-color="#12a96a"/><stop offset="1" stop-color="#075c5c"/></linearGradient>
+    <linearGradient id="ev-orange" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffef8d"/><stop offset=".28" stop-color="#ffc448"/><stop offset=".66" stop-color="#ff7c32"/><stop offset="1" stop-color="#f23a46"/></linearGradient>
+    <linearGradient id="ev-roof" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#5d708e"/><stop offset=".5" stop-color="#2c3b57"/><stop offset="1" stop-color="#152039"/></linearGradient>
+    <filter id="ev-glow" x="-65%" y="-65%" width="230%" height="230%"><feGaussianBlur stdDeviation="4"/></filter>
+    <filter id="ev-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
+    </defs>
+<!-- Named, editable graphic layers and bound data groups. -->
+<style>@keyframes ss-ev-charge{0%,100%{opacity:1}50%{opacity:.45}}.ss-ev-charging{animation:ss-ev-charge 1.6s ease-in-out infinite}@media(prefers-reduced-motion:reduce){.ss-ev-charging{animation:none}}</style>
+
+<g id="ev-charger-case"><rect x="87" y="31" width="114" height="208" rx="22" fill="url(#ev-metal-dark)" stroke="#57e8a6" stroke-width="3"/>
+<rect x="94" y="39" width="100" height="192" rx="17" fill="url(#ev-metal)" stroke="#f0fbff" stroke-width="1.7"/>
+<rect x="104" y="51" width="81" height="109" rx="10" fill="url(#ev-glass)" stroke="#40d2a4" stroke-width="2"/>
+<path d="M98 61 V207" stroke="#43efad" stroke-width="4" opacity=".5" filter="url(#ev-glow)"/>
+<path d="M98 61 V207" stroke="#64f6b8" stroke-width="2"/>
+<path d="M189 61 V207" stroke="#43efad" stroke-width="4" opacity=".5" filter="url(#ev-glow)"/>
+<path d="M189 61 V207" stroke="#64f6b8" stroke-width="2"/></g>
+<g id="ev-charger-display"><g id="ev-bolt" transform="translate(37 6) scale(.74)"><path d="M148 69 L126 109 H144 L133 140 L164 98 H147 L161 69 Z" fill="url(#ev-green)" stroke="#d9ffe7" stroke-width="1.4"/>
+<path d="M148 69 L126 109 H144 L133 140 L164 98 H147 L161 69 Z" fill="#60f6ad" opacity=".4" filter="url(#ev-glow)"/></g>
+<text id="ev-power-text" x="145" y="116" text-anchor="middle" fill="#a9ffdf" font-family="Arial,sans-serif" font-size="16" font-weight="bold">—</text>
+<text x="145" y="128" text-anchor="middle" fill="#9dd4dc" font-family="Arial,sans-serif" font-size="7.6">SESJA</text>
+<text id="ev-session-text" x="145" y="145" text-anchor="middle" fill="#e3fbff" font-family="Arial,sans-serif" font-size="12" font-weight="bold">—</text>
+<circle id="ev-led-glow" cx="145" cy="182" r="10" fill="#102b35" stroke="#41d99b" stroke-width="3"/><path id="ev-status-glyph" d="M145 175 V184" stroke="#caffde" stroke-width="2.3" stroke-linecap="round"/><path d="M139 177 A8 8 0 1 0 152 177" fill="none" stroke="#caffde" stroke-width="2"/></g>
+<g id="ev-status-ring"><circle id="ev-led" cx="145" cy="182" r="6" fill="#54dfa0" opacity=".38"/></g>
+<g id="ev-alarm" visibility="hidden"><path d="M177 178 l9 16 h-18Z" fill="#f04444"/><text x="177" y="191" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="white">!</text></g>
+<g id="ev-charging-cable"><path d="M201 169 C245 164 260 186 249 219 C241 242 213 235 212 208 V170" stroke="#142039" stroke-width="11" fill="none" stroke-linecap="round"/>
+<path d="M201 169 C245 164 260 186 249 219 C241 242 213 235 212 208 V170" stroke="#5a768b" stroke-width="3" fill="none" opacity=".7"/>
+<rect x="204" y="143" width="18" height="38" rx="5" fill="url(#ev-metal-dark)" stroke="#72e3b9" stroke-width="1.5"/>
+<path d="M209 143 V134 M217 143 V134" stroke="#e2edfa" stroke-width="3" stroke-linecap="round"/></g>
+<g id="ev-feet"><rect x="108" y="234" width="74" height="17" rx="4" fill="#283751" stroke="#66a9cf" stroke-width="1.2"/></g>
+</svg>
