@@ -3185,7 +3185,9 @@ const HASSStudioViewerGestures=(()=>{
       // Without a drag, do not interfere with native data-more -> hass-more-info.
     };
     const onWheel=event=>{
-      if(!viewInPath(event)||!fullscreen())return;
+      if(!viewInPath(event))return;
+      // Normal view: Shift+wheel only. Fullscreen retains its existing wheel gesture.
+      if(!fullscreen()&&!event.shiftKey)return;
       event.preventDefault();zoom(event.deltaY<0?1.15:1/1.15,event);
     };
     const startTracking=()=>{
