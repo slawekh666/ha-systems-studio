@@ -90,6 +90,7 @@ const HASSStudioEditorInspector = (() => {
           }
         }
         markup+='<div class="ss-row">'+field('X','x',obj.x,'number')+field('Y','y',obj.y,'number')+'</div>';
+        if(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant))markup+=field('Skala panelu z tekstem (%)','readout_scale',Math.round((obj.readout_scale||1)*100),'range',null,'min="40" max="150" step="5"');
 
         if(isRadiator){
           const c=obj.radiator||HASSStudioRadiator.defaults();
