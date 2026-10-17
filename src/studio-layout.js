@@ -50,7 +50,7 @@ const HASSStudioLayout = (() => {
       solid_state:['auto','burning','embers','off'].includes(v.solid_state)?v.solid_state:'auto',
       solid_glow:clamp(v.solid_glow,0,100,78),
       hp_power_entity:validEntity(v.hp_power_entity)?v.hp_power_entity:'',hp_fan_entity:validEntity(v.hp_fan_entity)?v.hp_fan_entity:'',
-      hp_max_rpm:clamp(v.hp_max_rpm,100,20000,1800),hp_glow:clamp(v.hp_glow,0,100,65),
+      hp_max_rpm:clamp(v.hp_max_rpm,100,20000,1800),hp_glow:clamp(v.hp_glow,0,100,65),hp_test_mode:v.hp_test_mode===true,hp_manual_kw:clamp(v.hp_manual_kw,0,500,0),hp_manual_fan:clamp(v.hp_manual_fan,0,100,0),
       gas_draw_entity:validEntity(v.gas_draw_entity)?v.gas_draw_entity:'',gas_glow:clamp(v.gas_glow,0,100,62),
       electric_power_entity:validEntity(v.electric_power_entity)?v.electric_power_entity:'',
       electric_load_entity:validEntity(v.electric_load_entity)?v.electric_load_entity:'',

@@ -30,8 +30,10 @@ const HASSStudioHeatPump = (()=>{
       labelY:cy+(base.labelY-cy)*sy,centerX:cx,centerY:cy,sx,sy};
   };
   const render=(node,hass)=>{
-    const kw=power(hass,node.hp_power_entity);
-    const speed=fan(hass,node.hp_fan_entity,node.hp_max_rpm);
+    const manual=node.hp_test_mode===true;
+    const kw=manual?clamp(node.hp_manual_kw,0,500,0):power(hass,node.hp_power_entity);
+    const fanPct=manual?clamp(node.hp_manual_fan,0,100,0):null;
+    const speed=manual?{percent:fanPct,label:Math.round(fanPct)+'%',unit:'%'}:fan(hass,node.hp_fan_entity,node.hp_max_rpm);
     const pct=speed?.percent??0, powered=pct>0;
     const kwLabel=kw===null?'—':(kw>=10?kw.toFixed(1):kw.toFixed(2))+' kW';
     const percentLabel=speed===null?'—':speed.label;
