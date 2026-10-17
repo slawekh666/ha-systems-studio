@@ -91,6 +91,7 @@ def build() -> None:
         'fireplace': 'fireplace',
         'radiator':'radiator',
         'manifold':'manifold',
+        'energyStorage':'energy-storage',
         'powerGridClassic':'power-grid-classic',
         'powerGridModernLight':'power-grid-modern-light',
         'powerGridModernDark':'power-grid-modern-dark',
@@ -119,7 +120,7 @@ def build() -> None:
         'ha-state.js', 'animation-state.js',
         'warmwasser-shapes.js', 'studio-tank.js', 'svg-template.js',
         'solid-fuel-stove.js', 'pellet-stove.js', 'heat-pump-stove.js',
-        'gas-boiler.js', 'electric-boiler.js', 'fireplace.js', 'readout-scale.js', 'power-grid.js', 'radiator.js', 'manifold.js',
+        'gas-boiler.js', 'electric-boiler.js', 'fireplace.js', 'readout-scale.js', 'power-grid.js', 'radiator.js', 'manifold.js', 'energy-storage.js',
         'device-registry.js', 'studio-viewport.js', 'studio-viewer-gestures.js', 'studio-layout.js', 'studio-canvas.js',
         'studio-inspector.js', 'studio-library.js', 'studio-custom.js',
     )
