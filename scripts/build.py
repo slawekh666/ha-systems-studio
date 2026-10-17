@@ -89,6 +89,9 @@ def build() -> None:
         'gasBoiler': 'gas-boiler',
         'electricBoiler': 'electric-boiler',
         'fireplace': 'fireplace',
+        'powerGridClassic':'power-grid-classic',
+        'powerGridModernLight':'power-grid-modern-light',
+        'powerGridModernDark':'power-grid-modern-dark',
     }
     assets = []
     for key, name in names.items():
@@ -114,7 +117,7 @@ def build() -> None:
         'ha-state.js', 'animation-state.js',
         'warmwasser-shapes.js', 'studio-tank.js', 'svg-template.js',
         'solid-fuel-stove.js', 'pellet-stove.js', 'heat-pump-stove.js',
-        'gas-boiler.js', 'electric-boiler.js', 'fireplace.js',
+        'gas-boiler.js', 'electric-boiler.js', 'fireplace.js', 'power-grid.js',
         'device-registry.js', 'studio-viewport.js', 'studio-viewer-gestures.js', 'studio-layout.js', 'studio-canvas.js',
         'studio-inspector.js', 'studio-library.js', 'studio-custom.js',
     )

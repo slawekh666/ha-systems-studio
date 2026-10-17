@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rozdzielacz CO — prototyp SVG+JS</title>
+<style>
+:root{color-scheme:dark;font-family:Arial,Helvetica,sans-serif;background:#06101e;color:#e3f0ff}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 50% 10%,#153552 0%,#071523 55%,#030811 100%)}
+header{padding:18px 22px;border-bottom:1px solid #29415c;background:#0a1a2a}
+h1{font-size:20px;margin:0 0 5px}small,.muted{color:#a4c0d9}
+main{display:grid;grid-template-columns:310px minmax(0,1fr);min-height:calc(100vh - 75px)}
+aside{padding:18px;background:#0c1c2e;border-right:1px solid #31506e}
+fieldset{border:1px solid #355674;border-radius:11px;margin:0 0 15px;padding:14px;min-width:0}
+legend{padding:0 6px;font-size:14px;font-weight:bold;color:#a7ddff}
+label{display:block;font-size:13px;margin:11px 0 5px}
+input[type=number],select,button{width:100%;min-height:36px;padding:6px 9px;border:1px solid #3d6687;border-radius:8px;background:#122b43;color:#f1f8ff;font:inherit}
+input[type=range]{width:100%}
+button{cursor:pointer}button:hover{background:#245175}
+.row{display:flex;gap:8px;align-items:center}.row input{flex:1;min-width:0}
+.row button{width:39px;flex:none}
+.check{display:flex;align-items:center;gap:10px;margin:8px 0}
+.check input{accent-color:#52b7ff}
+#sectionList{max-height:340px;overflow:auto}
+.section{background:#11283c;border:1px solid #2a4b66;padding:8px 11px;border-radius:8px;margin:7px 0}
+.section-title{font-size:12px;font-weight:bold;color:#abdfff;margin-bottom:7px}
+.section .check{font-size:12px}
+.preview{min-width:0;overflow:hidden;padding:16px;display:flex;flex-direction:column;gap:10px}
+.headline{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+#stage{flex:1;min-height:520px;overflow:auto;background:radial-gradient(ellipse,#173550 0%,#071522 55%,#020810 100%);border:1px solid #284b6b;border-radius:13px;padding:8px}
+#stage svg{display:block;height:auto;max-width:none;margin:0 auto}
+#status{font-size:12px;color:#a9d3ef}
+@media(max-width:820px){main{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid #31506e}#stage{min-height:370px}}
+</style>
+</head>
+<body>
+<header><h1>Rozdzielacz CO / podłogówki — SVG+JS</h1><small>Samodzielny prototyp na gałęzi ikon. Wartości są wyłącznie demonstracyjne; brak integracji z HA i brak automatycznych rur.</small></header>
+<main>
+<aside>
+<fieldset>
+<legend>Geometria</legend>
+<label for="count">Liczba obiegów (1–40)</label>
+<div class="row"><button type="button" id="minus">−</button><input id="count" type="number" min="1" max="40" step="1" value="5"><button type="button" id="plus">+</button></div>
+<label for="pitch">Rozstaw sekcji: <output id="pitchLabel">205</output> jednostek</label>
+<input id="pitch" type="range" min="165" max="300" step="5" value="205">
+<label for="zoom">Skala podglądu: <output id="zoomLabel">60</output>%</label>
+<input id="zoom" type="range" min="20" max="125" step="5" value="60">
+</fieldset>
+<fieldset>
+<legend>Siłowniki</legend>
+<label for="actuatorMode">Sposób montażu</label>
+<select id="actuatorMode">
+<option value="individual">Osobny dla każdego obiegu</option>
+<option value="common">Jeden wspólny na zaworze głównym</option>
+</select>
+<p class="muted" style="font-size:12px">Wspólny siłownik w tym prototypie oznacza zawór główny, nie indywidualną regulację poszczególnych pętli.</p>
+</fieldset>
+<fieldset>
+<legend>Każda sekcja niezależnie</legend>
+<div class="row"><button type="button" id="allDisplays">Pokaż wszystkie odczyty</button><button type="button" id="noDisplays">Ukryj wszystkie</button></div>
+<div id="sectionList"></div>
+</fieldset>
+<button type="button" id="reset">Przywróć ustawienia domyślne</button>
+</aside>
+<section class="preview">
+<div class="headline"><strong>Podgląd geometrii wektorowej</strong><span id="status">5 obiegów</span></div>
+<div id="stage" aria-label="Podgląd rozdzielacza SVG"></div>
+<div class="muted" style="font-size:12px">Dla 20 obiegów przewijaj schemat poziomo. Zmiana liczby sekcji zachowuje ustawienia istniejących obiegów. Wyświetlacze można ukrywać pojedynczo.</div>
+</section>
+</main>
+<script src="./manifold-prototype.js"></script>
+<script>
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id),api=HASSStudioManifoldPrototype;
+let state={count:5,pitch:205,actuatorMode:'individual',circuits:Array.from({length:5},(_,i)=>api.defaultCircuit(i))};
+const cache=new Map(state.circuits.map((c,i)=>[i,c]));
+const ensure=()=>{
+ const count=Math.round(Math.max(1,Math.min(api.MAX_CIRCUITS,Number($('count').value)||1)));
+ state.count=count;$('count').value=count;
+ state.circuits=Array.from({length:count},(_,i)=>{
+   if(!cache.has(i))cache.set(i,api.defaultCircuit(i));
+   return cache.get(i);
+ });
+};
+const draw=()=>{
+ ensure();
+ state.pitch=Number($('pitch').value);state.actuatorMode=$('actuatorMode').value;
+ const svg=api.render(state),scale=Number($('zoom').value)/100;
+ $('stage').innerHTML=svg;
+ const el=$('stage').querySelector('svg'),g=api.geometry(state);
+ el.setAttribute('width',Math.round(g.width*scale));
+ el.setAttribute('height',Math.round(g.height*scale));
+ el.style.width=Math.round(g.width*scale)+'px';el.style.height=Math.round(g.height*scale)+'px';
+ $('pitchLabel').textContent=state.pitch;$('zoomLabel').textContent=Math.round(scale*100);
+ $('status').textContent=state.count+' obiegów | '+g.width+' × '+g.height+' | SVG';
+};
+const sections=()=>{
+ ensure();
+ $('sectionList').innerHTML=state.circuits.map((c,i)=>
+ '<div class="section"><div class="section-title">OBIEG '+(i+1)+'</div>'+
+ '<label class="check"><input data-index="'+i+'" data-key="display" type="checkbox" '+(c.display?'checked':'')+'> Wyświetlacz pomiarów</label>'+
+ '<label class="check"><input data-index="'+i+'" data-key="actuator" type="checkbox" '+(c.actuator?'checked':'')+
+ ($('actuatorMode').value==='common'?' disabled':'')+'> Siłownik indywidualny</label></div>'
+ ).join('');
+};
+$('count').addEventListener('change',()=>{sections();draw();});
+$('minus').addEventListener('click',()=>{$('count').value=Number($('count').value)-1;sections();draw();});
+$('plus').addEventListener('click',()=>{$('count').value=Number($('count').value)+1;sections();draw();});
+$('pitch').addEventListener('input',draw);
+$('zoom').addEventListener('input',draw);
+$('actuatorMode').addEventListener('change',()=>{sections();draw();});
+$('sectionList').addEventListener('change',e=>{
+ const t=e.target,i=Number(t.dataset.index),key=t.dataset.key;
+ if(!Number.isInteger(i)||!state.circuits[i]||!['display','actuator'].includes(key))return;
+ state.circuits[i][key]=t.checked;draw();
+});
+$('allDisplays').addEventListener('click',()=>{
+ state.circuits.forEach(c=>c.display=true);sections();draw();
+});
+$('noDisplays').addEventListener('click',()=>{
+ state.circuits.forEach(c=>c.display=false);sections();draw();
+});
+$('reset').addEventListener('click',()=>{
+ cache.clear();$('count').value=5;$('pitch').value=205;$('zoom').value=60;
+ $('actuatorMode').value='individual';sections();draw();
+});
+window.manifoldPreviewAPI={getState:()=>JSON.parse(JSON.stringify(state)),
+ setCircuitCount:n=>{$('count').value=n;sections();draw();},
+ setCircuitData:(index,values)=>{
+  const i=Math.round(Number(index));if(i<0||i>=api.MAX_CIRCUITS)return;
+  if(!cache.has(i))cache.set(i,api.defaultCircuit(i));
+  Object.assign(cache.get(i),values);if(i>=state.count)$('count').value=i+1;
+  sections();draw();
+ }};
+sections();draw();
+})();
+</script>
+</body>
+</html>

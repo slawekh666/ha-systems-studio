@@ -10,7 +10,7 @@ const legacy={
   tank:'modular stratified buffer coil dual_coil hygiene combi',
   solar:'flat tube',pump:'circulation inline',valve:'two_way three_way',sensor:'temperature pressure'
 };
-assert.equal(Array.from(registry.listTypes()).join(' '),'boiler tank solar pump valve sensor pipe');
+assert.equal(Array.from(registry.listTypes()).join(' '),'boiler tank solar pump valve sensor power_grid pipe');
 for(const [type,variants] of Object.entries(legacy)){
   assert.equal(registry.variantsFor(type).map(item=>item.id).join(' '),variants);
   for(const variant of variants.split(' ')){
@@ -299,9 +299,9 @@ assert.match(src,/field\(L\.scale,'scale',obj\.scale/);
 assert.match(src,/field\(L\.solidWidth\+'\s*\('\+Math\.round\(obj\.width_scale\*100\)/);
 assert.match(src,/field\(L\.solidHeight\+'\s*\('\+Math\.round\(obj\.height_scale\*100\)/);
 assert.match(src,/obj\.type==='boiler'&&\['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'\]\.includes\(obj\.variant\)\)\{\n\s*\/\/ Independent from/);
-assert.match(src,/const outline=modernFireplace\?HASSStudioFireplace\.geometry\(node\):modernElectric\?HASSStudioElectricBoiler\.geometry\(node\):/);
+assert.match(src,/const outline=powerGrid\?HASSStudioPowerGrid\.geometry\(node\):modernFireplace\?HASSStudioFireplace\.geometry\(node\):modernElectric\?HASSStudioElectricBoiler\.geometry\(node\):/);
 assert.match(src,/solidBoiler\?\{x:66/);
-assert.match(src,/const previewBox=previewFireplace\?/);
+assert.match(src,/const previewBox=isGrid\?/);
 assert.match(src,/previewSolid\?\(\(66/);
 console.log('OK: independent solid-fuel dimensions, proportional scale retained, responsive outline and preview.');
 

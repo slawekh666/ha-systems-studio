@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300" role="img" aria-label="Sieć energetyczna">
+<defs>
+    <linearGradient id="grid-metal" x1="0" y1="0" x2="1" y2=".92"><stop stop-color="#f5faff"/><stop offset=".29" stop-color="#c6d6ed"/><stop offset=".6" stop-color="#e8f1ff"/><stop offset="1" stop-color="#6f82a5"/></linearGradient>
+    <linearGradient id="grid-metal-dark" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#596985"/><stop offset=".35" stop-color="#283854"/><stop offset="1" stop-color="#11192e"/></linearGradient>
+    <linearGradient id="grid-glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#213f68"/><stop offset=".42" stop-color="#101d37"/><stop offset="1" stop-color="#071324"/></linearGradient>
+    <linearGradient id="grid-blue" x1="0" y1="0" x2=".9" y2="1"><stop stop-color="#a1f7ff"/><stop offset=".25" stop-color="#39c6ff"/><stop offset=".7" stop-color="#145ee0"/><stop offset="1" stop-color="#153883"/></linearGradient>
+    <linearGradient id="grid-green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#bbffd5"/><stop offset=".24" stop-color="#6af7a0"/><stop offset=".75" stop-color="#12a96a"/><stop offset="1" stop-color="#075c5c"/></linearGradient>
+    <linearGradient id="grid-orange" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffef8d"/><stop offset=".28" stop-color="#ffc448"/><stop offset=".66" stop-color="#ff7c32"/><stop offset="1" stop-color="#f23a46"/></linearGradient>
+    <linearGradient id="grid-roof" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#5d708e"/><stop offset=".5" stop-color="#2c3b57"/><stop offset="1" stop-color="#152039"/></linearGradient>
+    <filter id="grid-glow" x="-65%" y="-65%" width="230%" height="230%"><feGaussianBlur stdDeviation="4"/></filter>
+    <filter id="grid-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
+    </defs>
+<!-- Individual visible groups are named for future Home Assistant entity and animation bindings -->
+
+<g id="grid-tower-frame" fill="none" stroke-linejoin="round" stroke-linecap="round">
+<path d="M150 31 L107 246 H193 Z" stroke="#6abfff" opacity=".22" stroke-width="9" filter="url(#grid-glow)"/>
+<path d="M150 31 L107 246 H193 Z" stroke="url(#grid-metal)" stroke-width="7"/>
+<path d="M121 245 H179" stroke="#e1f3ff" stroke-opacity=".56" stroke-width="2"/>
+<path d="M111 246 H189" stroke="#5daeff" stroke-width="1.5"/>
+<path d="M129 142 L171 142 M118 198 L182 198 M139 89 L161 89" stroke="#7399c7" stroke-width="6"/>
+<path d="M131 139 L173 195 M169 139 L126 195 M135 89 L170 139 M165 89 L130 139 M123 200 L179 240 M177 200 L117 240" stroke="#90a9cb" stroke-width="3.8"/>
+<path d="M104 246 H196" stroke="#7bb4dc" stroke-width="8"/>
+</g><g id="grid-crossarms" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<path d="M84 94 H216 L150 56 Z" stroke="#bad3eb" stroke-width="6"/>
+<path d="M78 147 H222 L150 115 Z" stroke="#9eb9d4" stroke-width="6"/>
+<path d="M91 113 H209 M88 165 H212" stroke="#607da8" stroke-width="3"/>
+<path d="M149 33 V246" stroke="#acc2d9" stroke-width="4" opacity=".9"/>
+</g><g id="grid-insulators" fill="#48ceff" stroke="#aeeeff" stroke-width="1">
+<rect x="90" y="95" width="6" height="20" rx="2"/><rect x="204" y="95" width="6" height="20" rx="2"/>
+<rect x="82" y="148" width="6" height="21" rx="2"/><rect x="212" y="148" width="6" height="21" rx="2"/>
+</g><g id="grid-cap"><circle cx="150" cy="30" r="4" fill="#74d9ff"/></g>
+</svg>
