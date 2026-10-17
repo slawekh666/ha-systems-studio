@@ -9,6 +9,7 @@ vm.runInContext('this.scale=HASSStudioReadoutScale;this.radiator=HASSStudioRadia
 const box=ctx.scale.box(10,20,100,50,.5,10,20);
 assert.equal(box.width,50);assert.equal(box.height,25);
 assert.equal(ctx.scale.factor(100),1.5);
+assert.match(ctx.scale.namedGroup('<g id="p-tempGroup"><text>55</text></g>','tempGroup',10,20,.6),/transform="translate\(10 20\) scale\(0.6\)/);
 assert.equal(ctx.scale.factor(.1),.4);
 assert.equal(ctx.scale.around(80,90,.6),'translate(80 90) scale(0.6) translate(-80 -90)');
 const radiator=ctx.radiator;
