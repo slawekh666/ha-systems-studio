@@ -1,0 +1,76 @@
+<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Power Grid — SVG+JS visual preview</title><style>
+:root{font-family:system-ui,Arial,sans-serif;color-scheme:dark;background:#07111c;color:#e7f0fa}*{box-sizing:border-box}
+body{margin:0}header{padding:14px 22px;background:#102235;border-bottom:1px solid #3b536c}h1{margin:0;font-size:21px}
+main{display:grid;grid-template-columns:340px minmax(0,1fr);min-height:calc(100vh - 60px)}
+aside{padding:16px;background:#0d2032;overflow-y:auto;max-height:calc(100vh - 60px)}
+fieldset{margin:0 0 12px;border:1px solid #405b75;border-radius:9px;padding:12px}
+legend{color:#99d7ff;font-weight:700;font-size:13px}label{display:block;margin:8px 0 4px;font-size:12px}
+input,select{width:100%;padding:7px;border-radius:7px;background:#122d44;border:1px solid #446684;color:#ecf5ff}
+input[type=checkbox]{width:auto;margin-right:7px;accent-color:#47aeff}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:8px}.frow3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+button{padding:8px 10px;border:1px solid #446684;background:#183d58;color:white;border-radius:6px;cursor:pointer}
+.preview{padding:22px;min-width:0;overflow:auto;background:radial-gradient(ellipse,#183650,#081321 63%);}
+#stage{min-height:550px;display:grid;place-items:center;overflow:auto;border:1px solid #36516c;border-radius:12px;background:#101b28}
+#stage.light{background:#e4ebee}#stage svg{width:auto;max-width:100%;height:auto}
+.note{font-size:12px;line-height:1.5;color:#a4bfd5}#state{color:#8ccafa}
+@media(max-width:880px){main{grid-template-columns:1fr}aside{max-height:none}}
+</style></head><body>
+<header><h1>Power Grid — podgląd SVG</h1><span class="note">Classic / Modern, L1 L2 L3, odczyty HA lub symulacja bez sterowania urządzeniami</span></header>
+<main><aside>
+<fieldset><legend>Wygląd</legend>
+<label>Grafika<select id="variant"><option value="classic">Classic</option><option value="modern">Modern</option></select></label>
+<label>Kontrast<select id="theme"><option value="auto">Auto</option><option value="light">Jasny</option><option value="dark">Ciemny</option></select></label>
+<label>Pozycja panelu<select id="panel_position"><option value="right">Prawo</option><option value="left">Lewo</option><option value="bottom">Dół</option></select></label>
+<div class="frow"><label>Przesunięcie X<input id="panel_x" type="number" value="0" min="-250" max="250"></label>
+<label>Przesunięcie Y<input id="panel_y" type="number" value="0" min="-250" max="250"></label></div>
+<label>Skala całego urządzenia<input id="zoom" type="range" min="50" max="200" step="10" value="140"></label>
+<label><input type="checkbox" id="lightBg"> Jasne tło podglądu (test Auto)</label>
+</fieldset>
+<fieldset><legend>Widoczność</legend>
+<div class="frow3"><label><input type="checkbox" id="show_l1" checked>L1</label><label><input type="checkbox" id="show_l2" checked>L2</label><label><input type="checkbox" id="show_l3" checked>L3</label></div>
+<div class="frow3"><label><input type="checkbox" id="show_v" checked>V</label><label><input type="checkbox" id="show_a" checked>A</label><label><input type="checkbox" id="show_panel" checked>Panel</label></div>
+</fieldset>
+<fieldset><legend>Źródło danych</legend>
+<label>Tryb<select id="mode"><option value="manual">Symulacja ręczna</option><option value="live">HA (brak encji = —)</option></select></label>
+<div class="frow3"><label>L1 V<input data-manual="l1_v" type="number" value="231.8" step=".1"></label><label>L2 V<input data-manual="l2_v" type="number" value="229.7" step=".1"></label><label>L3 V<input data-manual="l3_v" type="number" value="233.5" step=".1"></label></div>
+<div class="frow3"><label>L1 A<input data-manual="l1_a" type="number" value="4.2" step=".1"></label><label>L2 A<input data-manual="l2_a" type="number" value="3.8" step=".1"></label><label>L3 A<input data-manual="l3_a" type="number" value="5.1" step=".1"></label></div>
+<div class="frow"><label>Alarm od (V)<input id="min_voltage" type="number" value="207"></label><label>Alarm powyżej (V)<input id="max_voltage" type="number" value="253"></label></div>
+<button id="normal" type="button">Pomiary normalne</button><button id="alarm" type="button">Symuluj alarm</button>
+</fieldset>
+<fieldset><legend>Dodatkowe pomiary — opcjonalne</legend><div id="extras"></div><div id="extraInputs"></div></fieldset>
+<p class="note">Pliki SVG pozostają edytowalne w <code>src/icons</code>. Podgląd uruchamiaj przez lokalny serwer HTTP.</p>
+</aside><section class="preview"><p id="state" class="note"></p><div id="stage" aria-label="Schemat energetyczny SVG"></div></section></main>
+<script src="../src/svg-template.js"></script>
+<script src="../src/power-grid.js"></script>
+<script>
+(async()=>{
+const $=x=>document.getElementById(x),grid=HASSStudioPowerGrid;
+const defs=[['total_kw','Moc (kW)',2.5],['import_kw','Pobór (kW)',2.5],['export_kw','Oddawanie (kW)',0],['frequency','Częstotliwość (Hz)',49.98],['power_factor','cos φ',0.98],['grid_status','Sieć',1],['voltage_alarm','Alarm V',0],['phase_loss','Brak fazy',0]];
+$('extras').innerHTML=defs.map(([key,label])=>'<label><input type="checkbox" data-extra="'+key+'">'+label+'</label>').join('');
+$('extraInputs').innerHTML=defs.map(([key,label,val])=>'<label>'+label+'<input type="number" data-manual="'+key+'" step=".01" value="'+val+'"></label>').join('');
+const src=await Promise.all(['power-grid-classic','power-grid-modern-light','power-grid-modern-dark'].map(async key=>{
+ const res=await fetch('../src/icons/'+key+'.svg');if(!res.ok)throw Error(key+' HTTP '+res.status);return (await res.text()).replace(/^\s*(?:<\?xml[^>]*>\s*)?<svg\b[^>]*>/i,'').replace(/<\/svg>\s*$/i,'');
+}));
+window.HASSStudioIconTemplates={powerGridClassic:src[0],powerGridModernLight:src[1],powerGridModernDark:src[2]};
+const draw=()=>{
+ const state={variant:$('variant').value,theme:$('theme').value,panel_position:$('panel_position').value,mode:$('mode').value,
+ panel_x:Number($('panel_x').value),panel_y:Number($('panel_y').value),min_voltage:Number($('min_voltage').value),
+ max_voltage:Number($('max_voltage').value),show_extras:[...document.querySelectorAll('[data-extra]:checked')].map(x=>x.dataset.extra),
+ manual:Object.fromEntries([...document.querySelectorAll('[data-manual]')].map(x=>[x.dataset.manual,Number(x.value)]))};
+ for(const key of ['show_l1','show_l2','show_l3','show_v','show_a','show_panel'])state[key]=$(key).checked;
+ const node={id:'test-grid-1',type:'power_grid',variant:state.variant,power_grid:state};
+ const shape=grid.geometry(node),margin=18;
+ const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+(shape.x-margin)+' '+(shape.y-margin)+' '+(shape.width+margin*2)+' '+(shape.height+margin*2)+'">'+grid.render(node,{themes:{darkMode:!$('lightBg').checked}})+'</svg>';
+ $('stage').classList.toggle('light',$('lightBg').checked);$('stage').innerHTML=svg;
+ const scale=Number($('zoom').value)/100;
+ const nodeEl=$('stage').querySelector('svg');nodeEl.style.width=Math.round((shape.width+margin*2)*scale)+'px';
+ $('state').textContent='Urządzenie: '+Math.round(shape.width)+' × '+Math.round(shape.height)+' (jednostki SVG), skala proporcjonalna '+Math.round(scale*100)+'%';
+ window.powerGridPreviewAPI={getNode:()=>structuredClone(node),getSvg:()=>svg};
+};
+document.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',draw));
+$('alarm').addEventListener('click',()=>{$('mode').value='manual';document.querySelector('[data-manual=l2_v]').value=255;draw();});
+$('normal').addEventListener('click',()=>{$('mode').value='manual';document.querySelector('[data-manual=l2_v]').value=229.7;draw();});
+draw();
+})().catch(err=>{document.getElementById('state').textContent='Błąd podglądu: '+err.message;console.error(err);});
+</script></body></html>
