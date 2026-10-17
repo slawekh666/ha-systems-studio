@@ -6,7 +6,7 @@ const HASSStudioPowerGrid=(()=>{
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&apos;'}[c]));
  const FIELDS=['l1_v','l1_a','l2_v','l2_a','l3_v','l3_a','total_kw','import_kw','export_kw','frequency','power_factor'];
  const EXTRAS=['total_kw','import_kw','export_kw','frequency','power_factor','grid_status','voltage_alarm','phase_loss'];
- const defaults=()=>({variant:'classic',theme:'auto',panel_position:'right',panel_x:0,panel_y:0,
+ const defaults=()=>({variant:'classic',theme:'auto',panel_position:'right',panel_x:0,panel_y:0,panel_scale:.7,
   show_panel:true,show_v:true,show_a:true,show_l1:true,show_l2:true,show_l3:true,
   show_extras:[],mode:'live',entities:{},manual:{l1_v:231.8,l1_a:4.2,l2_v:229.7,l2_a:3.8,l3_v:233.5,l3_a:5.1,
   total_kw:2.5,import_kw:2.5,export_kw:0,frequency:49.98,power_factor:0.98,grid_status:1,voltage_alarm:0,phase_loss:0},
@@ -16,7 +16,7 @@ const HASSStudioPowerGrid=(()=>{
   return {...d,...raw,variant:['modern','classic'].includes(node?.variant)?node.variant:(raw.variant==='modern'?'modern':'classic'),
    theme:['auto','light','dark'].includes(raw.theme)?raw.theme:'auto',
    panel_position:['left','right','bottom'].includes(raw.panel_position)?raw.panel_position:'right',
-   panel_x:num(raw.panel_x,-250,250,0),panel_y:num(raw.panel_y,-250,250,0),
+   panel_x:num(raw.panel_x,-250,250,0),panel_y:num(raw.panel_y,-250,250,0),panel_scale:HASSStudioReadoutScale.factor(raw.panel_scale,.7),
    min_voltage:num(raw.min_voltage,0,350,207),max_voltage:num(raw.max_voltage,0,400,253),
    mode:raw.mode==='manual'?'manual':'live',
    entities:Object.fromEntries([...FIELDS,'grid_status','voltage_alarm','phase_loss'].map(k=>[k,typeof entities[k]==='string'?entities[k]:''])),
@@ -69,10 +69,11 @@ const HASSStudioPowerGrid=(()=>{
   let panel={x:body.width+gap+c.panel_x,y:10+c.panel_y,width:panelW,height:panelH};
   if(c.panel_position==='left')panel={...panel,x:-panelW-gap+c.panel_x};
   if(c.panel_position==='bottom')panel={...panel,x:(body.width-panelW)/2+c.panel_x,y:body.height+gap+c.panel_y};
-  const x=visible?Math.min(body.x,panel.x):body.x,y=visible?Math.min(body.y,panel.y):body.y;
-  const right=visible?Math.max(body.width,panel.x+panel.width):body.width;
-  const bottom=visible?Math.max(body.height,panel.y+panel.height):body.height;
-  return {x,y,width:right-x,height:bottom-y,body,panel,centerX:82,labelY:bottom+14,readingY:bottom+28};
+  const panelBounds=HASSStudioReadoutScale.box(panel.x,panel.y,panel.width,panel.height,c.panel_scale,panel.x,panel.y);
+  const x=visible?Math.min(body.x,panelBounds.x):body.x,y=visible?Math.min(body.y,panelBounds.y):body.y;
+  const right=visible?Math.max(body.width,panelBounds.x+panelBounds.width):body.width;
+  const bottom=visible?Math.max(body.height,panelBounds.y+panelBounds.height):body.height;
+  return {x,y,width:right-x,height:bottom-y,body,panel,panelBounds,centerX:82,labelY:bottom+14,readingY:bottom+28};
  };
  const fmt=(v,d=1)=>v===null?'—':num(v,-100000,100000,0).toFixed(d);
  const cell=(x,y,text,alert=false,anchor='end')=>'<text x="'+x+'" y="'+y+'" text-anchor="'+anchor+'" font-size="10.5" font-family="Arial,sans-serif" font-weight="600" fill="'+(alert?'#ff6c69':'#dce8f2')+'">'+esc(text)+'</text>';
@@ -110,7 +111,7 @@ const HASSStudioPowerGrid=(()=>{
    extraRows.push(cell(13,yy,extraNames[k],false,'start')+cell(149,yy,desc,flagAlert)+(flagAlert?'<path d="M151 '+(yy-12)+' l5 9 h-10Z" fill="#ff6c69"/>':''));
    yy+=20;
   }
-  const panelSvg=c.show_panel?'<g transform="translate('+g.panel.x+' '+g.panel.y+')">'+
+  const panelSvg=c.show_panel?'<g transform="translate('+g.panel.x+' '+g.panel.y+') scale('+c.panel_scale+')">'+
    '<rect x="0" y="0" width="'+g.panel.width+'" height="'+Math.max(42,yy+12)+'" rx="9" fill="#112332" stroke="#4b6678" stroke-width="1.5"/>'+
    '<rect x="6" y="6" width="'+(g.panel.width-12)+'" height="'+Math.max(30,yy)+'" rx="5" fill="#101c29"/>'+
    (rows.length||extraRows.length?'<path d="M11 39 H153" stroke="#354b5a" stroke-width=".65"/>':'')+
