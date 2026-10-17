@@ -414,7 +414,7 @@
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,entities:[],parts:[]};
+          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -518,7 +518,40 @@
       const index=Number(el.dataset.index);
       const val=el.value;
       if(key==='readout_scale')obj.readout_scale=clamp(val,40,150,100)/100;
-      else if(obj.type==='energy_storage'&&key.startsWith('storage_')){
+      else if(obj.type==='inverter'&&key.startsWith('inv_')){
+        const c=obj.inverter=obj.inverter||HASSStudioInverter.defaults(),k=key.slice(4);
+        if(k.startsWith('entity_')){
+          const f=k.slice(7);
+          if(['ac_power','temperature','status','alarm'].includes(f)){
+            c.entities=c.entities||{};c.entities[f]=validEntity(val)?val:'';
+          }
+        }else if(k.startsWith('manual_')){
+          const f=k.slice(7);c.manual=c.manual||{};
+          if(f==='ac_power')c.manual[f]=clamp(val,-500,500,0);
+          if(f==='temperature')c.manual[f]=clamp(val,-40,150,25);
+        }else if(k.startsWith('pv_')){
+          const match=/^pv_(\d+)_(name|visible|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
+          if(match&&Number(match[1])<12){
+            const i=Number(match[1]);
+            c.inputs=c.inputs||[];
+            if(!c.inputs[i])c.inputs[i]=HASSStudioInverter.defaultInput(i);
+            const q=c.inputs[i],fieldName=match[2];
+            if(fieldName==='name')q.name=val.slice(0,12);
+            else if(fieldName==='visible')q.visible=val==='true';
+            else if(fieldName.startsWith('entity_')){q.entities=q.entities||{};q.entities[fieldName.slice(7)]=validEntity(val)?val:'';}
+            else if(fieldName.startsWith('manual_')){
+              q.manual=q.manual||{};
+              q.manual[fieldName.slice(7)]=val===''?null:clamp(val,0,50000,0);
+            }
+          }
+        }else if(k==='mode')c.mode=val==='manual'?'manual':'live';
+        else if(k==='count')c.count=clamp(val,1,12,2);
+        else if(k==='display_scale'||k==='extra_scale')c[k]=clamp(val,40,150,100)/100;
+        else if(k==='extra_position')c.extra_position=val==='left'?'left':'right';
+        else if(k==='rated_kw')c.rated_kw=clamp(val,.1,500,10);
+        else if(k==='production_threshold_w')c.production_threshold_w=clamp(val,0,1000,10);
+        else if(['positive_power','show_extra'].includes(k))c[k]=val==='true';
+      }else if(obj.type==='energy_storage'&&key.startsWith('storage_')){
         const c=obj.energy_storage=obj.energy_storage||HASSStudioEnergyStorage.defaults();
         const k=key.slice(8);
         if(k.startsWith('entity_')){
