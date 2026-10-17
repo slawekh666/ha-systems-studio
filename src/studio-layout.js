@@ -69,6 +69,10 @@ const HASSStudioLayout = (() => {
         entity:validEntity(e.entity)?e.entity:'',label:String(e.label||'').slice(0,64)})),
       radiator:v.type==='radiator'?HASSStudioRadiator.normalize(v):undefined,
       manifold:v.type==='manifold'?HASSStudioManifold.normalize(v.manifold||v):undefined,
+      distribution_board:v.type==='distribution_board'?HASSStudioDistributionBoard.normalize(v):undefined,
+      ev_charger:v.type==='ev_charger'?HASSStudioEVCharger.normalize(v):undefined,
+      inverter:v.type==='inverter'?HASSStudioInverter.normalize(v):undefined,
+      energy_storage:v.type==='energy_storage'?HASSStudioEnergyStorage.normalize(v):undefined,
       power_grid:v.type==='power_grid'?HASSStudioPowerGrid.normalize(v):undefined,
       parts:(Array.isArray(v.parts)?v.parts:[]).slice(0,40).map(normalizeItem)
     }));

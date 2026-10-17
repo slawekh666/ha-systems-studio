@@ -12,4 +12,7 @@ validate_card:
     - node scripts/test_studio.js
     - node dev/test-power-grid.js
     - node dev/test-scaled-icons.js
+    - node dev/test-energy-storage.js
+    - node dev/test-inverter.js
+    - node dev/test-ev-charger.js
     - git diff --exit-code -- dist/ha-systems-studio.js

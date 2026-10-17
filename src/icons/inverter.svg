@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300" role="img" aria-label="Falownik fotowoltaiczny">
+<defs>
+    <linearGradient id="inv-metal" x1="0" y1="0" x2="1" y2=".92"><stop stop-color="#f5faff"/><stop offset=".29" stop-color="#c6d6ed"/><stop offset=".6" stop-color="#e8f1ff"/><stop offset="1" stop-color="#6f82a5"/></linearGradient>
+    <linearGradient id="inv-metal-dark" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#596985"/><stop offset=".35" stop-color="#283854"/><stop offset="1" stop-color="#11192e"/></linearGradient>
+    <linearGradient id="inv-glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#213f68"/><stop offset=".42" stop-color="#101d37"/><stop offset="1" stop-color="#071324"/></linearGradient>
+    <linearGradient id="inv-blue" x1="0" y1="0" x2=".9" y2="1"><stop stop-color="#a1f7ff"/><stop offset=".25" stop-color="#39c6ff"/><stop offset=".7" stop-color="#145ee0"/><stop offset="1" stop-color="#153883"/></linearGradient>
+    <linearGradient id="inv-green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#bbffd5"/><stop offset=".24" stop-color="#6af7a0"/><stop offset=".75" stop-color="#12a96a"/><stop offset="1" stop-color="#075c5c"/></linearGradient>
+    <linearGradient id="inv-orange" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffef8d"/><stop offset=".28" stop-color="#ffc448"/><stop offset=".66" stop-color="#ff7c32"/><stop offset="1" stop-color="#f23a46"/></linearGradient>
+    <linearGradient id="inv-roof" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#5d708e"/><stop offset=".5" stop-color="#2c3b57"/><stop offset="1" stop-color="#152039"/></linearGradient>
+    <filter id="inv-glow" x="-65%" y="-65%" width="230%" height="230%"><feGaussianBlur stdDeviation="4"/></filter>
+    <filter id="inv-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
+    </defs>
+<!-- Editable inverter artwork. Runtime injects PV values and optional diagnostic panel. -->
+
+<g id="inverter-shadow"><ellipse cx="150" cy="255" rx="65" ry="7" fill="#2777d1" opacity=".25" filter="url(#inv-glow)"/></g>
+<g id="inverter-case"><rect x="83" y="38" width="134" height="205" rx="16" fill="url(#inv-metal-dark)" stroke="#64bdff" stroke-width="2"/>
+<rect x="90" y="38" width="116" height="198" rx="13" fill="url(#inv-metal)" stroke="#f8fdff" stroke-opacity=".8" stroke-width="2"/>
+<path d="M102 47 H185" stroke="#fff" opacity=".55" stroke-width="3" stroke-linecap="round"/>
+<path d="M201 50 V218" stroke="#47769e" opacity=".65" stroke-width="2"/></g>
+<g id="inverter-display">
+  <!-- Compact page: AC output, shortened decorative wave, up to three PV inputs. -->
+  <rect x="98" y="62" width="104" height="96" rx="9" fill="url(#inv-glass)" stroke="#78d8ff" stroke-opacity=".65" stroke-width="2"/>
+  <text x="104" y="77" fill="#83bdf5" font-family="Arial,sans-serif" font-size="9" font-weight="700">AC</text>
+  <text id="inv-power" x="197" y="78" text-anchor="end" fill="#aaffda" font-family="Arial,sans-serif" font-size="14" font-weight="700">—</text>
+  <g id="inv-chart">
+    <path d="M106 106 H194 M106 94 H194" stroke="#2d5178" stroke-opacity=".52" stroke-width=".6" stroke-dasharray="3 3"/>
+    <path id="inv-graph-glow" d="M108 103 Q116 102 122 91 Q128 84 134 96 T149 96 Q155 85 161 92 T174 98 Q183 89 193 88"
+      fill="none" stroke="#3fe2ff" opacity=".62" stroke-width="5" filter="url(#inv-glow)"/>
+    <path id="inv-graph-line" d="M108 103 Q116 102 122 91 Q128 84 134 96 T149 96 Q155 85 161 92 T174 98 Q183 89 193 88"
+      fill="none" stroke="#70e8ff" stroke-width="2.3" stroke-linecap="round"/>
+  </g>
+  <path d="M104 111 H197" stroke="#5f86a5" stroke-opacity=".7" stroke-width=".8"/>
+  <g id="inv-pv-rows"></g>
+  <!-- These three short bars remain decorative, not simulated historical data. -->
+  <g id="inv-bottom-bars" fill="#64e6ff" opacity=".85">
+    <rect x="107" y="150" width="10" height="2.2" rx="1"/>
+    <rect x="121" y="150" width="19" height="2.2" rx="1"/>
+    <rect x="144" y="150" width="34" height="2.2" rx="1"/>
+  </g>
+</g>
+<g id="inverter-status">
+  <circle id="inv-led-glow" cx="150" cy="179" r="9" fill="#4cd6ff" opacity=".4" filter="url(#inv-glow)"/>
+  <circle id="inv-led" cx="150" cy="179" r="5" fill="#4cd6ff"/>
+  <g id="inv-alert" visibility="hidden"><path d="M166 170 l8 14 h-16 Z" fill="#ff4242" stroke="#ffe1a8" stroke-width="1"/><text x="166" y="182" font-size="10" font-family="Arial,sans-serif" font-weight="bold" fill="#fff" text-anchor="middle">!</text></g>
+  <rect x="119" y="207" width="63" height="4" rx="2" fill="#c5d9ec"/>
+  <rect x="127" y="218" width="47" height="3" rx="1.5" fill="#9cbad4"/>
+  <circle cx="103" cy="228" r="2" fill="#5a88ae"/>
+  <circle cx="192" cy="228" r="2" fill="#5a88ae"/>
+</g>
+<g id="inverter-connectors" fill="url(#inv-metal-dark)" stroke="#579dd6" stroke-width="1.3"><rect x="108" y="241" width="22" height="13" rx="3"/><rect x="171" y="241" width="22" height="13" rx="3"/></g>
+<g id="inv-extra-panel"></g>
+</svg>

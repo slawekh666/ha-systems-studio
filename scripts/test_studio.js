@@ -10,7 +10,7 @@ const legacy={
   tank:'modular stratified buffer coil dual_coil hygiene combi',
   solar:'flat tube',pump:'circulation inline',valve:'two_way three_way',sensor:'temperature pressure'
 };
-assert.equal(Array.from(registry.listTypes()).join(' '),'boiler tank solar pump valve sensor radiator manifold power_grid pipe');
+assert.equal(Array.from(registry.listTypes()).join(' '),'boiler tank solar pump valve sensor radiator manifold distribution_board ev_charger inverter energy_storage power_grid pipe');
 for(const [type,variants] of Object.entries(legacy)){
   assert.equal(registry.variantsFor(type).map(item=>item.id).join(' '),variants);
   for(const variant of variants.split(' ')){
@@ -299,9 +299,9 @@ assert.match(src,/field\(L\.scale,'scale',obj\.scale/);
 assert.match(src,/field\(L\.solidWidth\+'\s*\('\+Math\.round\(obj\.width_scale\*100\)/);
 assert.match(src,/field\(L\.solidHeight\+'\s*\('\+Math\.round\(obj\.height_scale\*100\)/);
 assert.match(src,/obj\.type==='boiler'&&\['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'\]\.includes\(obj\.variant\)\)\{\n\s*\/\/ Independent from/);
-assert(src.includes('const outline=radiator?HASSStudioRadiator.geometry(node):manifold?HASSStudioManifold.geometry(node):powerGrid?HASSStudioPowerGrid.geometry(node)'));
+assert(src.includes('const outline=distributionBoard?HASSStudioDistributionBoard.geometry(node):evCharger?HASSStudioEVCharger.geometry(node):inverter?HASSStudioInverter.geometry(node):energyStorage?HASSStudioEnergyStorage.geometry(node):radiator?HASSStudioRadiator.geometry(node):manifold?HASSStudioManifold.geometry(node):powerGrid?HASSStudioPowerGrid.geometry(node)'));
 assert.match(src,/solidBoiler\?\{x:66/);
-assert(src.includes('const previewBox=(isRadiator||isManifold)?'));
+assert(src.includes("const previewBox=(isDistribution||isEV)?'0 0 150 180':isInverter?'0 0 150 180':isStorage?'0 0 150 180':(isRadiator||isManifold)?"));
 assert.match(src,/previewSolid\?\(\(66/);
 console.log('OK: independent solid-fuel dimensions, proportional scale retained, responsive outline and preview.');
 
