@@ -65,14 +65,14 @@ const HASSStudioPowerGrid=(()=>{
  };
  const geometry=node=>{
   const c=normalize(node);const visible=c.show_panel&&(c.show_v||c.show_a||c.show_extras.length>0);
-  const gap=14,body={x:0,y:0,width:118,height:164},panelW=164,panelH=156+Math.min(c.show_extras.length,8)*20;
+  const gap=14,body={x:0,y:0,width:164,height:164},panelW=164,panelH=156+Math.min(c.show_extras.length,8)*20;
   let panel={x:body.width+gap+c.panel_x,y:10+c.panel_y,width:panelW,height:panelH};
   if(c.panel_position==='left')panel={...panel,x:-panelW-gap+c.panel_x};
   if(c.panel_position==='bottom')panel={...panel,x:(body.width-panelW)/2+c.panel_x,y:body.height+gap+c.panel_y};
   const x=visible?Math.min(body.x,panel.x):body.x,y=visible?Math.min(body.y,panel.y):body.y;
   const right=visible?Math.max(body.width,panel.x+panel.width):body.width;
   const bottom=visible?Math.max(body.height,panel.y+panel.height):body.height;
-  return {x,y,width:right-x,height:bottom-y,body,panel,centerX:59,labelY:bottom+14,readingY:bottom+28};
+  return {x,y,width:right-x,height:bottom-y,body,panel,centerX:82,labelY:bottom+14,readingY:bottom+28};
  };
  const fmt=(v,d=1)=>v===null?'—':num(v,-100000,100000,0).toFixed(d);
  const cell=(x,y,text,alert=false,anchor='end')=>'<text x="'+x+'" y="'+y+'" text-anchor="'+anchor+'" font-size="10.5" font-family="Arial,sans-serif" font-weight="600" fill="'+(alert?'#ff6c69':'#dce8f2')+'">'+esc(text)+'</text>';
@@ -83,7 +83,7 @@ const HASSStudioPowerGrid=(()=>{
   const key=c.variant==='modern'?(dark?'powerGridModernDark':'powerGridModernLight'):'powerGridClassic';
   const source=typeof HASSStudioIconTemplates!=='undefined'?HASSStudioIconTemplates[key]:null;
   // Equal physical footprint: Classic square and Modern portrait occupy 118 x 164.
-  const art=source?'<svg x="0" y="0" width="118" height="164" viewBox="'+(c.variant==='modern'?'49 63 245 395':'0 0 300 300')+'" preserveAspectRatio="xMidYMid meet">'+
+  const art=source?'<svg x="0" y="0" width="164" height="164" viewBox="'+(c.variant==='modern'?'49 63 245 395':'0 0 300 300')+'" preserveAspectRatio="xMidYMid meet">'+
     HASSStudioSvg.namespaceIds(source,pref+'-')+'</svg>':
     '<path d="M59 8L16 159H102L59 8ZM43 66H76M28 117H90M59 8V159M22 145L85 96M96 145L33 96" fill="none" stroke="#a7c9da" stroke-width="2.5"/>';
   const rows=[];let yy=29;
