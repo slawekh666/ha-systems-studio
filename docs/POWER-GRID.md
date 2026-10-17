@@ -11,7 +11,7 @@ Status: implemented on `feature/svg-icon-library-20261016`; NOT merged into `mai
 - `dev/power-grid-preview.html` — independent interactive preview; run from a local HTTP server.
 - `dev/test-power-grid.js` — source-level Node smoke/regression checks.
 
-The registry exposes **one** logical device `power_grid` with `classic` and `modern` variants; modern light/dark is the `theme` property (`auto`, `light`, `dark`). Switching the variant does not replace assigned HA entities. Artwork is embedded by `scripts/build.py`. All renderings use the same 118 x 164 proportional tower area regardless of variant. There are only short symbolic source wires; general diagram connections belong to the shared pipe/path editor.
+The registry exposes **one** logical device `power_grid` with `classic` and `modern` variants; modern light/dark is the `theme` property (`auto`, `light`, `dark`). Switching the variant does not replace assigned HA entities. Artwork is embedded by `scripts/build.py`. All renderings use the same 164 x 164 proportional illustration viewport (art itself preserves its aspect ratio) regardless of variant. There are only short symbolic source wires; general diagram connections belong to the shared pipe/path editor.
 
 ## User-facing properties
 
