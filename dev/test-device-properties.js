@@ -19,6 +19,13 @@ const states={states:{'sensor.hp_power':{state:'2800',attributes:{unit_of_measur
 assert.match(ctx.hp.render(liveNode,states),/2\.80 kW/);
 assert.match(ctx.hp.render(liveNode,states),/>900 RPM/);
 assert.match(ctx.hp.render(node,{states:{}}),/ss-hp-test-label/);
+for(const scale of [0.5,1,2.4]){
+  const bounds=ctx.hp.geometry({...node,width_scale:scale,height_scale:scale});
+  assert.equal(bounds.height.toFixed(2),(142.68*scale).toFixed(2));
+  assert(bounds.labelY>bounds.y+bounds.height,'TEST badge must not overlap the device name');
+}
+assert.equal(ctx.hp.geometry({...node,hp_test_mode:false}).height.toFixed(2),'121.28');
+assert.match(ctx.hp.render(node,{states:{}}),/ss-hp-test-label[\s\S]*<\/g><\/g><\/g>$/);
 assert.doesNotMatch(ctx.hp.render(liveNode,states),/ss-hp-test-label/);
 assert.match(ctx.hp.render(liveNode,{states:{}}),/data-power="unknown"/);
 assert.match(ctx.hp.render(liveNode,{states:{}}),/data-fan="unknown"/);

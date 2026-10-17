@@ -1826,9 +1826,11 @@ const HASSStudioHeatPump = (()=>{
     // Body (not invisible SVG canvas) from input source: x=86..1168, y=152..910.
     const base={x:21.76,y:-50.68,width:173.12,height:121.28,labelY:91.5};
     const cx=108.32,cy=9.96;
+    // The TEST badge sits below the body and must scale with it.
+    const hasTestBadge=n?.hp_test_mode===true;
     return {x:cx+(base.x-cx)*sx,y:cy+(base.y-cy)*sy,
-      width:base.width*sx,height:base.height*sy,
-      labelY:cy+(base.labelY-cy)*sy,centerX:cx,centerY:cy,sx,sy};
+      width:base.width*sx,height:(hasTestBadge?92-base.y:base.height)*sy,
+      labelY:cy+((hasTestBadge?109.5:base.labelY)-cy)*sy,centerX:cx,centerY:cy,sx,sy};
   };
   const render=(node,hass)=>{
     const manual=node.hp_test_mode===true;
@@ -1859,9 +1861,9 @@ const HASSStudioHeatPump = (()=>{
     );
     return '<g class="ss-modern-heat-pump" data-mode="'+(manual?'manual':'live')+'" data-fan="'+(speed===null?'unknown':pct.toFixed(1))+'" data-power="'+(kw===null?'unknown':kw.toFixed(2))+'">'+
       '<g class="ss-hp-dimensions" transform="translate(108.32 9.96) scale('+sx+' '+sy+') translate(-108.32 -9.96)">'+
-      '<g transform="translate(45 -45) scale(.1 .1)">'+image+'</g></g>'+
+      '<g transform="translate(45 -45) scale(.1 .1)">'+image+'</g>'+
       (manual?'<g class="ss-hp-test-label"><rect x="145" y="76" width="44" height="16" rx="6" fill="#3b4e67" stroke="#84bee4" stroke-width=".8"/>'+
-        '<text x="167" y="87.6" fill="#d9f1ff" font-family="Arial,sans-serif" font-size="10" font-weight="bold" text-anchor="middle">TEST</text></g>':'')+'</g>';
+        '<text x="167" y="87.6" fill="#d9f1ff" font-family="Arial,sans-serif" font-size="10" font-weight="bold" text-anchor="middle">TEST</text></g>':'')+'</g></g>';
   };
   const styles='<style>'+
     '@keyframes ssHPSpin{to{transform:rotate(360deg)}}'+
