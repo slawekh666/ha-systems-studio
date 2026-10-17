@@ -133,7 +133,8 @@ for(const type of ['boiler','tank','solar','pump','valve','sensor','radiator','m
     models[key]={
       type,variant:variant.id,renderer:variant.renderer,api:renderer.api,
       file:variant.svg?'src/icons/'+variant.svg+' + '+renderer.file:renderer.file,
-      assetKey:variant.renderer,asset:renderer.asset||null,
+      assetKey:type==='building'?'building'+variant.id[0].toUpperCase()+variant.id.slice(1):variant.renderer,
+      asset:type==='building'?'building-'+variant.id:renderer.asset||null,
       bounds:type==='boiler'&&variant.id==='solid_fuel'?{x:12,y:-105,width:110,height:318}:
         type==='tank'&&variant.id==='modular'?{x:-5,y:-10,width:145,height:175}:fallbackBounds[type]
     };
