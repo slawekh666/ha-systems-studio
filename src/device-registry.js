@@ -9,15 +9,16 @@ const HASSStudioDeviceRegistry = (() => {
     solar: {pl:'Solary',en:'Solar thermal'},
     hydraulics: {pl:'Pompy, zawory i osprzęt',en:'Pumps, valves and accessories'},
     measurements: {pl:'Czujniki i pomiary',en:'Sensors and measurements'},
-    connections: {pl:'Rury i połączenia',en:'Pipes and connections'}
+    connections: {pl:'Rury i połączenia',en:'Pipes and connections'},
+    electricity: {pl:'Sieć elektryczna',en:'Electrical grid'}
   });
   // MDI identifiers refer to native Home Assistant icons, not custom SVG assets.
   const categoryIcons=Object.freeze({heat_sources:'mdi:fire',tanks:'mdi:water-boiler',solar:'mdi:white-balance-sunny',
-    hydraulics:'mdi:pump',measurements:'mdi:thermometer',connections:'mdi:pipe'});
+    hydraulics:'mdi:pump',measurements:'mdi:thermometer',connections:'mdi:pipe',electricity:'mdi:transmission-tower'});
   const familyIcons=Object.freeze({solid_fuel_boiler:'mdi:fire',pellet_boiler:'mdi:fire',gas_boiler:'mdi:fire',
     electric_boiler:'mdi:flash',oil_boiler:'mdi:fire',heat_pump:'mdi:heat-pump',fireplace:'mdi:fireplace',
     tank:'mdi:water-boiler',solar_collector:'mdi:white-balance-sunny',pump:'mdi:pump',valve:'mdi:valve',
-    sensor:'mdi:thermometer',pipe:'mdi:pipe'});
+    sensor:'mdi:thermometer',pipe:'mdi:pipe',power_grid:'mdi:transmission-tower'});
   // Common logical identity, independent from the selected drawing.
   const families = Object.freeze({
     solid_fuel_boiler:{category:'heat_sources',pl:'Kocioł na drewno / węgiel',en:'Wood / coal boiler',fuels:['wood','coal'],entities:['entity','burner_entity'],animations:['combustion']},
@@ -32,6 +33,7 @@ const HASSStudioDeviceRegistry = (() => {
     pump:{category:'hydraulics',pl:'Pompa',en:'Pump',entities:['entity'],animations:['running']},
     valve:{category:'hydraulics',pl:'Zawór',en:'Valve',entities:['entity'],animations:[]},
     sensor:{category:'measurements',pl:'Czujnik',en:'Sensor',entities:['entity'],animations:[]},
+    power_grid:{category:'electricity',pl:'Sieć energetyczna',en:'Power Grid',entities:['L1_V','L1_A','L2_V','L2_A','L3_V','L3_A'],animations:[]},
     pipe:{category:'connections',pl:'Rura',en:'Pipe',entities:['flow_entity'],animations:['flow']}
   });
 
@@ -68,6 +70,7 @@ const HASSStudioDeviceRegistry = (() => {
     pump:{icon:'◉',variants:[['circulation','pump','Obiegowa','Circulation','warmwasser'],['inline','pump','Przelotowa','Inline','warmwasser']]},
     valve:{icon:'◇',variants:[['two_way','valve','Dwudrogowy','Two-way','warmwasser'],['three_way','valve','Trójdrogowy','Three-way','warmwasser']]},
     sensor:{icon:'♧',variants:[['temperature','sensor','Temperatura','Temperature','warmwasser'],['pressure','sensor','Ciśnienie','Pressure','warmwasser']]},
+    power_grid:{icon:'⚡',variants:[['classic','power_grid','Classic','Classic','powerGrid','power-grid-classic.svg'],['modern','power_grid','Modern','Modern','powerGrid','power-grid-modern-light.svg']]},
     pipe:{icon:'〰',variants:[]}
   });
   const types = Object.freeze(Object.keys(legacy));
@@ -114,6 +117,7 @@ const HASSStudioDeviceRegistry = (() => {
     ['valve','three_way','valve_group'],
     ['sensor','temperature','sensor_group'],
     ['sensor','pressure','sensor_group'],
+    ['power_grid','classic','electricity_group'],
     ['pipe',null,'pipe_group']
   ]);
   const subgroups = Object.freeze({
@@ -124,6 +128,7 @@ const HASSStudioDeviceRegistry = (() => {
     pump_group: Object.freeze({pl:'Pompy',en:'Pumps',icon:'mdi:pump'}),
     valve_group: Object.freeze({pl:'Zawory',en:'Valves',icon:'mdi:valve'}),
     sensor_group: Object.freeze({pl:'Czujniki',en:'Sensors',icon:'mdi:thermometer'}),
+    electricity_group: Object.freeze({pl:'Sieć elektryczna',en:'Electrical grid',icon:'mdi:transmission-tower'}),
     pipe_group: Object.freeze({pl:'Rury',en:'Pipes',icon:'mdi:pipe'})
   });
   const presetNames = Object.freeze({
