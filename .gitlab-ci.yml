@@ -11,4 +11,5 @@ validate_card:
     - python3 scripts/check.py
     - node scripts/test_studio.js
     - node dev/test-power-grid.js
+    - node dev/test-scaled-icons.js
     - git diff --exit-code -- dist/ha-systems-studio.js

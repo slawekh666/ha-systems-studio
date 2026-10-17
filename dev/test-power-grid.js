@@ -7,6 +7,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
 const root=path.resolve(__dirname,'..');
+globalThis.HASSStudioReadoutScale=require('../src/readout-scale.js');
 const power=require('../src/power-grid.js');
 const ctx={};
 vm.createContext(ctx);
@@ -36,7 +37,7 @@ for(const position of ['right','left','bottom']){
  const geom=power.geometry({variant:'modern',power_grid:{panel_position:position}});
  assert.ok(geom.width>0&&geom.height>0);
 }
-const context={HASSStudioSvg:{namespaceIds:(x,p)=>x.replace(/id="([^"]+)"/g,(_,id)=>'id="'+p+id+'"')},
+const context={HASSStudioReadoutScale:globalThis.HASSStudioReadoutScale,HASSStudioSvg:{namespaceIds:(x,p)=>x.replace(/id="([^"]+)"/g,(_,id)=>'id="'+p+id+'"')},
  HASSStudioIconTemplates:{powerGridClassic:'<circle id="test"/>',powerGridModernLight:'<rect id="light"/>',
  powerGridModernDark:'<rect id="dark"/>'}};
 vm.createContext(context);

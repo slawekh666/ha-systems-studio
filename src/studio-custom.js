@@ -414,7 +414,7 @@
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,entities:[],parts:[]};
+          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -517,7 +517,40 @@
       const model=get(),obj=selectedObject(model);if(!obj)return;
       const index=Number(el.dataset.index);
       const val=el.value;
-      if(obj.type==='power_grid'&&key.startsWith('grid_')){
+      if(key==='readout_scale')obj.readout_scale=clamp(val,40,150,100)/100;
+      else if(obj.type==='radiator'&&key.startsWith('rad_')){
+        const c=obj.radiator=obj.radiator||HASSStudioRadiator.defaults();
+        const k=key.slice(4);
+        if(k==='display_scale')c.display_scale=clamp(val,40,150,100)/100;
+        else if(k==='display')c.display=val==='true';
+        else if(k==='mode')c.mode=val==='manual'?'manual':'live';
+        else if(['temperature_entity','valve_entity'].includes(k))c[k]=validEntity(val)?val:'';
+        else if(k==='manual_temperature')c[k]=clamp(val,-40,150,55);
+        else if(k==='manual_open')c[k]=clamp(val,0,100,42);
+      }else if(obj.type==='manifold'&&key.startsWith('mf_')){
+        const c=obj.manifold=obj.manifold||HASSStudioManifold.defaults();
+        const k=key.slice(3);
+        if(k==='count')c.count=clamp(val,1,40,5);
+        else if(k==='pitch')c.pitch=clamp(val,165,300,205);
+        else if(k==='display_scale')c.display_scale=clamp(val,40,150,100)/100;
+        else if(k==='actuatorMode')c.actuatorMode=val==='common'?'common':'individual';
+        else if(k==='mode')c.mode=val==='manual'?'manual':'live';
+        else if(k.startsWith('c_')){
+          const hit=/^c_(\d+)_(display|actuator|display_scale|entity_(?:tempOut|tempReturn|flow|open)|manual_(?:tempOut|tempReturn|flow|open))$/.exec(k);
+          if(hit){
+            const index=Number(hit[1]);
+            if(index<40){
+              c.circuits=c.circuits||[];
+              if(!c.circuits[index])c.circuits[index]=HASSStudioManifold.defaultCircuit(index);
+              const item=c.circuits[index],name=hit[2];
+              if(name==='display'||name==='actuator')item[name]=val==='true';
+              else if(name==='display_scale')item.display_scale=clamp(val,40,150,100)/100;
+              else if(name.startsWith('entity_')){item.entities=item.entities||{};item.entities[name.slice(7)]=validEntity(val)?val:'';}
+              else if(name.startsWith('manual_'))item[name.slice(7)]=clamp(val,-40,150,0);
+            }
+          }
+        }
+      }else if(obj.type==='power_grid'&&key.startsWith('grid_')){
         obj.power_grid=obj.power_grid||HASSStudioPowerGrid.defaults();
         const g=obj.power_grid,k=key.slice(5);
         if(k.startsWith('entity_')){
@@ -536,6 +569,7 @@
              ?val==='true':(g.show_extras||[]).includes(x));
         }else if(['show_panel','show_v','show_a','show_l1','show_l2','show_l3'].includes(k))g[k]=val==='true';
         else if(k==='mode')g.mode=val==='manual'?'manual':'live';
+        else if(k==='panel_scale')g.panel_scale=clamp(val,40,150,70)/100;
         else if(k==='theme')g.theme=['auto','light','dark'].includes(val)?val:'auto';
         else if(k==='panel_position')g.panel_position=['right','left','bottom'].includes(val)?val:'right';
         else if(['panel_x','panel_y'].includes(k))g[k]=clamp(val,-250,250,0);

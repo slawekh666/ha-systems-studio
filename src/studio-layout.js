@@ -39,7 +39,7 @@ const HASSStudioLayout = (() => {
       typeof v.id==='string').slice(0,MAX_NODES).map(v=>({
       id:v.id.slice(0,32),type:v.type,
       x:clamp(v.x,-5000,10000,40),y:clamp(v.y,-5000,10000,40),
-      scale:clamp(v.scale,0.5,2.4,1),
+      scale:clamp(v.scale,0.5,2.4,1),readout_scale:HASSStudioReadoutScale.factor(v.readout_scale),
       scale_mode:v.type==='tank' && v.variant==='modular' && v.scale_mode==='free'?'free':'proportional',
        aspect_locked:typeof v.aspect_locked==='boolean'?v.aspect_locked:v.scale_mode!=='free',
       width_scale:clamp(v.width_scale,0.5,2.4,1),height_scale:clamp(v.height_scale,0.5,2.4,1),
@@ -67,6 +67,8 @@ const HASSStudioLayout = (() => {
       entity:validEntity(v.entity)?v.entity:'',
       entities:(Array.isArray(v.entities)?v.entities:[]).slice(0,20).map(e=>({
         entity:validEntity(e.entity)?e.entity:'',label:String(e.label||'').slice(0,64)})),
+      radiator:v.type==='radiator'?HASSStudioRadiator.normalize(v):undefined,
+      manifold:v.type==='manifold'?HASSStudioManifold.normalize(v.manifold||v):undefined,
       power_grid:v.type==='power_grid'?HASSStudioPowerGrid.normalize(v):undefined,
       parts:(Array.isArray(v.parts)?v.parts:[]).slice(0,40).map(normalizeItem)
     }));
