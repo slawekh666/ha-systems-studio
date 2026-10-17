@@ -301,7 +301,7 @@ assert.match(src,/field\(L\.solidHeight\+'\s*\('\+Math\.round\(obj\.height_scale
 assert.match(src,/obj\.type==='boiler'&&\['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'\]\.includes\(obj\.variant\)\)\{\n\s*\/\/ Independent from/);
 assert(src.includes('const outline=energyStorage?HASSStudioEnergyStorage.geometry(node):radiator?HASSStudioRadiator.geometry(node):manifold?HASSStudioManifold.geometry(node):powerGrid?HASSStudioPowerGrid.geometry(node)'));
 assert.match(src,/solidBoiler\?\{x:66/);
-assert(src.includes('const previewBox=(isRadiator||isManifold)?'));
+assert(src.includes('const previewBox=isStorage?'0 0 150 180':(isRadiator||isManifold)?'));
 assert.match(src,/previewSolid\?\(\(66/);
 console.log('OK: independent solid-fuel dimensions, proportional scale retained, responsive outline and preview.');
 
