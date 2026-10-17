@@ -414,7 +414,7 @@
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,entities:[],parts:[]};
+          scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -517,7 +517,31 @@
       const model=get(),obj=selectedObject(model);if(!obj)return;
       const index=Number(el.dataset.index);
       const val=el.value;
-      if(key==='aspect_locked'&&obj.type==='tank'&&obj.variant==='modular'){
+      if(obj.type==='power_grid'&&key.startsWith('grid_')){
+        obj.power_grid=obj.power_grid||HASSStudioPowerGrid.defaults();
+        const g=obj.power_grid,k=key.slice(5);
+        if(k.startsWith('entity_')){
+          const name=k.slice(7);
+          if([...HASSStudioPowerGrid.FIELDS,'grid_status','voltage_alarm','phase_loss'].includes(name)){
+            g.entities=g.entities||{};g.entities[name]=validEntity(val)?val:'';
+          }
+        }else if(k.startsWith('manual_')){
+          const name=k.slice(7);
+          if([...HASSStudioPowerGrid.FIELDS,'grid_status','voltage_alarm','phase_loss'].includes(name)){
+            g.manual=g.manual||{};g.manual[name]=clamp(val,-10000,10000,0);
+          }
+        }else if(k.startsWith('extra_')){
+          const name=k.slice(6);
+          g.show_extras=HASSStudioPowerGrid.EXTRAS.filter(x=>x===name
+             ?val==='true':(g.show_extras||[]).includes(x));
+        }else if(['show_panel','show_v','show_a','show_l1','show_l2','show_l3'].includes(k))g[k]=val==='true';
+        else if(k==='mode')g.mode=val==='manual'?'manual':'live';
+        else if(k==='theme')g.theme=['auto','light','dark'].includes(val)?val:'auto';
+        else if(k==='panel_position')g.panel_position=['right','left','bottom'].includes(val)?val:'right';
+        else if(['panel_x','panel_y'].includes(k))g[k]=clamp(val,-250,250,0);
+        else if(k==='min_voltage')g.min_voltage=clamp(val,0,350,207);
+        else if(k==='max_voltage')g.max_voltage=clamp(val,0,400,253);
+      }else if(key==='aspect_locked'&&obj.type==='tank'&&obj.variant==='modular'){
         obj.aspect_locked=val==='true';
       }else if(['width_scale','height_scale'].includes(key)&&obj.type==='tank'&&obj.variant==='modular'){
         const previous=obj[key];
