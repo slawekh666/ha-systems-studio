@@ -111,7 +111,7 @@ const HASSStudioEditorInspector = (() => {
         if(isManifold){
           const c=obj.manifold||HASSStudioManifold.defaults();
           markup+=field('Liczba obiegów (1–40)','mf_count',c.count||5,'number',null,'min="1" max="40" step="1"');
-          markup+=field('Rozstaw obiegów','mf_pitch',c.pitch||205,'number',null,'min="165" max="300" step="5"');
+          markup+=field('Rozstaw obiegów','mf_pitch',c.pitch||260,'number',null,'min="165" max="400" step="5"');
           markup+=field('Skala wyświetlaczy (%)','mf_display_scale',Math.round((c.display_scale||1)*100),'range',null,'min="40" max="150" step="5"');
           markup+=field('Sterowanie siłownikami','mf_actuatorMode',c.actuatorMode||'individual','text',[['individual','Indywidualne'],['common','Wspólne']]);
           markup+=field('Źródło danych','mf_mode',c.mode||'live','text',[['live','Home Assistant'],['manual','Symulacja']]);
