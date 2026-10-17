@@ -138,7 +138,7 @@ const HASSStudioManifold=(()=>{
       '<g class="mf-circuits">',
       centers.map((x,i)=>flowmeter(x,i,c.circuits[i])).join(''),
       centers.map((x,i)=>actuator(x,i,c.actuatorMode==='individual'&&c.circuits[i].actuator)).join(''),
-      centers.map((x,i)=>c.circuits[i].display?display(x,i,c.circuits[i]):'').join(''),
+      centers.map((x,i)=>c.circuits[i].display?display(x,i,{...c.circuits[i],display_scale:Math.max(.4,Math.min(1.5,c.display_scale*c.circuits[i].display_scale))}):'').join(''),
       '</g>',c.actuatorMode==='common'?commonActuator(75):'','</g>',
       '<g fill="#d4e8fc" font-family="Arial,sans-serif" text-anchor="middle">',
       '<text x="',box.width/2,'" y="42" font-size="',c.count===1?17:c.count===2?21:26,'" font-weight="bold">ROZDZIELACZ CO / PODŁOGÓWKI</text>',
@@ -162,7 +162,6 @@ const HASSStudioManifold=(()=>{
       const out={...c};
       if(config.mode==='live')for(const k of ['tempOut','tempReturn','flow','open'])
         out[k]=read(c.entities[k],k);
-      out.display_scale=c.display_scale*config.display_scale;
       return out;
     })};
   };
@@ -174,7 +173,7 @@ const HASSStudioManifold=(()=>{
     // The prototype built text with f(Number), so replace its readout function below.
     const fragment=HASSStudioSvg.fragment(xml);
     const unique='ssmanifold'+String(node?.id||'test').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,25)+'-';
-    return '<svg width="'+Math.min(460,Math.max(175,g.width*.3))+'" height="215" viewBox="0 0 '+g.width+' '+g.height+'" preserveAspectRatio="xMidYMid meet">'+
+    return '<svg width="'+g.width*.3+'" height="215" viewBox="0 0 '+g.width+' '+g.height+'" preserveAspectRatio="xMidYMid meet">'+
       HASSStudioSvg.namespaceIds(fragment,unique)+'</svg>';
   };
   const layoutGeometry=node=>{
