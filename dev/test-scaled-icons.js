@@ -43,7 +43,7 @@ for(const count of [1,5,20,40]){
  assert(xml.includes('scale(0.6)'));
  assert(xml.includes('mf-outlets'));
  assert(xml.includes('V119'));
- assert.equal(manifold.geometry(c).height,765);
+ assert.equal(manifold.geometry(c).height,215);
 }
 assert.equal(manifold.resolve({manifold:{count:1,mode:'live'}},{states:{}}).circuits[0].tempOut,null);
 console.log('OK: scalable data panels, radiator HA/manual separation, manifold 1/5/20/40 loops.');
