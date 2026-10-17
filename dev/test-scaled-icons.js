@@ -18,6 +18,7 @@ assert.equal(radConfig.display_scale,.55);
 assert.equal(radiator.data({radiator:{mode:'live'}},{states:{}}).temp,null);
 assert.equal(radiator.data({radiator:{mode:'manual',manual_temperature:63,manual_open:20}},{states:{}}).temp,63);
 const tpl=source('src/icons/radiator.svg');
+const manifoldTemplate=source('src/icons/manifold.svg');
 vm.runInContext('this.HASSStudioIconTemplates={radiator:globalThis.__radTemplate};',Object.assign(ctx,{__radTemplate:tpl.replace(/^\s*<svg\b[^>]*>/,'').replace(/<\/svg>\s*$/,'')}));
 const radMarkup=radiator.render({id:'rad1',radiator:{display_scale:.65,mode:'manual',manual_temperature:63,manual_open:20}},null);
 assert.match(radMarkup,/scale\(0.65\)/);assert.match(radMarkup,/63°/);assert.match(radMarkup,/20%/);
@@ -34,6 +35,7 @@ const full=radiator.render({id:'rad4',radiator:{mode:'manual',manual_open:100}},
 assert.match(full,/id="ssradiatorrad4-bar4"[^>]*opacity="1"/);
 assert(!radMarkup.includes('x="1040"'));
 assert.match(radiator.render({id:'rad2',radiator:{mode:'live'}},{states:{}}),/—/);
+vm.runInContext('this.HASSStudioIconTemplates.manifold=globalThis.__mfTemplate;',Object.assign(ctx,{__mfTemplate:manifoldTemplate.replace(/^\s*<svg\b[^>]*>/,'').replace(/<\/svg>\s*$/,'')}));
 const manifold=ctx.manifold;
 for(const count of [1,5,20,40]){
  const c=manifold.normalize({count,mode:'manual',display_scale:.6});
@@ -42,7 +44,10 @@ for(const count of [1,5,20,40]){
  assert(xml.includes('viewBox="0 0 '));
  assert(xml.includes('scale(0.6)'));
  assert(xml.includes('mf-outlets'));
- assert(xml.includes('V119'));
+ assert(xml.includes('mf-c1-mf-display-supply'));
+ assert(xml.includes('href="#mf-rail-middle"'));
+ assert(!xml.includes('id="mf-preview"'));
+ assert(xml.includes('mf-outlet-upper'));
  assert.equal(manifold.geometry(c).height,215);
 }
 assert.equal(manifold.resolve({manifold:{count:1,mode:'live'}},{states:{}}).circuits[0].tempOut,null);

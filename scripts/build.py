@@ -90,6 +90,7 @@ def build() -> None:
         'electricBoiler': 'electric-boiler',
         'fireplace': 'fireplace',
         'radiator':'radiator',
+        'manifold':'manifold',
         'powerGridClassic':'power-grid-classic',
         'powerGridModernLight':'power-grid-modern-light',
         'powerGridModernDark':'power-grid-modern-dark',

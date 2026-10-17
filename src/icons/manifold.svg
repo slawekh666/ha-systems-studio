@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 765" role="img" aria-label="Rozdzielacz ogrzewania z pięcioma obiegami — podgląd komponentów">
+<!-- Editable master artwork. Edit the grouped shapes below, not generated JS. -->
+<defs>
+  <linearGradient id="mf-brass" x2="0" y2="1">
+    <stop stop-color="#fff0a9"/><stop offset=".15" stop-color="#c78c30"/>
+    <stop offset=".43" stop-color="#f2cd72"/><stop offset=".75" stop-color="#ad6e20"/>
+    <stop offset="1" stop-color="#f3cf7d"/>
+  </linearGradient>
+  <linearGradient id="mf-steel" x2="1" y2="0">
+    <stop stop-color="#dceaf4"/><stop offset=".17" stop-color="#79889a"/>
+    <stop offset=".5" stop-color="#3b4859"/><stop offset=".8" stop-color="#a6b7c9"/>
+    <stop offset="1" stop-color="#edf6ff"/>
+  </linearGradient>
+  <linearGradient id="mf-glass" x2="1" y2=".1">
+    <stop stop-color="#cfeaff" stop-opacity=".7"/><stop offset=".22" stop-color="#528cc6" stop-opacity=".12"/>
+    <stop offset=".7" stop-color="#0c2846" stop-opacity=".18"/>
+    <stop offset="1" stop-color="#e7f9ff" stop-opacity=".72"/>
+  </linearGradient>
+  <linearGradient id="mf-red" x2="0" y2="1">
+    <stop stop-color="#ff9890"/><stop offset=".45" stop-color="#ec3a39"/><stop offset="1" stop-color="#a51723"/>
+  </linearGradient>
+  <linearGradient id="mf-blue" x2="0" y2="1">
+    <stop stop-color="#c3e6ff"/><stop offset=".3" stop-color="#4aaeff"/><stop offset="1" stop-color="#1857a9"/>
+  </linearGradient>
+  <linearGradient id="mf-screen" x2="1" y2="1">
+    <stop stop-color="#172e45"/><stop offset=".6" stop-color="#06121f"/><stop offset="1" stop-color="#1a3850"/>
+  </linearGradient>
+  <filter id="mf-shadow" x="-20%" y="-35%" width="140%" height="180%">
+    <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#01060a" flood-opacity=".4"/>
+  </filter>
+
+  <!-- Rails are made of scalable middle section and two fixed-size caps. -->
+  <g id="mf-rail-middle">
+    <rect x="0" y="0" width="1" height="58" fill="url(#mf-brass)"/>
+    <path d="M0 11 H1" stroke="#fffbd1" stroke-opacity=".5" stroke-width="7"/>
+    <path d="M0 49 H1" stroke="#6c431a" stroke-opacity=".45" stroke-width="4"/>
+  </g>
+  <g id="mf-rail-start">
+    <rect x="-18" y="8" width="20" height="42" rx="5" fill="url(#mf-steel)" stroke="#a9b8cb"/>
+  </g>
+  <g id="mf-rail-end">
+    <rect x="-2" y="8" width="20" height="42" rx="5" fill="url(#mf-steel)" stroke="#a9b8cb"/>
+  </g>
+  <g id="mf-supply-mark">
+    <rect x="12" y="19" width="52" height="19" rx="8" fill="#d93837" fill-opacity=".86"/>
+  </g>
+  <g id="mf-return-mark">
+    <rect x="12" y="19" width="52" height="19" rx="8" fill="#277fd7" fill-opacity=".86"/>
+  </g>
+
+  <!-- Each supply/return pair is vertically aligned in its circuit. -->
+  <g id="mf-outlet-upper">
+    <path d="M0 0 V25" stroke="#9ca9b6" stroke-width="13" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="7" fill="#c8dae9"/>
+  </g>
+  <g id="mf-outlet-lower">
+    <path d="M0 -31 V0" stroke="#9ca9b6" stroke-width="13" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="7" fill="#c8dae9"/>
+  </g>
+
+  <!-- Dynamic items have stable ids used by manifold.js for numeric binding. -->
+  <g id="mf-flowmeter-template">
+    <rect x="-19" y="-15" width="38" height="25" rx="6" fill="url(#mf-steel)" stroke="#c9d1d9"/>
+    <path d="M-23 -15 L-16 -26 H16 L23 -15Z" fill="#d6a75a" stroke="#ffdf91"/>
+    <rect x="-15" y="-104" width="30" height="77" rx="7" fill="#112b3d" stroke="#ebf5ff"/>
+    <rect id="mf-flow-fill" x="-11" y="-27" width="22" height="0" rx="3" fill="#58baff" fill-opacity=".68"/>
+    <rect x="-15" y="-104" width="30" height="77" rx="7" fill="url(#mf-glass)" stroke="#c0d7e5"/>
+    <path d="M-8 -98 V-33" stroke="#fff" stroke-opacity=".6" stroke-width="3"/>
+    <path d="M7 -36 h6" stroke="#e6f9ff" stroke-width="1"/><path d="M7 -50 h6" stroke="#e6f9ff" stroke-width="1"/><path d="M7 -64 h6" stroke="#e6f9ff" stroke-width="1"/><path d="M7 -78 h6" stroke="#e6f9ff" stroke-width="1"/><path d="M7 -92 h6" stroke="#e6f9ff" stroke-width="1"/>
+    <text id="mf-flow-text" x="0" y="-160" text-anchor="middle" fill="#95dfff" font-family="Arial,sans-serif" font-size="13" font-weight="700">1.6 l/min</text>
+    <rect x="-29" y="-7" width="58" height="17" rx="6" fill="url(#mf-red)" stroke="#f6a7a5"/>
+    <path d="M-19 -3 H19" stroke="#ffcebd" stroke-opacity=".65" stroke-width="2"/>
+  </g>
+
+  <g id="mf-valve-manual">
+    <path d="M-21 0 L-16 16 H16 L21 0Z" fill="url(#mf-steel)" stroke="#d4e1e9"/>
+    <rect x="-11" y="15" width="22" height="30" rx="5" fill="url(#mf-steel)" stroke="#bbc9d6"/>
+    <rect x="-25" y="38" width="50" height="29" rx="11" fill="url(#mf-blue)" stroke="#bddfff"/>
+    <path d="M-18 50 H18" stroke="#d3ebff" stroke-width="2"/>
+  </g>
+  <g id="mf-valve-actuator">
+    <path d="M-21 0 L-16 16 H16 L21 0Z" fill="url(#mf-steel)" stroke="#d4e1e9"/>
+    <rect x="-11" y="15" width="22" height="30" rx="5" fill="url(#mf-steel)" stroke="#bbc9d6"/>
+    <rect x="-27" y="39" width="54" height="71" rx="13" fill="url(#mf-steel)" stroke="#dce9f4"/>
+    <rect x="-27" y="75" width="54" height="13" fill="url(#mf-blue)"/>
+    <rect x="-21" y="46" width="42" height="23" rx="7" fill="#daeaf6"/>
+    <text x="0" y="63" fill="#1c496e" text-anchor="middle" font-size="9" font-weight="bold">24 V</text>
+    <path d="M0 110 v14 q0 7 10 7" fill="none" stroke="#3b536a" stroke-width="5"/>
+  </g>
+  <g id="mf-common-actuator">
+    <path d="M-50 13 H42" stroke="#d6a85b" stroke-width="14" stroke-linecap="round"/>
+    <rect x="-14" y="-35" width="28" height="52" rx="6" fill="url(#mf-steel)" stroke="#d6e3ee"/>
+    <rect x="-27" y="-91" width="54" height="57" rx="12" fill="url(#mf-steel)" stroke="#c9e4f2"/>
+    <rect x="-27" y="-55" width="54" height="12" fill="url(#mf-blue)"/>
+    <rect x="-17" y="-80" width="34" height="20" rx="5" fill="#d6ebf8"/>
+    <text x="0" y="-66" text-anchor="middle" font-size="9" fill="#1b4663">24 V</text>
+    <text x="0" y="-104" fill="#a2d8ff" text-anchor="middle" font-size="12">WSPÓLNY</text>
+  </g>
+
+  <g id="mf-display-template">
+    <rect x="-75" y="-43" width="150" height="86" rx="13" fill="url(#mf-screen)" stroke="#547a9a" stroke-width="1.7"/>
+    <rect x="-69" y="-37" width="138" height="74" rx="10" fill="#071422" fill-opacity=".8"/>
+    <text id="mf-display-title" x="0" y="-25" fill="#a5cee9" text-anchor="middle" font-family="Arial,sans-serif" font-size="10">OBIEG 1</text>
+    <text x="-62" y="-8" fill="#ff8181" font-family="Arial,sans-serif" font-size="10" font-weight="bold">ZAS.</text>
+    <text id="mf-display-supply" x="-19" y="-8" fill="#ffe6e0" font-family="Arial,sans-serif" font-size="14" font-weight="bold">36.0°C</text>
+    <text x="-62" y="9" fill="#74b7ff" font-family="Arial,sans-serif" font-size="10" font-weight="bold">POW.</text>
+    <text id="mf-display-return" x="-19" y="9" fill="#ddeaff" font-family="Arial,sans-serif" font-size="14" font-weight="bold">28.0°C</text>
+    <text id="mf-display-flow" x="-62" y="28" fill="#76ecf2" font-family="Arial,sans-serif" font-size="10" font-weight="bold">1.6 l/min</text>
+    <text id="mf-display-open" x="8" y="28" fill="#8effad" font-family="Arial,sans-serif" font-size="10" font-weight="bold">65% OTW.</text>
+  </g>
+
+  <g id="mf-title-template">
+    <text id="mf-title-text" x="0" y="42" font-family="Arial,sans-serif" text-anchor="middle" fill="#d4e8fc" font-size="26" font-weight="bold">ROZDZIELACZ CO / PODŁOGÓWKI</text>
+    <text id="mf-subtitle-text" x="0" y="66" font-family="Arial,sans-serif" text-anchor="middle" fill="#91b9da" font-size="13">5 obiegów • zasilanie / powrót</text>
+  </g>
+</defs>
+<!-- Visible 5-circuit editable reference preview. Runtime omits this group and assembles its own instances. -->
+<g id="mf-preview">
+  <use href="#mf-title-template" transform="translate(725 0)"/>
+  <use href="#mf-rail-middle" transform="translate(125 230) scale(1200 1)"/>
+  <use href="#mf-rail-middle" transform="translate(125 490) scale(1200 1)"/>
+  <use href="#mf-rail-start" transform="translate(125 230)"/>
+  <use href="#mf-rail-end" transform="translate(1325 230)"/>
+  <use href="#mf-rail-start" transform="translate(125 490)"/>
+  <use href="#mf-rail-end" transform="translate(1325 490)"/>
+  <use href="#mf-supply-mark" transform="translate(125 230)"/>
+  <use href="#mf-return-mark" transform="translate(125 490)"/>
+  
+  <use href="#mf-outlet-upper" transform="translate(205 94)"/>
+  <use href="#mf-outlet-lower" transform="translate(205 710)"/>
+  <use href="#mf-flowmeter-template" transform="translate(205 225)"/>
+  <use href="#mf-valve-actuator" transform="translate(205 548)"/>
+  <use href="#mf-display-template" transform="translate(205 418)"/>
+
+  <use href="#mf-outlet-upper" transform="translate(465 94)"/>
+  <use href="#mf-outlet-lower" transform="translate(465 710)"/>
+  <use href="#mf-flowmeter-template" transform="translate(465 225)"/>
+  <use href="#mf-valve-actuator" transform="translate(465 548)"/>
+  <use href="#mf-display-template" transform="translate(465 418)"/>
+
+  <use href="#mf-outlet-upper" transform="translate(725 94)"/>
+  <use href="#mf-outlet-lower" transform="translate(725 710)"/>
+  <use href="#mf-flowmeter-template" transform="translate(725 225)"/>
+  <use href="#mf-valve-actuator" transform="translate(725 548)"/>
+  <use href="#mf-display-template" transform="translate(725 418)"/>
+
+  <use href="#mf-outlet-upper" transform="translate(985 94)"/>
+  <use href="#mf-outlet-lower" transform="translate(985 710)"/>
+  <use href="#mf-flowmeter-template" transform="translate(985 225)"/>
+  <use href="#mf-valve-actuator" transform="translate(985 548)"/>
+  <use href="#mf-display-template" transform="translate(985 418)"/>
+
+  <use href="#mf-outlet-upper" transform="translate(1245 94)"/>
+  <use href="#mf-outlet-lower" transform="translate(1245 710)"/>
+  <use href="#mf-flowmeter-template" transform="translate(1245 225)"/>
+  <use href="#mf-valve-actuator" transform="translate(1245 548)"/>
+  <use href="#mf-display-template" transform="translate(1245 418)"/>
+</g>
+</svg>
