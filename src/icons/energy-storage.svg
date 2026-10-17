@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300" role="img" aria-label="Magazyn energii">
+<defs>
+    <linearGradient id="bat-metal" x1="0" y1="0" x2="1" y2=".92"><stop stop-color="#f5faff"/><stop offset=".29" stop-color="#c6d6ed"/><stop offset=".6" stop-color="#e8f1ff"/><stop offset="1" stop-color="#6f82a5"/></linearGradient>
+    <linearGradient id="bat-metal-dark" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#596985"/><stop offset=".35" stop-color="#283854"/><stop offset="1" stop-color="#11192e"/></linearGradient>
+    <linearGradient id="bat-glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#213f68"/><stop offset=".42" stop-color="#101d37"/><stop offset="1" stop-color="#071324"/></linearGradient>
+    <linearGradient id="bat-blue" x1="0" y1="0" x2=".9" y2="1"><stop stop-color="#a1f7ff"/><stop offset=".25" stop-color="#39c6ff"/><stop offset=".7" stop-color="#145ee0"/><stop offset="1" stop-color="#153883"/></linearGradient>
+    <linearGradient id="bat-green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#bbffd5"/><stop offset=".24" stop-color="#6af7a0"/><stop offset=".75" stop-color="#12a96a"/><stop offset="1" stop-color="#075c5c"/></linearGradient>
+    <linearGradient id="bat-orange" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffef8d"/><stop offset=".28" stop-color="#ffc448"/><stop offset=".66" stop-color="#ff7c32"/><stop offset="1" stop-color="#f23a46"/></linearGradient>
+    <linearGradient id="bat-roof" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#5d708e"/><stop offset=".5" stop-color="#2c3b57"/><stop offset="1" stop-color="#152039"/></linearGradient>
+    <filter id="bat-glow" x="-65%" y="-65%" width="230%" height="230%"><feGaussianBlur stdDeviation="4"/></filter>
+    <filter id="bat-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
+    </defs>
+<!-- Static, editable artwork; JS binds SOC, power and BMS alerts by element IDs. -->
+<style>
+  @keyframes ssBatteryChargePulse { 0%,100% { opacity: 1; } 50% { opacity: .73; } }
+  .battery-charging { animation: ssBatteryChargePulse 2.2s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .battery-charging { animation: none; } }
+</style>
+
+<g id="battery-case"><rect x="94" y="34" width="112" height="215" rx="12" fill="url(#bat-metal-dark)" stroke="#52bcff" stroke-width="2"/>
+<rect x="99" y="34" width="101" height="208" rx="9" fill="url(#bat-metal)" stroke="#eefaff" stroke-width="1.5"/>
+<rect x="108" y="46" width="83" height="31" rx="5" fill="url(#bat-glass)" stroke="#54bbeb" stroke-width="1.2"/>
+<g id="battery-screen">
+  <text id="battery-soc-text" x="119" y="58" font-family="Arial,sans-serif" font-size="9" font-weight="700" fill="#b7f9e2">SOC —</text>
+  <text id="battery-power-text" x="119" y="69" font-family="Arial,sans-serif" font-size="8" font-weight="700" fill="#7cddff">—</text>
+  <circle cx="174" cy="60" r="8" fill="#45ef9c" opacity=".35" filter="url(#bat-glow)"/>
+  <circle id="battery-led" cx="174" cy="60" r="4" fill="#6cffad"/>
+</g></g>
+<g id="battery-charge-cells"><g id="battery-segment-4" opacity=".16">
+  <rect x="109" y="86" width="82" height="25" rx="5" fill="url(#bat-glass)" stroke="#628eac" stroke-width="1.2"/>
+  <rect id="battery-level-glow-4" x="113" y="90" width="73" height="17" rx="3" fill="url(#bat-green)" opacity=".37" filter="url(#bat-glow)"/>
+  <rect id="battery-level-fill-4" x="113" y="90" width="73" height="17" rx="3" fill="url(#bat-green)" stroke="#9bffd3" stroke-width=".7"/>
+  <path d="M120 93 H175" stroke="#d4ffeb" opacity=".6" stroke-width="2"/>
+</g>
+<g id="battery-segment-3" opacity=".16">
+  <rect x="109" y="118" width="82" height="25" rx="5" fill="url(#bat-glass)" stroke="#628eac" stroke-width="1.2"/>
+  <rect id="battery-level-glow-3" x="113" y="122" width="73" height="17" rx="3" fill="url(#bat-green)" opacity=".37" filter="url(#bat-glow)"/>
+  <rect id="battery-level-fill-3" x="113" y="122" width="73" height="17" rx="3" fill="url(#bat-green)" stroke="#9bffd3" stroke-width=".7"/>
+  <path d="M120 125 H175" stroke="#d4ffeb" opacity=".6" stroke-width="2"/>
+</g>
+<g id="battery-segment-2" opacity=".16">
+  <rect x="109" y="150" width="82" height="25" rx="5" fill="url(#bat-glass)" stroke="#628eac" stroke-width="1.2"/>
+  <rect id="battery-level-glow-2" x="113" y="154" width="73" height="17" rx="3" fill="url(#bat-green)" opacity=".37" filter="url(#bat-glow)"/>
+  <rect id="battery-level-fill-2" x="113" y="154" width="73" height="17" rx="3" fill="url(#bat-green)" stroke="#9bffd3" stroke-width=".7"/>
+  <path d="M120 157 H175" stroke="#d4ffeb" opacity=".6" stroke-width="2"/>
+</g>
+<g id="battery-segment-1" opacity=".16">
+  <rect x="109" y="182" width="82" height="25" rx="5" fill="url(#bat-glass)" stroke="#628eac" stroke-width="1.2"/>
+  <rect id="battery-level-glow-1" x="113" y="186" width="73" height="17" rx="3" fill="url(#bat-green)" opacity=".37" filter="url(#bat-glow)"/>
+  <rect id="battery-level-fill-1" x="113" y="186" width="73" height="17" rx="3" fill="url(#bat-green)" stroke="#9bffd3" stroke-width=".7"/>
+  <path d="M120 189 H175" stroke="#d4ffeb" opacity=".6" stroke-width="2"/>
+</g></g>
+<g id="battery-warning" visibility="hidden">
+  <path d="M184 214 l8 13 h-16 Z" fill="#e24646" stroke="#ffd3d3" stroke-width="1"/>
+  <text x="184" y="224.5" fill="#ffffff" font-family="Arial,sans-serif" font-size="11" font-weight="bold" text-anchor="middle">!</text>
+</g><g id="battery-foot"><rect x="116" y="223" width="67" height="10" rx="4" fill="url(#bat-metal-dark)"/>
+<rect x="108" y="247" width="22" height="7" rx="2" fill="#3a5274"/><rect x="171" y="247" width="22" height="7" rx="2" fill="#3a5274"/></g>
+</svg>
