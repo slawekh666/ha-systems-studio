@@ -517,7 +517,39 @@
       const model=get(),obj=selectedObject(model);if(!obj)return;
       const index=Number(el.dataset.index);
       const val=el.value;
-      if(obj.type==='power_grid'&&key.startsWith('grid_')){
+      if(obj.type==='radiator'&&key.startsWith('rad_')){
+        const c=obj.radiator=obj.radiator||HASSStudioRadiator.defaults();
+        const k=key.slice(4);
+        if(k==='display_scale')c.display_scale=clamp(val,40,150,100)/100;
+        else if(k==='display')c.display=val==='true';
+        else if(k==='mode')c.mode=val==='manual'?'manual':'live';
+        else if(['temperature_entity','valve_entity'].includes(k))c[k]=validEntity(val)?val:'';
+        else if(k==='manual_temperature')c[k]=clamp(val,-40,150,55);
+        else if(k==='manual_open')c[k]=clamp(val,0,100,42);
+      }else if(obj.type==='manifold'&&key.startsWith('mf_')){
+        const c=obj.manifold=obj.manifold||HASSStudioManifold.defaults();
+        const k=key.slice(3);
+        if(k==='count')c.count=clamp(val,1,40,5);
+        else if(k==='pitch')c.pitch=clamp(val,165,300,205);
+        else if(k==='display_scale')c.display_scale=clamp(val,40,150,100)/100;
+        else if(k==='actuatorMode')c.actuatorMode=val==='common'?'common':'individual';
+        else if(k==='mode')c.mode=val==='manual'?'manual':'live';
+        else if(k.startsWith('c_')){
+          const hit=/^c_(\d+)_(display|actuator|display_scale|entity_(?:tempOut|tempReturn|flow|open)|manual_(?:tempOut|tempReturn|flow|open))$/.exec(k);
+          if(hit){
+            const index=Number(hit[1]);
+            if(index<40){
+              c.circuits=c.circuits||[];
+              if(!c.circuits[index])c.circuits[index]=HASSStudioManifold.defaultCircuit(index);
+              const item=c.circuits[index],name=hit[2];
+              if(name==='display'||name==='actuator')item[name]=val==='true';
+              else if(name==='display_scale')item.display_scale=clamp(val,40,150,100)/100;
+              else if(name.startsWith('entity_')){item.entities=item.entities||{};item.entities[name.slice(7)]=validEntity(val)?val:'';}
+              else if(name.startsWith('manual_'))item[name.slice(7)]=clamp(val,-40,150,0);
+            }
+          }
+        }
+      }else if(obj.type==='power_grid'&&key.startsWith('grid_')){
         obj.power_grid=obj.power_grid||HASSStudioPowerGrid.defaults();
         const g=obj.power_grid,k=key.slice(5);
         if(k.startsWith('entity_')){
@@ -536,6 +568,7 @@
              ?val==='true':(g.show_extras||[]).includes(x));
         }else if(['show_panel','show_v','show_a','show_l1','show_l2','show_l3'].includes(k))g[k]=val==='true';
         else if(k==='mode')g.mode=val==='manual'?'manual':'live';
+        else if(k==='panel_scale')g.panel_scale=clamp(val,40,150,70)/100;
         else if(k==='theme')g.theme=['auto','light','dark'].includes(val)?val:'auto';
         else if(k==='panel_position')g.panel_position=['right','left','bottom'].includes(val)?val:'right';
         else if(['panel_x','panel_y'].includes(k))g[k]=clamp(val,-250,250,0);

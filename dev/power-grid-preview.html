@@ -25,6 +25,7 @@ button{padding:8px 10px;border:1px solid #446684;background:#183d58;color:white;
 <div class="frow"><label>Przesunięcie X<input id="panel_x" type="number" value="0" min="-250" max="250"></label>
 <label>Przesunięcie Y<input id="panel_y" type="number" value="0" min="-250" max="250"></label></div>
 <label>Skala całego urządzenia<input id="zoom" type="range" min="50" max="200" step="10" value="140"></label>
+<label>Skala panelu (%)<input id="panel_scale" type="range" min="40" max="150" value="70" step="5"></label>
 <label><input type="checkbox" id="lightBg"> Jasne tło podglądu (test Auto)</label>
 </fieldset>
 <fieldset><legend>Widoczność</legend>
@@ -55,7 +56,7 @@ const src=await Promise.all(['power-grid-classic','power-grid-modern-light','pow
 window.HASSStudioIconTemplates={powerGridClassic:src[0],powerGridModernLight:src[1],powerGridModernDark:src[2]};
 const draw=()=>{
  const state={variant:$('variant').value,theme:$('theme').value,panel_position:$('panel_position').value,mode:$('mode').value,
- panel_x:Number($('panel_x').value),panel_y:Number($('panel_y').value),min_voltage:Number($('min_voltage').value),
+ panel_x:Number($('panel_x').value),panel_y:Number($('panel_y').value),panel_scale:Number($('panel_scale').value)/100,min_voltage:Number($('min_voltage').value),
  max_voltage:Number($('max_voltage').value),show_extras:[...document.querySelectorAll('[data-extra]:checked')].map(x=>x.dataset.extra),
  manual:Object.fromEntries([...document.querySelectorAll('[data-manual]')].map(x=>[x.dataset.manual,Number(x.value)]))};
  for(const key of ['show_l1','show_l2','show_l3','show_v','show_a','show_panel'])state[key]=$(key).checked;
