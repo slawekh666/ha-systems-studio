@@ -16,6 +16,8 @@ const HASSStudioRadiator=(()=>{
   const open=c.mode==='manual'?c.manual_open:HASSStudioHA.percentage(hass,c.valve_entity);
   return {c,temp,open};
  };
+ const valveStatus=open=>open===null?{label:'—',color:'#a7bbc8'}:
+    open<5?{label:'CLOSE',color:'#ff5d59'}:{label:'OPEN',color:'#76ddff'};
  const geometry=node=>{
   const c=normalize(node),body={x:0,y:0,width:176,height:132};
   return {...body,centerX:88,labelY:146,readingY:162};
@@ -24,14 +26,20 @@ const HASSStudioRadiator=(()=>{
   const {c,temp,open}=data(node,hass);
   const tpl=typeof HASSStudioIconTemplates!=='undefined'?HASSStudioIconTemplates.radiator:null;
   if(!tpl)return '<rect width="176" height="132" rx="10" fill="#9fb7c7"/>';
-  const text=(id,val)=>'<text'; // SVG text replaced in template
   let svg=tpl;
   const replacements={tempText:temp===null?'—':Math.round(temp)+'°',
     openText:open===null?'—':Math.round(open)+'%'};
   svg=svg.replace(/(<text\b[^>]*\bid="(tempText|openText)"[^>]*>)([^<]*)(<\/text>)/g,
     (_,a,id,old,z)=>a+replacements[id]+z);
-  svg=svg.replace(/(<circle\b[^>]*\bid="valveRing"[^>]*\bstroke-dasharray=")[^"]+(")/,
-    (_,a,z)=>a+(open===null?'0 276':(276.46*(260/360)*(open/100)).toFixed(2)+' 276.46')+z);
+  const status=valveStatus(open);
+  svg=svg.replace(/(<text\b[^>]*\bid="valveStatus"[^>]*>)[^<]*(<\/text>)/,
+    (_,head,tail)=>head.replace(/fill="[^"]+"/,'fill="'+status.color+'"')+status.label+tail);
+  for(let index=1;index<=4;index++){
+    const enabled=open!==null&&open>=[5,25,50,75][index-1];
+    const pattern=new RegExp('(<rect\\b[^>]*\\bid="bar'+index+'"[^>]*)(\\/>)');
+    svg=svg.replace(pattern,(_,head,tail)=>
+      head.replace(/\sopacity="[^"]*"/,'')+' opacity="'+(enabled?'1':'.16')+'"'+tail);
+  }
   // Remove duplicated captions, retaining the original design's ring readings.
   svg=svg.replace(/(<text\b[^>]*x="1040"[^>]*>[\s\S]*?<\/text>)/g,'');
   svg=svg.replace(/(<text\b[^>]*\bid="(?:tempLarge|openLarge)"[^>]*>[\s\S]*?<\/text>)/g,'');
@@ -45,5 +53,5 @@ const HASSStudioRadiator=(()=>{
   return '<svg x="0" y="0" width="176" height="132" viewBox="120 110 1230 840" preserveAspectRatio="xMidYMid meet">'+
     HASSStudioSvg.namespaceIds(svg,prefix)+'</svg>';
  };
- return Object.freeze({defaults,normalize,data,geometry,render});
+ return Object.freeze({defaults,normalize,data,valveStatus,geometry,render});
 })();

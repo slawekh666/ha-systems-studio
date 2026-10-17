@@ -531,7 +531,7 @@
         const c=obj.manifold=obj.manifold||HASSStudioManifold.defaults();
         const k=key.slice(3);
         if(k==='count')c.count=clamp(val,1,40,5);
-        else if(k==='pitch')c.pitch=clamp(val,165,300,205);
+        else if(k==='pitch')c.pitch=clamp(val,165,400,260);
         else if(k==='display_scale')c.display_scale=clamp(val,40,150,100)/100;
         else if(k==='actuatorMode')c.actuatorMode=val==='common'?'common':'individual';
         else if(k==='mode')c.mode=val==='manual'?'manual':'live';

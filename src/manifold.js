@@ -14,10 +14,13 @@ const HASSStudioManifold=(()=>{
   });
   const normalize=raw=>{
     const count=Math.round(number(raw?.count,1,MAX_CIRCUITS,5));
-    const pitch=number(raw?.pitch,165,300,205);
+    const pitch=number(raw?.pitch,165,400,260);
     const mode=raw?.actuatorMode==='common'?'common':'individual';
     const values=Array.isArray(raw?.circuits)?raw.circuits:[];
-    return {count,pitch,actuatorMode:mode,display_scale:HASSStudioReadoutScale.factor(raw?.display_scale),mode:raw?.mode==='manual'?'manual':'live',circuits:Array.from({length:count},(_,i)=>{
+    const maximumPanelScale=Math.max(0,...Array.from({length:count},(_,i)=>HASSStudioReadoutScale.factor(values[i]?.display_scale)));
+    const sharedScale=HASSStudioReadoutScale.factor(raw?.display_scale);
+    const effectivePitch=Math.max(pitch,150*Math.min(1.5,maximumPanelScale*sharedScale)+36);
+    return {count,pitch:effectivePitch,requestedPitch:pitch,actuatorMode:mode,display_scale:HASSStudioReadoutScale.factor(raw?.display_scale),mode:raw?.mode==='manual'?'manual':'live',circuits:Array.from({length:count},(_,i)=>{
       const fallback=defaultCircuit(i),v=values[i]||{};
       return {id:fallback.id,display:v.display!==false,actuator:v.actuator!==false,display_scale:HASSStudioReadoutScale.factor(v.display_scale),
         tempOut:v.tempOut===null?null:number(v.tempOut,-30,120,fallback.tempOut),
@@ -80,7 +83,7 @@ const HASSStudioManifold=(()=>{
       '" rx="3" fill="#58baff" fill-opacity=".68"/>',
       '<rect x="-15" y="-104" width="30" height="77" rx="7" fill="url(#mf-glass)" stroke="#c0d7e5"/>',
       '<path d="M-8 -98 V-33" stroke="#fff" stroke-opacity=".6" stroke-width="3"/>',ticks,
-      '<text x="0" y="-119" text-anchor="middle" fill="#95dfff" font-size="13" font-weight="700">',
+      '<text x="0" y="-160" text-anchor="middle" fill="#95dfff" font-size="13" font-weight="700">',
       f(c.flow),' l/min</text>',
       '<rect x="-29" y="-7" width="58" height="17" rx="6" fill="url(#mf-red)" stroke="#f6a7a5"/>',
       '<path d="M-19 -3 H19" stroke="#ffcebd" stroke-opacity=".65" stroke-width="2"/></g>'
@@ -111,7 +114,7 @@ const HASSStudioManifold=(()=>{
     '<text x="-62" y="9" fill="#74b7ff" font-size="10" font-weight="bold">POW.</text>',
     '<text x="-19" y="9" fill="#ddeaff" font-size="14" font-weight="bold">',f(c.tempReturn),'°C</text>',
     '<text x="-62" y="28" fill="#76ecf2" font-size="10" font-weight="bold">',f(c.flow),' l/min</text>',
-    '<text x="8" y="28" fill="#8effad" font-size="10" font-weight="bold">',Math.round(c.open),'% OTW.</text>',
+    '<text x="8" y="28" fill="#8effad" font-size="10" font-weight="bold">',c.open===null?'—':Math.round(c.open),'% OTW.</text>',
     '</g>'
   ].join('');
   const commonActuator=x=>[
@@ -136,6 +139,7 @@ const HASSStudioManifold=(()=>{
       defs,'<g filter="url(#mf-shadow)">',beam(125,230,railWidth,'#d93837'),
       beam(125,490,railWidth,'#277fd7'),
       '<g class="mf-circuits">',
+      centers.map((x,i)=>'<g class="mf-outlets" data-circuit="'+(i+1)+'"><path d="M'+x+' 94 V119" stroke="#9ca9b6" stroke-width="13" stroke-linecap="round"/><path d="M'+x+' 692 V710" stroke="#9ca9b6" stroke-width="13" stroke-linecap="round"/><circle cx="'+x+'" cy="94" r="7" fill="#c8dae9"/><circle cx="'+x+'" cy="710" r="7" fill="#c8dae9"/></g>').join(''),
       centers.map((x,i)=>flowmeter(x,i,c.circuits[i])).join(''),
       centers.map((x,i)=>actuator(x,i,c.actuatorMode==='individual'&&c.circuits[i].actuator)).join(''),
       centers.map((x,i)=>c.circuits[i].display?display(x,i,{...c.circuits[i],display_scale:Math.max(.4,Math.min(1.5,c.display_scale*c.circuits[i].display_scale))}):'').join(''),
@@ -147,7 +151,7 @@ const HASSStudioManifold=(()=>{
     ].join('');
   };
 
-  const defaults=()=>({count:5,pitch:205,actuatorMode:'individual',display_scale:1,mode:'live',circuits:[]});
+  const defaults=()=>({count:5,pitch:260,actuatorMode:'individual',display_scale:1,mode:'live',circuits:[]});
   const resolve=(node,h)=>{
     const config=normalize(node?.manifold||node);
     const read=(entity,key)=>{
@@ -178,7 +182,7 @@ const HASSStudioManifold=(()=>{
   };
   const layoutGeometry=node=>{
     const c=normalize(node?.manifold||node),g=geometry(c);
-    const width=Math.min(460,Math.max(175,g.width*.3));
+    const width=g.width*.3;
     return {x:0,y:0,width,height:215,centerX:width/2,labelY:229,readingY:244};
   };
   return Object.freeze({render:renderNode,geometry:layoutGeometry,normalize,defaults,resolve,defaultCircuit,MAX_CIRCUITS,renderStandalone:render});
