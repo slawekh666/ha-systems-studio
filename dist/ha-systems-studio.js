@@ -1857,9 +1857,11 @@ const HASSStudioHeatPump = (()=>{
         fanSpeedBar: { width: (206 * pct / 100).toFixed(1) }
       }), prefix
     );
-    return '<g class="ss-modern-heat-pump" data-fan="'+(speed===null?'unknown':pct.toFixed(1))+'" data-power="'+(kw===null?'unknown':kw.toFixed(2))+'">'+
+    return '<g class="ss-modern-heat-pump" data-mode="'+(manual?'manual':'live')+'" data-fan="'+(speed===null?'unknown':pct.toFixed(1))+'" data-power="'+(kw===null?'unknown':kw.toFixed(2))+'">'+
       '<g class="ss-hp-dimensions" transform="translate(108.32 9.96) scale('+sx+' '+sy+') translate(-108.32 -9.96)">'+
-      '<g transform="translate(45 -45) scale(.1 .1)">'+image+'</g></g></g>';
+      '<g transform="translate(45 -45) scale(.1 .1)">'+image+'</g></g>'+
+      (manual?'<g class="ss-hp-test-label"><rect x="145" y="76" width="44" height="16" rx="6" fill="#3b4e67" stroke="#84bee4" stroke-width=".8"/>'+
+        '<text x="167" y="87.6" fill="#d9f1ff" font-family="Arial,sans-serif" font-size="10" font-weight="bold" text-anchor="middle">TEST</text></g>':'')+'</g>';
   };
   const styles='<style>'+
     '@keyframes ssHPSpin{to{transform:rotate(360deg)}}'+
@@ -3895,10 +3897,18 @@ const HASSStudioEditorInspector = (() => {
               field(L.solidState,'solid_state',obj.solid_state,'text',[['auto',L.solidAuto],['burning',L.solidBurning],['embers',L.solidEmbers],['off',L.solidOff]])+
               field(L.solidGlow,'solid_glow',obj.solid_glow,'range',null,'min="0" max="100" step="5"')+
               '<p class="ss-note">'+esc(L.solidHelp)+'</p>';
-          }else if(['wood','pellet','gas','oil','electric','heatpump','gas_modern'].includes(obj.variant))markup+=field(L.boilerState,'burner_mode',obj.burner_mode,'text',[['auto',L.flowAuto],['on',L.flowOn],['off',L.flowOff]]);
-          if(!['heatpump_modern','electric_modern'].includes(obj.variant))markup+=field(L.burnerEntity,'burner_entity',obj.burner_entity,'search',null,'list="ss-entity-list"');
-          if(!['heatpump_modern','electric_modern'].includes(obj.variant))markup+=field(L.burnerOnTemp,'burner_on_temp',obj.burner_on_temp,'number',null,'min="20" max="90" step="1"');
-          if(!['heatpump_modern','electric_modern'].includes(obj.variant))markup+=field(L.burnerOffTemp,'burner_off_temp',obj.burner_off_temp,'number',null,'min="10" max="89" step="1"');
+          }else if(obj.variant==='heatpump')markup+=field('Tryb pracy pompy (wizualizacja)','burner_mode',obj.burner_mode,'text',[['auto','Automatyczny'],['on','Pracuje — test'],['off','Wyłączona — test']]);
+          else if(obj.variant!=='heatpump_modern')markup+=field(L.boilerState,'burner_mode',obj.burner_mode,'text',[['auto',L.flowAuto],['on',L.flowOn],['off',L.flowOff]]);
+          if(obj.variant==='heatpump'){
+            markup+=field('Encja pracy pompy ciepła','burner_entity',obj.burner_entity,'search',null,'list="ss-entity-list"');
+            markup+=field('Próg startu animacji przy braku encji (°C)','burner_on_temp',obj.burner_on_temp,'number',null,'min="20" max="90" step="1"');
+            markup+=field('Próg zakończenia animacji (°C)','burner_off_temp',obj.burner_off_temp,'number',null,'min="10" max="89" step="1"');
+            markup+='<p class="ss-note">Progi sterują tylko animacją starszej grafiki, nie uruchamiają pompy.</p>';
+          }else if(obj.variant!=='heatpump_modern'){
+            markup+=field(L.burnerEntity,'burner_entity',obj.burner_entity,'search',null,'list="ss-entity-list"');
+            markup+=field(L.burnerOnTemp,'burner_on_temp',obj.burner_on_temp,'number',null,'min="20" max="90" step="1"');
+            markup+=field(L.burnerOffTemp,'burner_off_temp',obj.burner_off_temp,'number',null,'min="10" max="89" step="1"');
+          }
         }
         if(obj.type==='solar'){
           markup+=field(L.solarPump,'pump_entity',obj.pump_entity,'search',null,'list="ss-entity-list"');
