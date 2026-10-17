@@ -17,6 +17,22 @@ const HASSStudioReadoutScale=(()=>{
     const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y);
     return {x,y,width:Math.max(a.x+a.width,b.x+b.width)-x,height:Math.max(a.y+a.height,b.y+b.height)-y};
   };
-  return Object.freeze({factor,around,box,union});
+  // Namespaced SVG assets retain their group suffixes; keep any existing transform.
+  const namedGroup=(markup,id,centerX,centerY,value)=>{
+    const scale=factor(value);
+    if(scale===1)return markup;
+    const re=/<g\b[^>]*\bid="([^"]+)"[^>]*>/g;
+    let count=0;
+    const result=markup.replace(re,(tag,found)=>{
+      if(found!==id&&!found.endsWith(id))return tag;
+      count++;
+      const t=around(centerX,centerY,scale);
+      return /\btransform="[^"]*"/.test(tag)
+        ?tag.replace(/\btransform="([^"]*)"/,(_,existing)=>'transform="'+t+' '+existing+'"')
+        :tag.slice(0,-1)+' transform="'+t+'">';
+    });
+    return count===1?result:markup;
+  };
+  return Object.freeze({factor,around,box,union,namedGroup});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioReadoutScale;
