@@ -79,6 +79,8 @@ a{color:#8ad7ff}code{color:#edc182}
 <script src="../src/manifold.js"></script>
 <script src="../src/energy-storage.js"></script>
 <script src="../src/inverter.js"></script>
+<script src="../src/distribution-board.js"></script>
+<script src="../src/ev-charger.js"></script>
 <script>
 (function(){
 "use strict";
@@ -98,7 +100,9 @@ const renderers=Object.freeze({
   radiator:{api:HASSStudioRadiator,file:"src/radiator.js",asset:"radiator"},
   manifold:{api:HASSStudioManifold,file:"src/manifold.js"},
   energyStorage:{api:HASSStudioEnergyStorage,file:"src/energy-storage.js",asset:"energy-storage"},
-  inverter:{api:HASSStudioInverter,file:"src/inverter.js",asset:"inverter"}
+  inverter:{api:HASSStudioInverter,file:"src/inverter.js",asset:"inverter"},
+  distributionBoard:{api:HASSStudioDistributionBoard,file:"src/distribution-board.js",asset:"distribution-board"},
+  evCharger:{api:HASSStudioEVCharger,file:"src/ev-charger.js",asset:"ev-charger"}
 });
 const fallbackBounds={
   boiler:{x:-18,y:-110,width:180,height:300},
@@ -111,10 +115,12 @@ const fallbackBounds={
   radiator:{x:0,y:0,width:176,height:162},
   manifold:{x:0,y:0,width:300,height:250},
   energy_storage:{x:0,y:0,width:150,height:150},
-  inverter:{x:0,y:0,width:150,height:150}
+  inverter:{x:0,y:0,width:150,height:150},
+  distribution_board:{x:0,y:0,width:150,height:150},
+  ev_charger:{x:0,y:0,width:150,height:150}
 };
 const models=Object.create(null),groups=[];
-for(const type of ['boiler','tank','solar','pump','valve','sensor','radiator','manifold','energy_storage','inverter','power_grid']){
+for(const type of ['boiler','tank','solar','pump','valve','sensor','radiator','manifold','energy_storage','inverter','distribution_board','ev_charger','power_grid']){
   const variants=registry.variantsFor(type);
   const options=variants.map(variant=>{
     const renderer=renderers[variant.renderer];

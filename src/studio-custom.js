@@ -414,7 +414,7 @@
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
-          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,entities:[],parts:[]};
+          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -518,7 +518,25 @@
       const index=Number(el.dataset.index);
       const val=el.value;
       if(key==='readout_scale')obj.readout_scale=clamp(val,40,150,100)/100;
-      else if(obj.type==='inverter'&&key.startsWith('inv_')){
+      else if(obj.type==='ev_charger'&&key.startsWith('ev_')){
+        const e=obj.ev_charger=obj.ev_charger||HASSStudioEVCharger.defaults(),k=key.slice(3);
+        if(k.startsWith('entity_')){
+          const name=k.slice(7);if(HASSStudioEVCharger.keys.includes(name)){
+            e.entities=e.entities||{};e.entities[name]=validEntity(val)?val:'';
+          }
+        }else if(k.startsWith('manual_')){
+          const name=k.slice(7);e.manual=e.manual||{};
+          if(name==='status')e.manual.status=['charging','ready','disconnected','fault'].includes(val)?val:'ready';
+          else if(name==='alarm')e.manual.alarm=val==='true';
+          else if(name==='power')e.manual.power=clamp(val,-500,500,0);
+          else if(name==='session_energy')e.manual.session_energy=clamp(val,0,100000,0);
+        }else if(k==='mode')e.mode=val==='manual'?'manual':'live';
+        else if(k==='phases')e.phases=val==='1'?1:3;
+        else if(k==='power_threshold_w')e.power_threshold_w=clamp(val,0,1000,30);
+        else if(k==='display_scale'||k==='extra_scale')e[k]=clamp(val,40,150,100)/100;
+        else if(k==='extra_position')e.extra_position=val==='left'?'left':'right';
+        else if(['charging_positive','animate','show_extra'].includes(k))e[k]=val==='true';
+      }else if(obj.type==='inverter'&&key.startsWith('inv_')){
         const c=obj.inverter=obj.inverter||HASSStudioInverter.defaults(),k=key.slice(4);
         if(k.startsWith('entity_')){
           const f=k.slice(7);

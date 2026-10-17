@@ -51,7 +51,7 @@ const HASSStudioEditorInspector = (() => {
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
         const isGrid=obj.type==='power_grid';
-        const isRadiator=obj.type==='radiator',isManifold=obj.type==='manifold',isStorage=obj.type==='energy_storage',isInverter=obj.type==='inverter';
+        const isRadiator=obj.type==='radiator',isManifold=obj.type==='manifold',isStorage=obj.type==='energy_storage',isInverter=obj.type==='inverter',isDistribution=obj.type==='distribution_board',isEV=obj.type==='ev_charger';
         const previewFree=obj.type==='tank'&&obj.variant==='modular'&&obj.scale_mode==='free';
         const previewSolid=obj.type==='boiler'&&obj.variant==='solid_fuel';
         const previewPellet=obj.type==='boiler'&&obj.variant==='pellet_modern';
@@ -61,7 +61,7 @@ const HASSStudioEditorInspector = (() => {
         const previewFireplace=obj.type==='boiler'&&obj.variant==='fireplace_modern';
         const previewWidth=previewFree?Math.max(112*obj.width_scale+30,145*obj.width_scale):120;
         const previewHeight=previewFree?Math.max(113*obj.height_scale+40,155*obj.height_scale):140;
-        const previewBox=isInverter?'0 0 150 180':isStorage?'0 0 150 180':(isRadiator||isManifold)?(()=>{const q=isRadiator?HASSStudioRadiator.geometry(obj):HASSStudioManifold.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.height+38);})():isGrid?(()=>{const q=HASSStudioPowerGrid.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.height+38);})():previewFireplace?(()=>{const q=HASSStudioFireplace.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewElectric?(()=>{const q=HASSStudioElectricBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewGas?(()=>{const q=HASSStudioGasBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewHP?(()=>{const q=HASSStudioHeatPump.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewPellet?(()=>{const b=HASSStudioPellet.geometry(obj);
+        const previewBox=(isDistribution||isEV)?'0 0 150 180':isInverter?'0 0 150 180':isStorage?'0 0 150 180':(isRadiator||isManifold)?(()=>{const q=isRadiator?HASSStudioRadiator.geometry(obj):HASSStudioManifold.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.height+38);})():isGrid?(()=>{const q=HASSStudioPowerGrid.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.height+38);})():previewFireplace?(()=>{const q=HASSStudioFireplace.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewElectric?(()=>{const q=HASSStudioElectricBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewGas?(()=>{const q=HASSStudioGasBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewHP?(()=>{const q=HASSStudioHeatPump.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewPellet?(()=>{const b=HASSStudioPellet.geometry(obj);
             return (b.x-8)+' '+(b.y-8)+' '+(b.width+16)+' '+(b.labelY-b.y+26);})():
           previewSolid?((66+(12-66)*obj.width_scale-8)+' '+(53+(-105-53)*obj.height_scale-8)+' '+
             (110*obj.width_scale+16)+' '+(318*obj.height_scale+16)):
@@ -69,7 +69,7 @@ const HASSStudioEditorInspector = (() => {
           previewFree?((60-previewWidth/2)+' '+(70-previewHeight/2)+' '+previewWidth+' '+previewHeight):'0 0 120 140';
         markup+='<div class="ss-preview"><svg viewBox="'+previewBox+'" width="120" height="120">'+
           HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+HASSStudioGraphics.defs(obj,editor._hass)+'</defs>'+
-          (isInverter?HASSStudioInverter.render(obj,editor._hass):isStorage?HASSStudioEnergyStorage.render(obj,editor._hass):isRadiator?HASSStudioRadiator.render(obj,editor._hass):isManifold?HASSStudioManifold.render(obj,editor._hass):isGrid?HASSStudioPowerGrid.render(obj,editor._hass):obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,editor._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,editor._hass):previewPellet?HASSStudioPellet.render(obj,editor._hass):previewHP?HASSStudioHeatPump.render(obj,editor._hass):previewGas?HASSStudioGasBoiler.render(obj,editor._hass):previewElectric?HASSStudioElectricBoiler.render(obj,editor._hass):previewFireplace?HASSStudioFireplace.render(obj,editor._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,editor._hass):variantShape(obj))+'</svg></div>';
+          (isDistribution?HASSStudioDistributionBoard.render(obj,editor._hass):isEV?HASSStudioEVCharger.render(obj,editor._hass):isInverter?HASSStudioInverter.render(obj,editor._hass):isStorage?HASSStudioEnergyStorage.render(obj,editor._hass):isRadiator?HASSStudioRadiator.render(obj,editor._hass):isManifold?HASSStudioManifold.render(obj,editor._hass):isGrid?HASSStudioPowerGrid.render(obj,editor._hass):obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,editor._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,editor._hass):previewPellet?HASSStudioPellet.render(obj,editor._hass):previewHP?HASSStudioHeatPump.render(obj,editor._hass):previewGas?HASSStudioGasBoiler.render(obj,editor._hass):previewElectric?HASSStudioElectricBoiler.render(obj,editor._hass):previewFireplace?HASSStudioFireplace.render(obj,editor._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,editor._hass):variantShape(obj))+'</svg></div>';
         if(obj.type==='boiler'){
           const panelGroups={solid_fuel:['displayGroup',549,369],pellet_modern:['displayPanel',322,315],
             heatpump_modern:['displayBlock',986,371],gas_modern:['displayFrame',574,1097],
@@ -100,6 +100,31 @@ const HASSStudioEditorInspector = (() => {
         if(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant))markup+=field('Skala panelu z tekstem (%)','readout_scale',Math.round((obj.readout_scale||1)*100),'range',null,'min="40" max="150" step="5"');
 
 
+        if(isEV){
+          const d=HASSStudioEVCharger.normalize(obj);
+          const yes=(k,label)=>field(label,'ev_'+k,d[k]?'true':'false','text',[['true','Tak'],['false','Nie']]);
+          markup+=field('Źródło danych','ev_mode',d.mode,'text',[['live','Home Assistant'],['manual','Symulacja']]);
+          markup+=field('Liczba faz','ev_phases',d.phases,'text',[['1','Jedna'],['3','Trzy']]);
+          markup+=field('Próg ładowania (W)','ev_power_threshold_w',d.power_threshold_w,'number',null,'min="0" max="1000" step="1"');
+          markup+=field('Skala ekranu (%)','ev_display_scale',Math.round(d.display_scale*100),'range',null,'min="40" max="150" step="5"');
+          markup+=yes('charging_positive','Dodatnia moc oznacza ładowanie')+yes('animate','Animacja błyskawicy');
+          markup+=yes('show_extra','Pokaż panel parametrów');
+          markup+=field('Położenie panelu','ev_extra_position',d.extra_position,'text',[['right','Prawo'],['left','Lewo']]);
+          markup+=field('Skala panelu (%)','ev_extra_scale',Math.round(d.extra_scale*100),'range',null,'min="40" max="150" step="5"');
+          markup+='<h4>Encje ładowarki i liczniki energii</h4>';
+          const labels={power:'Aktualna moc (W/kW)',session_energy:'Energia sesji (Wh/kWh)',daily_energy:'Energia dzienna',monthly_energy:'Energia miesięczna',total_energy:'Energia całkowita',status:'Status ładowarki',alarm:'Alarm',temperature:'Temperatura',vehicle_soc:'SOC samochodu',voltage_l1:'Napięcie L1',voltage_l2:'Napięcie L2',voltage_l3:'Napięcie L3',current_l1:'Prąd L1',current_l2:'Prąd L2',current_l3:'Prąd L3'};
+          for(const key of HASSStudioEVCharger.keys){
+            if(d.phases===1&&/_(?:l2|l3)$/.test(key))continue;
+            markup+=field(labels[key]||key,'ev_entity_'+key,d.entities[key]||'','search',null,'list="ss-entity-list"');
+          }
+          if(d.mode==='manual'){
+            markup+=field('Test mocy (kW)','ev_manual_power',d.manual.power,'number',null,'step="0.1"');
+            markup+=field('Test energii sesji (kWh)','ev_manual_session_energy',d.manual.session_energy,'number',null,'min="0" step="0.1"');
+            markup+=field('Test statusu','ev_manual_status',d.manual.status,'text',[['charging','Ładowanie'],['ready','Gotowość'],['disconnected','Niepodłączona'],['fault','Awaria']]);
+            markup+=field('Test alarmu','ev_manual_alarm',d.manual.alarm?'true':'false','text',[['false','Brak'],['true','Alarm']]);
+          }
+          markup+='<p class="ss-note">Historia sesji wymaga liczników/rekordów w HA. Panel tylko odczytuje dane; nie steruje ładowaniem.</p>';
+        }
         if(isInverter){
           const c=HASSStudioInverter.normalize(obj);
           const bool=(k,label)=>field(label,'inv_'+k,c[k]?'true':'false','text',[['true','Tak'],['false','Nie']]);
