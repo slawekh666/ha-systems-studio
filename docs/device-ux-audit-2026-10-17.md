@@ -47,7 +47,7 @@ Realizacja: osobna gałąź i MR dla każdego punktu; nie publikować Release/HA
 | 2 | !37 | #2958938595 SUCCESS | Biblioteka: kategorie źródeł, Dom/Garaż/Budynek gospodarczy, +22% domyślnej szerokości | Zweryfikować ikony MDI na rzeczywistym motywie HA |
 | 3 | !38 | #2958938794 SUCCESS | Osobne wejścia Rura / Przewód elektryczny, parametr connection_type z zachowaniem starego type=pipe | Dodatki elektryczne zostają do kolejnej iteracji; konieczny test w UI |
 | 4 | !39 | #2958938668 SUCCESS | Shift+wheel nad kartą na desktopie, bez przejęcia zwykłego scrolla HA | Test zachowania przeglądarek w HA |
-| 5 | !40 | #2958938870 SUCCESS | 5 segmentów pelletu, encja %, próg alarmu 20%, ręczny poziom testowy | Obowiązkowa próba na bieżących encjach HA |
+| 5 | !40 | #2958941398 SUCCESS | 5 segmentów pelletu, encja %, próg alarmu 20%, ręczny poziom testowy; osobne testy progów 0–100% | Obowiązkowa próba na bieżących encjach HA |
 | 6 | !35 | #2958927250 SUCCESS | Oddzielne parametry pompy ciepła i działający test mocy + obrotów; ukryte palnikowe opcje w nowych pompach i kotłach elektrycznych | Pozostałe rodziny wymagają manualnej akceptacji w GUI |
 
 **Stan scalenia:** MR-y otwarte, `main` niezmieniony. Zmiany w różnych MR mają wspólny `dist/ha-systems-studio.js`; scalać kolejno, po każdym rebase/regeneracja deterministycznego bundla i test CI.
