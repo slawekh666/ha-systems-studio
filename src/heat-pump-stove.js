@@ -56,9 +56,11 @@ const HASSStudioHeatPump = (()=>{
         fanSpeedBar: { width: (206 * pct / 100).toFixed(1) }
       }), prefix
     );
-    return '<g class="ss-modern-heat-pump" data-fan="'+(speed===null?'unknown':pct.toFixed(1))+'" data-power="'+(kw===null?'unknown':kw.toFixed(2))+'">'+
+    return '<g class="ss-modern-heat-pump" data-mode="'+(manual?'manual':'live')+'" data-fan="'+(speed===null?'unknown':pct.toFixed(1))+'" data-power="'+(kw===null?'unknown':kw.toFixed(2))+'">'+
       '<g class="ss-hp-dimensions" transform="translate(108.32 9.96) scale('+sx+' '+sy+') translate(-108.32 -9.96)">'+
-      '<g transform="translate(45 -45) scale(.1 .1)">'+image+'</g></g></g>';
+      '<g transform="translate(45 -45) scale(.1 .1)">'+image+'</g></g>'+
+      (manual?'<g class="ss-hp-test-label"><rect x="145" y="76" width="44" height="16" rx="6" fill="#3b4e67" stroke="#84bee4" stroke-width=".8"/>'+
+        '<text x="167" y="87.6" fill="#d9f1ff" font-family="Arial,sans-serif" font-size="10" font-weight="bold" text-anchor="middle">TEST</text></g>':'')+'</g>';
   };
   const styles='<style>'+
     '@keyframes ssHPSpin{to{transform:rotate(360deg)}}'+
