@@ -32,7 +32,7 @@ assert.match(render,/3500W/);
 assert.match(render,/fill="#4cd6ff"/);
 assert(!render.includes('NaN'));
 const stopped=api.render(known,{states:{...h.states,'sensor.ac':value(0,'W')}});
-assert.match(stopped,/id="ssinvpv1-inv-led"[^>]+fill="#f04444"/);
+assert.match(stopped,/id="ssinvpv1-inv-led"[^>]+fill="#ff9b32"/);
 const absent=api.render(known,{states:{...h.states,'sensor.ac':value('unavailable','W')}});
 assert.match(absent,/id="ssinvpv1-inv-led"[^>]+fill="#7e929f"/);
 assert.match(absent,/id="ssinvpv1-inv-power"[^>]*>—<\/text>/);

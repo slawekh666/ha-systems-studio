@@ -10,7 +10,7 @@ const legacy={
   tank:'modular stratified buffer coil dual_coil hygiene combi',
   solar:'flat tube',pump:'circulation inline',valve:'two_way three_way',sensor:'temperature pressure'
 };
-assert.equal(Array.from(registry.listTypes()).join(' '),'boiler tank solar pump valve sensor radiator manifold inverter distribution_board ev_charger energy_storage power_grid pipe');
+assert.equal(Array.from(registry.listTypes()).join(' '),'boiler tank solar pump valve sensor radiator manifold distribution_board ev_charger inverter energy_storage power_grid pipe');
 for(const [type,variants] of Object.entries(legacy)){
   assert.equal(registry.variantsFor(type).map(item=>item.id).join(' '),variants);
   for(const variant of variants.split(' ')){

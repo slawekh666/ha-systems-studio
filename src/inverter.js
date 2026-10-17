@@ -90,8 +90,8 @@ const HASSStudioInverter=(()=>{
    const rowMarkup=shown.map(svgRow).join('')+
      (d.inputs.filter(x=>x.visible).length>3?'<text x="194" y="147" text-anchor="end" fill="#79d5fc" font-size="7">więcej…</text>':'');
    source=HASSStudioSvg.inject(source,{'inv-pv-rows':rowMarkup,'inv-extra-panel':c.show_extra?extra(d):''});
-   const led=d.state==='generating'?'#4cd6ff':d.state==='standby'?'#f04444':
-     d.state==='alarm'?'#ff9138':'#7e929f';
+   const led=d.state==='generating'?'#4cd6ff':d.state==='standby'?'#ff9b32':
+     d.state==='alarm'?'#f04444':'#7e929f';
    source=HASSStudioSvg.apply(source,{'inv-power':{text:kw(d.power)},
      'inv-led':{fill:led},'inv-led-glow':{fill:led},
      'inv-alert':{visibility:d.fault?'visible':'hidden'}});
