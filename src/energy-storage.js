@@ -62,7 +62,7 @@ const HASSStudioEnergyStorage=(()=>{
     const missing=c.mode==='live'&&!!e.soc&&soc===null;
     const warnings=[],alarms=[];
     if(soc!==null){
-      if(soc<=warningThreshold)warnings.push('Niski SOC');
+      if(c.show_warning&&soc<=warningThreshold)warnings.push('Niski SOC');
       if(soc<=criticalThreshold)alarms.push('Alarm SOC');
     }
     if(c.mode==='live'){
