@@ -18,7 +18,7 @@ const HASSStudioDeviceRegistry = (() => {
   const familyIcons=Object.freeze({solid_fuel_boiler:'mdi:fire',pellet_boiler:'mdi:fire',gas_boiler:'mdi:fire',
     electric_boiler:'mdi:flash',oil_boiler:'mdi:fire',heat_pump:'mdi:heat-pump',fireplace:'mdi:fireplace',
     tank:'mdi:water-boiler',solar_collector:'mdi:white-balance-sunny',pump:'mdi:pump',valve:'mdi:valve',
-    sensor:'mdi:thermometer',pipe:'mdi:pipe',energy_storage:'mdi:battery-high',power_grid:'mdi:transmission-tower',radiator:'mdi:radiator',manifold:'mdi:pipe-manifold'});
+    sensor:'mdi:thermometer',pipe:'mdi:pipe',energy_storage:'mdi:battery-high',inverter:'mdi:solar-power',power_grid:'mdi:transmission-tower',radiator:'mdi:radiator',manifold:'mdi:pipe-manifold'});
   // Common logical identity, independent from the selected drawing.
   const families = Object.freeze({
     solid_fuel_boiler:{category:'heat_sources',pl:'Kocioł na drewno / węgiel',en:'Wood / coal boiler',fuels:['wood','coal'],entities:['entity','burner_entity'],animations:['combustion']},
@@ -35,6 +35,7 @@ const HASSStudioDeviceRegistry = (() => {
     sensor:{category:'measurements',pl:'Czujnik',en:'Sensor',entities:['entity'],animations:[]},
     radiator:{category:'hydraulics',pl:'Grzejnik',en:'Radiator',entities:['temperature_entity','valve_entity'],animations:[]},
     manifold:{category:'hydraulics',pl:'Rozdzielacz CO',en:'Heating manifold',entities:['circuits'],animations:[]},
+    inverter:{category:'electricity',pl:'Falownik fotowoltaiczny',en:'PV inverter',entities:['ac_power','inputs'],animations:[]},
     energy_storage:{category:'electricity',pl:'Magazyn energii',en:'Energy storage',entities:['soc','power','soh','voltage','current','temperature','bms_alarm'],animations:['charge']},
     power_grid:{category:'electricity',pl:'Sieć energetyczna',en:'Power Grid',entities:['L1_V','L1_A','L2_V','L2_A','L3_V','L3_A'],animations:[]},
     pipe:{category:'connections',pl:'Rura',en:'Pipe',entities:['flow_entity'],animations:['flow']}
@@ -75,6 +76,7 @@ const HASSStudioDeviceRegistry = (() => {
     sensor:{icon:'♧',variants:[['temperature','sensor','Temperatura','Temperature','warmwasser'],['pressure','sensor','Ciśnienie','Pressure','warmwasser']]},
     radiator:{icon:'▥',variants:[['modern','radiator','Nowoczesny','Modern','radiator','radiator.svg']]},
     manifold:{icon:'≡',variants:[['floor_heating','manifold','Podłogówka','Floor heating','manifold']]},
+    inverter:{icon:'▣',variants:[['modern','inverter','Falownik PV','PV inverter','inverter','inverter.svg']]},
     energy_storage:{icon:'▤',variants:[['modern','energy_storage','Magazyn energii','Energy storage','energyStorage','energy-storage.svg']]},
     power_grid:{icon:'⚡',variants:[['classic','power_grid','Classic','Classic','powerGrid','power-grid-classic.svg'],['modern','power_grid','Modern','Modern','powerGrid','power-grid-modern-light.svg']]},
     pipe:{icon:'〰',variants:[]}
@@ -125,6 +127,7 @@ const HASSStudioDeviceRegistry = (() => {
     ['sensor','pressure','sensor_group'],
     ['radiator','modern','radiator_group'],
     ['manifold','floor_heating','manifold_group'],
+    ['inverter','modern','inverter_group'],
     ['energy_storage','modern','storage_group'],
     ['power_grid','classic','electricity_group'],
     ['pipe',null,'pipe_group']
@@ -139,6 +142,7 @@ const HASSStudioDeviceRegistry = (() => {
     sensor_group: Object.freeze({pl:'Czujniki',en:'Sensors',icon:'mdi:thermometer'}),
     radiator_group: Object.freeze({pl:'Grzejniki',en:'Radiators',icon:'mdi:radiator'}),
     manifold_group: Object.freeze({pl:'Rozdzielacze',en:'Manifolds',icon:'mdi:pipe-manifold'}),
+    inverter_group: Object.freeze({pl:'Falowniki PV',en:'PV inverters',icon:'mdi:solar-power'}),
     storage_group: Object.freeze({pl:'Magazyny energii',en:'Energy storage',icon:'mdi:battery-high'}),
     electricity_group: Object.freeze({pl:'Sieć elektryczna',en:'Electrical grid',icon:'mdi:transmission-tower'}),
     pipe_group: Object.freeze({pl:'Rury',en:'Pipes',icon:'mdi:pipe'})
