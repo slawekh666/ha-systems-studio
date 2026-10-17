@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const files=['src/ha-state.js','src/svg-template.js','src/solid-fuel-stove.js','src/heat-pump-stove.js'];
+const ctx={};vm.createContext(ctx);
+for(const f of ['src/ha-state.js','src/svg-template.js'])vm.runInContext(fs.readFileSync(f,'utf8'),ctx,{filename:f});
+vm.runInContext('this.HASSStudioIconTemplates={heatPump:requireHeatPump};',Object.assign(ctx,{requireHeatPump:fs.readFileSync('src/icons/heat-pump-stove.svg','utf8').replace(/^\s*<svg\b[^>]*>/,'').replace(/<\/svg>\s*$/,'')})); 
+vm.runInContext(fs.readFileSync('src/heat-pump-stove.js','utf8')+'\nthis.hp=HASSStudioHeatPump;',ctx);
+const node={id:'hp',type:'boiler',variant:'heatpump_modern',hp_test_mode:true,hp_manual_kw:4.5,hp_manual_fan:70,hp_glow:65,width_scale:1,height_scale:1};
+assert.match(ctx.hp.render(node,{states:{}}),/4\.50 kW/);
+assert.match(ctx.hp.render(node,{states:{}}),/>70%</);
+const inspector=fs.readFileSync('src/studio-inspector.js','utf8');
+assert(inspector.includes('hp_manual_kw'));assert(inspector.includes('hp_manual_fan'));
+assert(inspector.includes("if(!['heatpump_modern','electric_modern'].includes(obj.variant))"));
+console.log('OK: heat pump manual preview and device-specific controls');
