@@ -16,7 +16,7 @@ assert(hpLegacy.includes('Encja pracy pompy ciepła'));
 assert(hpLegacy.includes("obj.variant!=='heatpump_modern'"));
 const liveNode={...node,hp_test_mode:false,hp_power_entity:'sensor.hp_power',hp_fan_entity:'sensor.hp_fan'};
 const states={states:{'sensor.hp_power':{state:'2800',attributes:{unit_of_measurement:'W'}},'sensor.hp_fan':{state:'900',attributes:{unit_of_measurement:'rpm'}}}};
-assert.match(ctx.hp.render(liveNode,states),/2\\.80 kW/);
+assert.match(ctx.hp.render(liveNode,states),/2\.80 kW/);
 assert.match(ctx.hp.render(liveNode,states),/>900 RPM/);
 assert.match(ctx.hp.render(node,{states:{}}),/ss-hp-test-label/);
 assert.doesNotMatch(ctx.hp.render(liveNode,states),/ss-hp-test-label/);
