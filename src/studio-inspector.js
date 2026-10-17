@@ -51,7 +51,7 @@ const HASSStudioEditorInspector = (() => {
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
         const isGrid=obj.type==='power_grid';
-        const isRadiator=obj.type==='radiator',isManifold=obj.type==='manifold',isStorage=obj.type==='energy_storage',isInverter=obj.type==='inverter',isDistribution=obj.type==='distribution_board',isEV=obj.type==='ev_charger';
+        const isRadiator=obj.type==='radiator',isManifold=obj.type==='manifold',isStorage=obj.type==='energy_storage',isInverter=obj.type==='inverter',isDistribution=obj.type==='distribution_board',isEV=obj.type==='ev_charger',isBuilding=obj.type==='building';
         const previewFree=obj.type==='tank'&&obj.variant==='modular'&&obj.scale_mode==='free';
         const previewSolid=obj.type==='boiler'&&obj.variant==='solid_fuel';
         const previewPellet=obj.type==='boiler'&&obj.variant==='pellet_modern';
@@ -61,7 +61,7 @@ const HASSStudioEditorInspector = (() => {
         const previewFireplace=obj.type==='boiler'&&obj.variant==='fireplace_modern';
         const previewWidth=previewFree?Math.max(112*obj.width_scale+30,145*obj.width_scale):120;
         const previewHeight=previewFree?Math.max(113*obj.height_scale+40,155*obj.height_scale):140;
-        const previewBox=(isDistribution||isEV)?'0 0 150 180':isInverter?'0 0 150 180':isStorage?'0 0 150 180':(isRadiator||isManifold)?(()=>{const q=isRadiator?HASSStudioRadiator.geometry(obj):HASSStudioManifold.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.height+38);})():isGrid?(()=>{const q=HASSStudioPowerGrid.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.height+38);})():previewFireplace?(()=>{const q=HASSStudioFireplace.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewElectric?(()=>{const q=HASSStudioElectricBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewGas?(()=>{const q=HASSStudioGasBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewHP?(()=>{const q=HASSStudioHeatPump.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewPellet?(()=>{const b=HASSStudioPellet.geometry(obj);
+        const previewBox=isBuilding?'0 0 150 185':(isDistribution||isEV)?'0 0 150 180':isInverter?'0 0 150 180':isStorage?'0 0 150 180':(isRadiator||isManifold)?(()=>{const q=isRadiator?HASSStudioRadiator.geometry(obj):HASSStudioManifold.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.height+38);})():isGrid?(()=>{const q=HASSStudioPowerGrid.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.height+38);})():previewFireplace?(()=>{const q=HASSStudioFireplace.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewElectric?(()=>{const q=HASSStudioElectricBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewGas?(()=>{const q=HASSStudioGasBoiler.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewHP?(()=>{const q=HASSStudioHeatPump.geometry(obj);return (q.x-8)+' '+(q.y-8)+' '+(q.width+16)+' '+(q.labelY-q.y+24);})():previewPellet?(()=>{const b=HASSStudioPellet.geometry(obj);
             return (b.x-8)+' '+(b.y-8)+' '+(b.width+16)+' '+(b.labelY-b.y+26);})():
           previewSolid?((66+(12-66)*obj.width_scale-8)+' '+(53+(-105-53)*obj.height_scale-8)+' '+
             (110*obj.width_scale+16)+' '+(318*obj.height_scale+16)):
@@ -69,7 +69,7 @@ const HASSStudioEditorInspector = (() => {
           previewFree?((60-previewWidth/2)+' '+(70-previewHeight/2)+' '+previewWidth+' '+previewHeight):'0 0 120 140';
         markup+='<div class="ss-preview"><svg viewBox="'+previewBox+'" width="120" height="120">'+
           HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+HASSStudioGraphics.defs(obj,editor._hass)+'</defs>'+
-          (isDistribution?HASSStudioDistributionBoard.render(obj,editor._hass):isEV?HASSStudioEVCharger.render(obj,editor._hass):isInverter?HASSStudioInverter.render(obj,editor._hass):isStorage?HASSStudioEnergyStorage.render(obj,editor._hass):isRadiator?HASSStudioRadiator.render(obj,editor._hass):isManifold?HASSStudioManifold.render(obj,editor._hass):isGrid?HASSStudioPowerGrid.render(obj,editor._hass):obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,editor._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,editor._hass):previewPellet?HASSStudioPellet.render(obj,editor._hass):previewHP?HASSStudioHeatPump.render(obj,editor._hass):previewGas?HASSStudioGasBoiler.render(obj,editor._hass):previewElectric?HASSStudioElectricBoiler.render(obj,editor._hass):previewFireplace?HASSStudioFireplace.render(obj,editor._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,editor._hass):variantShape(obj))+'</svg></div>';
+          (isBuilding?HASSStudioBuilding.render(obj,editor._hass):isDistribution?HASSStudioDistributionBoard.render(obj,editor._hass):isEV?HASSStudioEVCharger.render(obj,editor._hass):isInverter?HASSStudioInverter.render(obj,editor._hass):isStorage?HASSStudioEnergyStorage.render(obj,editor._hass):isRadiator?HASSStudioRadiator.render(obj,editor._hass):isManifold?HASSStudioManifold.render(obj,editor._hass):isGrid?HASSStudioPowerGrid.render(obj,editor._hass):obj.type==='tank'&&obj.variant==='modular'?HASSStudioTank.render(obj,editor._hass):obj.type==='boiler'&&obj.variant==='solid_fuel'?HASSStudioSolidFuel.render(obj,editor._hass):previewPellet?HASSStudioPellet.render(obj,editor._hass):previewHP?HASSStudioHeatPump.render(obj,editor._hass):previewGas?HASSStudioGasBoiler.render(obj,editor._hass):previewElectric?HASSStudioElectricBoiler.render(obj,editor._hass):previewFireplace?HASSStudioFireplace.render(obj,editor._hass):obj.visual==='warmwasser'?HASSStudioGraphics.render(obj,editor._hass):variantShape(obj))+'</svg></div>';
         if(obj.type==='boiler'){
           const panelGroups={solid_fuel:['displayGroup',549,369],pellet_modern:['displayPanel',322,315],
             heatpump_modern:['displayBlock',986,371],gas_modern:['displayFrame',574,1097],
@@ -100,6 +100,20 @@ const HASSStudioEditorInspector = (() => {
         if(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant))markup+=field('Skala panelu z tekstem (%)','readout_scale',Math.round((obj.readout_scale||1)*100),'range',null,'min="40" max="150" step="5"');
 
 
+        if(isBuilding){
+          const c=HASSStudioBuilding.normalize(obj);
+          markup+=field('Źródło danych','building_mode',c.mode,'text',[['live','Home Assistant'],['manual','Symulacja']]);
+          markup+=field('Moc odbiornika (W/kW)','building_power_entity',c.power_entity,'search',null,'list="ss-entity-list"');
+          markup+=field('Zużycie dzienne (Wh/kWh/MWh)','building_daily_entity',c.daily_entity,'search',null,'list="ss-entity-list"');
+          markup+=field('Typ pomiaru','building_measurement',c.measurement,'text',
+            [['individual','Tylko ten budynek'],['aggregate','Pomiar zbiorczy, obejmuje inne odbiorniki']]);
+          markup+=field('Pokaż odczyt','building_show_readout',c.show_readout?'true':'false','text',[['true','Tak'],['false','Nie']]);
+          markup+=field('Skala odczytu (%)','building_readout_scale',Math.round(c.readout_scale*100),'range',null,'min="40" max="150" step="5"');
+          markup+=field('Podświetlaj okna przy poborze','building_window_glow',c.window_glow?'true':'false','text',[['true','Tak'],['false','Nie']]);
+          if(c.mode==='manual')markup+=field('Test mocy (kW)','building_power_kw',c.power_kw,'number',null,'min="0" step="0.1"')+
+             field('Test zużycia dziennego (kWh)','building_daily_kwh',c.daily_kwh,'number',null,'min="0" step="0.1"');
+          markup+='<p class="ss-note">Udział energii PV i sieci to osobny bilans. Pomiar zbiorczy nie jest dodawany do jego odbiorników.</p>';
+        }
         if(isEV){
           const d=HASSStudioEVCharger.normalize(obj);
           const yes=(k,label)=>field(label,'ev_'+k,d[k]?'true':'false','text',[['true','Tak'],['false','Nie']]);
@@ -338,6 +352,16 @@ const HASSStudioEditorInspector = (() => {
           [['off',L.flowOff||'Off'],['auto',L.flowAuto||'Entity-controlled'],['on',L.flowOn||'On (preview)']]);
         markup+=field(L.flowDirection||'Flow direction','flow_direction',obj.flow_direction,'text',
           [['forward',L.forward||'Start → End'],['reverse',L.reverse||'End → Start']]);
+        markup+=field('Animacja zależna od mocy','flow_power_mode',obj.flow_power_mode||'off','text', [['off','Wyłączona (stare zachowanie)'],['ha','Pomiar mocy z HA'],['manual','Symulacja kW']]);
+        if(obj.flow_power_mode!=='off'){
+          markup+=field('Encja przepływu mocy (W/kW)','flow_power_entity',obj.flow_power_entity||'','search',null,'list="ss-entity-list"');
+          markup+=field('Moc testowa (kW)','flow_power_kw',obj.flow_power_kw??0,'number',null,'step="0.1"');
+          markup+=field('Moc maksymalna skali (kW)','flow_max_kw',obj.flow_max_kw??10,'number',null,'min="0.1" step="0.1"');
+          markup+=field('Grubość animacji min','flow_min_width',obj.flow_min_width??1.5,'number',null,'min="0.5" max="12" step="0.5"');
+          markup+=field('Grubość animacji max','flow_max_width',obj.flow_max_width??6,'number',null,'min="0.5" max="16" step="0.5"');
+          markup+=field('Wzór przepływu','flow_pattern',obj.flow_pattern||'dots','text',[['dots','Kropki'],['dashes','Kreski'],['arrows','Strzałki']]);
+          markup+=field('Odwracaj kierunek dla ujemnych kW','flow_power_direction',obj.flow_power_direction!==false?'true':'false','text',[['true','Tak'],['false','Nie']]);
+        }
         markup+=field(L.flowSpeed||'Animation duration (s)','flow_speed',obj.flow_speed,'number',null,'min="0.35" max="5" step="0.1"');
         markup+=field(L.flowEntity||'Animation state entity','flow_entity',obj.flow_entity,'search',null,'list="ss-entity-list"');
         markup+='<p>'+esc(L.pipeHelp)+'</p><div class="ss-row">'+
