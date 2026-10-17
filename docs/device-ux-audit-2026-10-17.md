@@ -37,3 +37,19 @@ Realizacja: osobna gałąź i MR dla każdego punktu; nie publikować Release/HA
 - Rury: zachowujemy kierunek przepływu; temperatura i kolor z HA będą dopiero osobnym uzgodnionym etapem.
 - Kabel elektryczny: animacja w zależności od podpisanej mocy W/kW; dla rur można stosować odczyt przepływu w l/min, bez fałszywego wnioskowania z kW.
 - Historia ładowania EV nie może powstawać z chwilowej mocy bez liczników lub danych HA.
+
+## Status wykonania (raport aktualizowany)
+
+| Nr | MR | CI | Rezultat | Ograniczenia |
+|---|---|---|---|---|
+| 0 | !34 | Dokumentacja | Lista punktów, audyt kodu i kryteria akceptacyjne | Audyt interakcji wszystkich ikon w HA jeszcze nieukończony |
+| 1 | !36 | #2958938483 SUCCESS | Mniejszy piorun EV, niezmieniony odczyt kW/sesja | Potrzebny podgląd w HA |
+| 2 | !37 | #2958938595 SUCCESS | Biblioteka: kategorie źródeł, Dom/Garaż/Budynek gospodarczy, +22% domyślnej szerokości | Zweryfikować ikony MDI na rzeczywistym motywie HA |
+| 3 | !38 | #2958938794 SUCCESS | Osobne wejścia Rura / Przewód elektryczny, parametr connection_type z zachowaniem starego type=pipe | Dodatki elektryczne zostają do kolejnej iteracji; konieczny test w UI |
+| 4 | !39 | #2958938668 SUCCESS | Shift+wheel nad kartą na desktopie, bez przejęcia zwykłego scrolla HA | Test zachowania przeglądarek w HA |
+| 5 | !40 | #2958938870 SUCCESS | 5 segmentów pelletu, encja %, próg alarmu 20%, ręczny poziom testowy | Obowiązkowa próba na bieżących encjach HA |
+| 6 | !35 | #2958927250 SUCCESS | Oddzielne parametry pompy ciepła i działający test mocy + obrotów; ukryte palnikowe opcje w nowych pompach i kotłach elektrycznych | Pozostałe rodziny wymagają manualnej akceptacji w GUI |
+
+**Stan scalenia:** MR-y otwarte, `main` niezmieniony. Zmiany w różnych MR mają wspólny `dist/ha-systems-studio.js`; scalać kolejno, po każdym rebase/regeneracja deterministycznego bundla i test CI.
+
+**Zakres audytu:** wykryto i poprawiono konkretną niezgodność nowoczesnej pompy ciepła. Systematyczne przejście formularzy wszystkich wariantów, w tym test przez interakcję w HA, pozostaje osobnym wymaganym krokiem akceptacyjnym. Nie deklarować kompletnej naprawy wszystkich urządzeń tylko na podstawie zielonego CI.
