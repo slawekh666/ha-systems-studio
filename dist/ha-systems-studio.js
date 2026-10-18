@@ -1268,6 +1268,7 @@ const HASSStudioGraphics = (() => {
     '@keyframes ssWWPulse{0%{opacity:.8;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}'+
     '@keyframes ssWWFire{33%{opacity:.8;transform:scale(1.04,.92)}66%{opacity:.95;transform:scale(.96,1.06)}}'+
     '@keyframes ssWWFlow{to{stroke-dashoffset:-28}}'+
+    '@keyframes ssElectricFlow{to{stroke-dashoffset:var(--ss-flow-cycle,-28)}}'+
     '.ss-pump-pulse{animation:ssWWPulse 1.6s infinite;transform-box:fill-box;transform-origin:center}'+
     '.ss-fire{animation:ssWWFire .9s infinite;transform-box:fill-box;transform-origin:center}'+
     '.ss-solar-sun{animation:ssWWFire 3s infinite;transform-box:fill-box;transform-origin:center}'+
@@ -1276,6 +1277,7 @@ const HASSStudioGraphics = (() => {
     '.ss-embers{animation:ssWWEmbers 1.7s infinite}'+
     '.ss-fan{animation:ssWWRotate 1.8s linear infinite;transform-box:fill-box;transform-origin:center}'+
     '.ss-flow{stroke:#fff;stroke-width:2.5;stroke-dasharray:1 13;animation:ssWWFlow var(--ss-speed,1s) linear infinite;fill:none;stroke-linecap:round}'+
+    '.ss-flow-power{animation-name:ssElectricFlow}'+
     '</style>';
   return {defs,render,styles,on};
 })();
@@ -2903,7 +2905,15 @@ const HASSStudioPowerFlow=(()=>{
    const direction=reverse?(pipe.flow_direction==='reverse'?'forward':'reverse'):(pipe.flow_direction==='reverse'?'reverse':'forward');
    return {known:kw!==null,active:nonzero,kw,width,size,interval,direction,pattern:c.flow_pattern};
  };
- const style=v=>'--ss-flow-width:'+v.width+';--ss-flow-size:'+v.size+';--ss-flow-gap:'+v.interval+';animation-direction:'+v.direction;
+ // A seamless dash animation advances exactly one dash+gap period per loop.
+ // Hydraulic flows deliberately keep the independent legacy 28-unit cycle.
+ const style=v=>{
+   const dash=v.pattern==='dots'?v.size:v.size*2;
+   const cycle=+(dash+v.interval).toFixed(2);
+   return '--ss-flow-width:'+v.width+';--ss-flow-size:'+v.size+
+     ';--ss-flow-gap:'+v.interval+';--ss-flow-cycle:-'+cycle+
+     ';animation-direction:'+v.direction;
+ };
  const arrowPath=(d,w)=>'<path class="ss-power-arrow" d="'+d+'" stroke="#fff" stroke-width="'+w+'" stroke-dasharray="1 17" fill="none"/>';
  return Object.freeze({defaults,normalize,measure,visual,style,arrowPath});
 })();
