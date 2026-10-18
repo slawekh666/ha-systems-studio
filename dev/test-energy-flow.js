@@ -76,7 +76,7 @@ result=flow.resolve(x,{states:{}});
 assert.equal(result.byConnection.loop.available,false);
 assert.equal(result.byConnection.loop.reason,'ambiguous_cycle');
 const crossing=cable('cross','pv','ac','home','ac',[{x:0,y:0},{x:20,y:20}]);
-const separate=cfg([pv,home,grid,panel],[cs[2],cross],[{node_id:'grid',mode:'calculate'}]);
+const separate=cfg([pv,home,grid,panel],[cs[2],crossing],[{node_id:'grid',mode:'calculate'}]);
 assert.equal(flow.resolve(separate,{states:{}}).balance.networks.length,2);
 const broken=cable('broken','pv','ac','grid','ac');
 broken.energy_end={node_id:'missing',port_id:'ac'};
