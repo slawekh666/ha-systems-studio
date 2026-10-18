@@ -692,6 +692,7 @@
         const k=key.slice(4);
         if(k==='display_scale')c.display_scale=clamp(val,40,150,100)/100;
         else if(k==='display')c.display=val==='true';
+         else if(k==='mirror_horizontal')c.mirror_horizontal=val==='true';
         else if(k==='mode')c.mode=val==='manual'?'manual':'live';
         else if(['temperature_entity','valve_entity'].includes(k))c[k]=validEntity(val)?val:'';
         else if(k==='manual_temperature')c[k]=clamp(val,-40,150,55);
