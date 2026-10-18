@@ -99,7 +99,7 @@ const HASSStudioEditorInspector = (() => {
             c.entities.temperature,'inv_manual_temperature',c.manual.temperature)+
           selectMetric('Stan pracy falownika','inv_entity_status',c.entities.status,
             'inv_manual_status',c.manual.status,[
-              ['generating','Produkcja'],['standby','Czuwanie'],['off','Wyłączony'],
+              ['auto','Automatycznie z mocy AC'],['generating','Produkcja'],['standby','Czuwanie'],['off','Wyłączony'],
               ['fault','Awaria']])+
           selectMetric('Alarm falownika','inv_entity_alarm',c.entities.alarm,
             'inv_manual_alarm',c.manual.alarm?'true':'false',[

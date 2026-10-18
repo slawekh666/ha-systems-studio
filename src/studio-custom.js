@@ -367,7 +367,10 @@
         '<p class="ss-note">Bilans chwilowej mocy. Słup jest punktem wymiany, nie źródłem odczytu mocy.</p>'+
         balance.networks.map(n=>'<p><strong>'+n.state+'</strong> · '+
           (n.residual_kw===null?'—':n.residual_kw.toFixed(3)+' kW')+'</p>').join('')+
-        HASSStudioEnergyDiagnostics.render(get(),this._hass,pickLang(this._config,this._hass),'editor');
+        HASSStudioEnergyDiagnostics.render({...get(),
+          energy_diagnostics:{...get().energy_diagnostics,enabled:true,
+            show_devices:true,show_cables:true,show_warnings:true}},
+          this._hass,pickLang(this._config,this._hass),'editor');
     };
     const balanceToggle=root.getElementById('ss-balance-toggle');
     const balancePopover=root.getElementById('ss-energy-popover');
@@ -726,7 +729,7 @@
           const f=k.slice(7);c.manual=c.manual||{};
           if(f==='ac_power'){c.manual[f]=clamp(val,-500,500,0);obj.energy_test_configured=true;}
           if(f==='temperature')c.manual[f]=clamp(val,-40,150,25);
-           if(f==='status')c.manual[f]=['generating','standby','off','fault'].includes(val)?val:'standby';
+           if(f==='status')c.manual[f]=['auto','generating','standby','off','fault'].includes(val)?val:'auto';
            if(f==='alarm')c.manual[f]=val==='true';
         }else if(k.startsWith('pv_')){
           const match=/^pv_(\d+)_(name|visible|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
