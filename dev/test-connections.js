@@ -71,6 +71,29 @@ assert(svg.includes('ss-connection-hydraulic')&&svg.includes('ss-connection-elec
 assert(svg.includes('data-connection="hydro"'), 'hydraulic accessory should be rendered');
 assert(!svg.includes('data-connection="electric"'), 'electric accessories must be hidden');
 assert(svg.includes('ss-flow-power'), 'electric power animation must be distinguishable');
+// Power-dependent dash patterns must animate by their actual dash+gap period.
+// Otherwise a dot visibly jumps backwards when the 28-unit legacy CSS loop resets.
+assert(svg.includes('--ss-flow-cycle:-21;'), '5.5-dot + 15.5-gap must loop seamlessly');
+assert(svg.includes('animation-direction:reverse'), 'negative power must preserve flow reversal');
+const visual=vm.runInContext('HASSStudioPowerFlow.visual',ctx);
+const shapeStyle=vm.runInContext('HASSStudioPowerFlow.style',ctx);
+for(const pattern of ['dots','dashes']){
+  for(const kw of [-10,-5,-0.5,0.5,5,10]){
+    const state=visual({...electric.animation,flow_pattern:pattern,flow_power_kw:kw},{states:{}});
+    const dash=pattern==='dots'?state.size:state.size*2;
+    const step=+(dash+state.interval).toFixed(2);
+    assert(shapeStyle(state).includes('--ss-flow-cycle:-'+step+';'),
+      'each electrical dash pattern must use a whole-period loop');
+  }
+}
+const dashed={...electric,animation:{...electric.animation,flow_pattern:'dashes'}};
+const svgDashed=canvas.canvasSvg({...cfg,studio_layout:{...cfg.studio_layout,connections:[dashed]}},{states:{}});
+assert(svgDashed.includes('--ss-flow-cycle:-26.5;'), 'dashed cable must have a distinct seamless period');
+const graphicsSrc=fs.readFileSync('src/warmwasser-shapes.js','utf8');
+assert(graphicsSrc.includes('@keyframes ssElectricFlow{to{stroke-dashoffset:var(--ss-flow-cycle,-28)}}'));
+assert(graphicsSrc.includes('.ss-flow-power{animation-name:ssElectricFlow}'));
+assert(graphicsSrc.includes('@keyframes ssWWFlow{to{stroke-dashoffset:-28}}'),
+  'hydraulic animation must remain unchanged');
 assert.equal((svg.match(/class="ss-cap"/g)||[]).length,2,'only hydraulic connections receive pipe end caps');
 assert(svg.includes('stroke="#e3bc63"'),'cable must have a distinct electrical color');
 assert.equal((svg.match(/class="ss-handle"/g)||[]).length,3);

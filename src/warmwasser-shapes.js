@@ -216,6 +216,7 @@ const HASSStudioGraphics = (() => {
     '@keyframes ssWWPulse{0%{opacity:.8;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}'+
     '@keyframes ssWWFire{33%{opacity:.8;transform:scale(1.04,.92)}66%{opacity:.95;transform:scale(.96,1.06)}}'+
     '@keyframes ssWWFlow{to{stroke-dashoffset:-28}}'+
+    '@keyframes ssElectricFlow{to{stroke-dashoffset:var(--ss-flow-cycle,-28)}}'+
     '.ss-pump-pulse{animation:ssWWPulse 1.6s infinite;transform-box:fill-box;transform-origin:center}'+
     '.ss-fire{animation:ssWWFire .9s infinite;transform-box:fill-box;transform-origin:center}'+
     '.ss-solar-sun{animation:ssWWFire 3s infinite;transform-box:fill-box;transform-origin:center}'+
@@ -224,6 +225,7 @@ const HASSStudioGraphics = (() => {
     '.ss-embers{animation:ssWWEmbers 1.7s infinite}'+
     '.ss-fan{animation:ssWWRotate 1.8s linear infinite;transform-box:fill-box;transform-origin:center}'+
     '.ss-flow{stroke:#fff;stroke-width:2.5;stroke-dasharray:1 13;animation:ssWWFlow var(--ss-speed,1s) linear infinite;fill:none;stroke-linecap:round}'+
+    '.ss-flow-power{animation-name:ssElectricFlow}'+
     '</style>';
   return {defs,render,styles,on};
 })();

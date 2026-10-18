@@ -32,7 +32,15 @@ const HASSStudioPowerFlow=(()=>{
    const direction=reverse?(pipe.flow_direction==='reverse'?'forward':'reverse'):(pipe.flow_direction==='reverse'?'reverse':'forward');
    return {known:kw!==null,active:nonzero,kw,width,size,interval,direction,pattern:c.flow_pattern};
  };
- const style=v=>'--ss-flow-width:'+v.width+';--ss-flow-size:'+v.size+';--ss-flow-gap:'+v.interval+';animation-direction:'+v.direction;
+ // A seamless dash animation advances exactly one dash+gap period per loop.
+ // Hydraulic flows deliberately keep the independent legacy 28-unit cycle.
+ const style=v=>{
+   const dash=v.pattern==='dots'?v.size:v.size*2;
+   const cycle=+(dash+v.interval).toFixed(2);
+   return '--ss-flow-width:'+v.width+';--ss-flow-size:'+v.size+
+     ';--ss-flow-gap:'+v.interval+';--ss-flow-cycle:-'+cycle+
+     ';animation-direction:'+v.direction;
+ };
  const arrowPath=(d,w)=>'<path class="ss-power-arrow" d="'+d+'" stroke="#fff" stroke-width="'+w+'" stroke-dasharray="1 17" fill="none"/>';
  return Object.freeze({defaults,normalize,measure,visual,style,arrowPath});
 })();
