@@ -350,9 +350,9 @@ assert.doesNotMatch(pelletBurn,/sspelletpelletBsteelFront/);
 const pelletScaled=pellet.render({...pelletNode,width_scale:1.8,height_scale:.65},haModern);
 assert.match(pelletScaled,/class="ss-pellet-dimensions" transform="translate\(97 46\) scale\(1\.8 0\.65\)/);
 const gb=pellet.geometry({...pelletNode,width_scale:1.8,height_scale:.65});
-assert.equal(gb.width,186*1.8);
-assert.equal(gb.height,312*.65);
-assert.equal(pellet.geometry(pelletNode).centerX,97);
+assert.equal(gb.width,211*1.8);
+assert.equal(gb.height,230*.65);
+assert.equal(pellet.geometry(pelletNode).centerX,113);
 assert.equal(registry.variantOptions('boiler','pl').find(([id])=>id==='pellet_modern')?.[1],'Pellet (nowoczesny)');
 assert.match(src,/HASSStudioPellet\.render\(node,hass\)/);
 assert(libHtml.includes('data-add-preset="pellet_modern"'));
@@ -360,7 +360,51 @@ assert.match(src,/modernPellet\?HASSStudioPellet\.geometry\(node\)/);
 assert.match(src,/previewPellet\?/);
 assert.match(src,/field\(L\.solidState,'solid_state'/);
 assert.match(src,/field\(L\.solidGlow,'solid_glow'/);
-console.log('OK: modern pellet renderer, Warmwasser flames/embers, shared state, HA readings, geometry.');
+
+const fullCtx={};vm.createContext(fullCtx);
+for(const file of ['src/ha-state.js','src/animation-state.js','src/svg-template.js','src/readout-scale.js'])
+  vm.runInContext(fs.readFileSync(file,'utf8'),fullCtx,{filename:file});
+fullCtx.fragment=assets.pellet;
+vm.runInContext('const HASSStudioIconTemplates={pellet:this.fragment};',fullCtx);
+vm.runInContext(solidSrc+'\n'+pelletSource+'\nthis.pellet=HASSStudioPellet;',fullCtx);
+const p=fullCtx.pellet;
+const pelletHAValue=(value,unit)=>({state:String(value),attributes:{unit_of_measurement:unit||''}});
+const realHA={states:{'sensor.boiler':pelletHAValue(62,'°C'),'sensor.mod':pelletHAValue(53,'%'),
+  'binary_sensor.burner':pelletHAValue('on'),'binary_sensor.feeder':pelletHAValue('on'),
+  'binary_sensor.alarm':pelletHAValue('off'),'sensor.level':pelletHAValue(75,'%')}};
+const manualNode={...pelletNode,pellet_test_mode:true,pellet_manual_state:'burning',
+ pellet_manual_temperature:72,pellet_manual_power:65,pellet_manual_power_unit:'%',
+ pellet_manual_feeder:true,pellet_manual_alarm:false,pellet_level_test:80};
+const readManual=p.readings(manualNode,realHA);
+assert.equal(readManual.temp,72);assert.equal(readManual.power.value,65);
+assert.equal(readManual.state,'burning');assert.equal(readManual.level,80);
+assert.equal(readManual.feeder,true);assert.equal(readManual.alarm,false);
+assert.match(p.render(manualNode,realHA),/data-source="test"/);
+assert.match(p.render(manualNode,realHA),/PRACA 65%/);
+assert.match(p.render(manualNode,realHA),/sspelletpelletApelletTestIndicator/);
+for(const name of ['off','ignition','burning','embers']){
+ const frame=p.render({...manualNode,pellet_manual_state:name},realHA);
+ assert(frame.includes('data-combustion="'+name+'"'),name);
+}
+assert.match(p.render({...manualNode,pellet_manual_alarm:true},realHA),/>ALARM<\/text>/);
+assert.match(p.render({...manualNode,pellet_manual_power_unit:'kW',pellet_manual_power:5.2},realHA),/PRACA 5.20kW/);
+const liveNode={...pelletNode,pellet_test_mode:false,solid_state:'auto',pellet_level_entity:'sensor.level',
+  pellet_burner_power_entity:'sensor.mod',burner_entity:'binary_sensor.burner',
+  pellet_feeder_entity:'binary_sensor.feeder',pellet_alarm_entity:'binary_sensor.alarm'};
+assert.equal(p.readings(liveNode,realHA).power.value,53);
+assert.match(p.render(liveNode,realHA),/PRACA 53%/);
+assert.equal(p.readings({...liveNode,pellet_burner_power_entity:'sensor.missing'},realHA).power,null);
+assert.equal(p.powerReading({states:{'sensor.watt':pelletHAValue(5200,'W')}},'sensor.watt').value,5.2);
+assert.equal(p.powerReading({states:{'sensor.invalid':pelletHAValue(120,'V')}},'sensor.invalid'),null);
+const unknown=p.render({...pelletNode,entity:'',burner_entity:'',pellet_level_entity:'',
+  pellet_level_manual:false}, {states:{}});
+assert.match(unknown,/PALNIK —/);
+assert.match(unknown,/fill="#4a86a8"/);
+assert.doesNotMatch(unknown,/class="ss-fire"/);
+assert(p.geometry(pelletNode).width>200 && p.geometry(pelletNode).height<250);
+assert(src.includes("pellet_manual_state") && src.includes("pellet_test_mode"));
+
+console.log('OK: modern pellet renderer, HA and manual telemetry, geometry.');
 
 // Heat pump: HA watts/kilowatts, fan RPM or %, missing values and stop.
 const heatPumpSource=fs.readFileSync('src/heat-pump-stove.js','utf8');

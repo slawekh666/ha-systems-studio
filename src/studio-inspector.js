@@ -271,10 +271,29 @@ const HASSStudioEditorInspector = (() => {
           if(obj.variant==='gas_modern')markup+=field(L.gasDraw,'gas_draw_entity',obj.gas_draw_entity,'search',null,'list="ss-entity-list"')+
             field(L.gasGlow,'gas_glow',obj.gas_glow,'range',null,'min="0" max="100" step="5"')+
             '<p class="ss-note">'+esc(L.gasHelp)+'</p>';
-          if(obj.variant==='pellet_modern')markup+=field(L.pelletLevelEntity,'pellet_level_entity',obj.pellet_level_entity||'','search',null,'list="ss-entity-list"')+
-              field(L.pelletLevelMode,'pellet_level_manual',obj.pellet_level_manual?'true':'false','text',[['false',L.pelletLevelHA],['true',L.pelletLevelManual]])+
-              (obj.pellet_level_manual||!obj.pellet_level_entity?field(L.pelletLevelTest,'pellet_level_test',obj.pellet_level_test??80,'number',null,'min="0" max="100" step="1"'):'')+
-              field(L.pelletAlarm,'pellet_alarm_pct',obj.pellet_alarm_pct??20,'number',null,'min="0" max="100" step="1"');
+          if(obj.variant==='pellet_modern'){
+             const test=obj.pellet_test_mode===true;
+             markup+=field('Tryb danych kotła pelletowego','pellet_test_mode',test?'true':'false','text',
+                [['false','Home Assistant'],['true','Symulacja ręczna']]);
+             if(test){
+               markup+=field('Test temperatury (°C)','pellet_manual_temperature',obj.pellet_manual_temperature??65,'number',null,'min="-40" max="150" step="0.5"')+
+                 field('Test stanu palnika','pellet_manual_state',obj.pellet_manual_state||'burning','text',
+                   [['off','Wyłączony'],['ignition','Rozpalanie'],['burning','Praca'],['embers','Wygaszanie']])+
+                 field('Jednostka mocy palnika','pellet_manual_power_unit',obj.pellet_manual_power_unit||'%','text',[['%','%'],['kW','kW']])+
+                 field('Test mocy palnika','pellet_manual_power',obj.pellet_manual_power??65,'number',null,'min="0" step="0.1"')+
+                 field('Test podajnika','pellet_manual_feeder',obj.pellet_manual_feeder?'true':'false','text',[['false','Wyłączony'],['true','Aktywny']])+
+                 field('Test alarmu','pellet_manual_alarm',obj.pellet_manual_alarm?'true':'false','text',[['false','Brak'],['true','Alarm']])+
+                 field(L.pelletLevelTest,'pellet_level_test',obj.pellet_level_test??80,'number',null,'min="0" max="100" step="1"');
+             }else{
+               markup+=field('Encja mocy/modulacji palnika (% / W / kW)','pellet_burner_power_entity',obj.pellet_burner_power_entity||'','search',null,'list="ss-entity-list"')+
+                 field('Encja podajnika','pellet_feeder_entity',obj.pellet_feeder_entity||'','search',null,'list="ss-entity-list"')+
+                 field('Encja alarmu','pellet_alarm_entity',obj.pellet_alarm_entity||'','search',null,'list="ss-entity-list"')+
+                 field(L.pelletLevelEntity,'pellet_level_entity',obj.pellet_level_entity||'','search',null,'list="ss-entity-list"')+
+                 field(L.pelletLevelMode,'pellet_level_manual',obj.pellet_level_manual?'true':'false','text',[['false',L.pelletLevelHA],['true',L.pelletLevelManual]])+
+                 (obj.pellet_level_manual?field(L.pelletLevelTest,'pellet_level_test',obj.pellet_level_test??80,'number',null,'min="0" max="100" step="1"'):'');
+             }
+             markup+=field(L.pelletAlarm,'pellet_alarm_pct',obj.pellet_alarm_pct??20,'number',null,'min="0" max="100" step="1"');
+           }
           if(obj.variant==='heatpump_modern')markup+=field('Tryb testowy pompy','hp_test_mode',obj.hp_test_mode?'true':'false','text',[['false','Home Assistant'],['true','Symulacja ręczna']])+
              (obj.hp_test_mode?field('Test mocy (kW)','hp_manual_kw',obj.hp_manual_kw??0,'number',null,'min="0" max="500" step="0.1"')+field('Test wentylatora (%)','hp_manual_fan',obj.hp_manual_fan??0,'number',null,'min="0" max="100" step="1"'):'')+
              field(L.hpPower,'hp_power_entity',obj.hp_power_entity,'search',null,'list="ss-entity-list"')+
@@ -283,7 +302,7 @@ const HASSStudioEditorInspector = (() => {
             field(L.hpGlow,'hp_glow',obj.hp_glow,'range',null,'min="0" max="100" step="5"');
           if(['solid_fuel','pellet_modern','fireplace_modern'].includes(obj.variant)){
             markup+=(obj.variant==='solid_fuel'?field(L.solidFuel,'solid_fuel',obj.solid_fuel,'text',[['wood',L.solidWood],['coal',L.solidCoal]]):'')+
-              field(L.solidState,'solid_state',obj.solid_state,'text',[['auto',L.solidAuto],['burning',L.solidBurning],['embers',L.solidEmbers],['off',L.solidOff]])+
+              (obj.variant==='pellet_modern'&&obj.pellet_test_mode?'':field(L.solidState,'solid_state',obj.solid_state,'text',[['auto',L.solidAuto],['burning',L.solidBurning],['embers',L.solidEmbers],['off',L.solidOff]]))+
               field(L.solidGlow,'solid_glow',obj.solid_glow,'range',null,'min="0" max="100" step="5"')+
               '<p class="ss-note">'+esc(L.solidHelp)+'</p>';
           }else if(obj.variant==='heatpump')markup+=field('Tryb pracy pompy (wizualizacja)','burner_mode',obj.burner_mode,'text',[['auto','Automatyczny'],['on','Pracuje — test'],['off','Wyłączona — test']]);
@@ -293,7 +312,7 @@ const HASSStudioEditorInspector = (() => {
             markup+=field('Próg startu animacji przy braku encji (°C)','burner_on_temp',obj.burner_on_temp,'number',null,'min="20" max="90" step="1"');
             markup+=field('Próg zakończenia animacji (°C)','burner_off_temp',obj.burner_off_temp,'number',null,'min="10" max="89" step="1"');
             markup+='<p class="ss-note">Progi sterują tylko animacją starszej grafiki, nie uruchamiają pompy.</p>';
-          }else if(obj.variant!=='heatpump_modern'){
+          }else if(obj.variant!=='heatpump_modern'&&!(obj.variant==='pellet_modern'&&obj.pellet_test_mode)){
             markup+=field(L.burnerEntity,'burner_entity',obj.burner_entity,'search',null,'list="ss-entity-list"');
             markup+=field(L.burnerOnTemp,'burner_on_temp',obj.burner_on_temp,'number',null,'min="20" max="90" step="1"');
             markup+=field(L.burnerOffTemp,'burner_off_temp',obj.burner_off_temp,'number',null,'min="10" max="89" step="1"');
