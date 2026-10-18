@@ -195,7 +195,7 @@
       '.ss-modal:not([open]){display:none}.ss-modal.ss-fullscreen{position:fixed;inset:0;width:100vw;height:100vh;max-width:none;max-height:none;border:0;margin:0;padding:0;box-sizing:border-box}'+
       '.ss-modal.ss-fullscreen::backdrop{background:#071018dd}.ss-modal.ss-fullscreen[open]{display:flex} .ss-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--divider-color,#555);flex-wrap:wrap}'+
       '.ss-bar strong{margin-right:auto}.ss-bar button{white-space:nowrap}'+
-      '.ss-grid{display:grid;grid-template-columns:var(--ss-left,180px) 7px minmax(0,1fr) 7px var(--ss-right,310px);flex:1;min-height:0;height:100%}'+
+      '.ss-grid{display:grid;grid-template-columns:var(--ss-left,220px) 7px minmax(0,1fr) 7px var(--ss-right,310px);flex:1;min-height:0;height:100%}'+
       '.ss-splitter{width:7px;cursor:col-resize;background:var(--divider-color,#44505b);opacity:.6;flex-shrink:0}'+
       '.ss-library,.ss-props{padding:12px;overflow-y:auto;border-right:1px solid var(--divider-color,#555)}'+
       '.ss-props{border-right:none;border-left:1px solid var(--divider-color,#555);min-width:0;overflow-x:hidden}'+
@@ -217,6 +217,8 @@
       '.ss-library button.ss-lib-item:hover,.ss-library button.ss-lib-item:focus-visible{background:var(--secondary-background-color,#18222e);border-color:var(--primary-color,#168bce)}'+
       '.ss-library .ss-lib-label{font-size:12px;line-height:1.3;display:block;min-width:0;flex:1;overflow-wrap:anywhere}'+
       '.ss-library .ss-lib-icon{flex:0 0 20px}'+
+      '.ss-library-search{width:100%;box-sizing:border-box;border:1px solid var(--divider-color,#555);border-radius:7px;padding:9px;margin-bottom:9px;background:var(--card-background-color,#29323c);color:var(--primary-text-color)}'+
+      '.ss-lib-results[hidden],.ss-lib-catalog[hidden],.ss-lib-recent[hidden]{display:none}.ss-lib-recent{padding:7px;border:1px solid var(--divider-color,#555);border-radius:8px;margin-bottom:9px}.ss-lib-recent strong,.ss-lib-results strong{display:block;font-size:12px;margin-bottom:7px}'+
       '.ss-canvas{position:relative;min-width:0;min-height:0;overflow:hidden;background:#101820;padding:0;outline:0;touch-action:none}'+
       '.ss-stage{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:default}'+
       '.ss-svg{display:block;width:100%;height:100%;max-width:none;max-height:none;padding:0;touch-action:none;background:#101820}'+
@@ -279,7 +281,8 @@
        '<button id="ss-redo" type="button" title="'+esc(L.redo)+'">↷</button>'+
        '<button id="ss-size" type="button" title="'+esc(L.canvasSettings)+'">⚙</button>'+
        '<button id="ss-shortcuts" type="button" title="'+esc(L.help)+'" aria-expanded="false" aria-controls="ss-help">?</button></div>'+
-      '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
+      '<button id="ss-duplicate" type="button">⧉ '+(pickLang(this._config,this._hass)==='en'?'Duplicate':'Duplikuj')+'</button>'+ 
+       '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
       '<button id="ss-close" type="button">'+esc(L.close)+'</button></div>'+
       '<div class="ss-settings" id="ss-settings" hidden><strong>'+esc(L.canvasSettings)+'</strong>'+
        '<label>'+esc(L.schemeName)+'<input type="text" maxlength="64" id="ss-scheme-name" placeholder="Kotłownia"></label>'+
@@ -292,13 +295,15 @@
        [['Delete / Backspace','Usuń / Delete'],['← ↑ → ↓','Przesuń o 5 / Move 5'],['Shift + ← ↑ → ↓','Przesuń o 1 / Move 1'],
         ['Rolka / Wheel','Zoom'],['Spacja + przeciągnij / Drag','Przesuń widok / Pan'],
         ['Środkowy przycisk / Middle drag','Przesuń widok / Pan'],
-        ['Ctrl + Z','Cofnij / Undo'],['Ctrl + Y / Ctrl + Shift + Z','Ponów / Redo'],
+        ['Ctrl + C / V','Kopiuj / Wklej'],['Ctrl + D','Duplikuj / Duplicate'],['Ctrl + Z','Cofnij / Undo'],['Ctrl + Y / Ctrl + Shift + Z','Ponów / Redo'],
         ['F','Dopasuj / Fit'],['Esc','Odznacz / Deselect'],['?','Pokaż pomoc / Help']].map(row=>
          '<tr><td><kbd>'+esc(row[0])+'</kbd></td><td>'+esc(row[1])+'</td></tr>').join('')+'</tbody></table>'+
        '<p class="ss-note">'+esc(L.shortcutHint)+'</p></div>'+
-       '<div class="ss-grid" id="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+
+       '<div class="ss-grid" id="ss-grid"><aside class="ss-library"><h3>'+esc(L.library)+'</h3>'+ 
+       '<input id="ss-library-search" class="ss-library-search" type="search" autocomplete="off" placeholder="'+(pickLang(this._config,this._hass)==='en'?'Search devices...':'Szukaj urządzenia...')+'">'+
+       '<div id="ss-lib-results" class="ss-lib-results" hidden></div><div id="ss-lib-recent" class="ss-lib-recent" hidden></div><div id="ss-lib-catalog" class="ss-lib-catalog">'+
       HASSStudioEditorLibrary.render({registry,language:pickLang(this._config,this._hass),esc})+
-      '</aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
+      '</div></aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
       '</main>'+
       '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
     const modal=root.getElementById('ss-modal'),stage=root.getElementById('ss-stage'),properties=root.getElementById('ss-props');
@@ -320,7 +325,7 @@
         grip.addEventListener('pointercancel',end);
       });
     }
-    let selection=null,drag=null,selectedPartId=null,expandedPartId=null,lastConnectionPointer=null;
+    let selection=null,drag=null,selectedPartId=null,expandedPartId=null,lastConnectionPointer=null,clipboard=null;
     const dimensions=()=>viewport.dimensions(this._config);
     let {width:sceneW,height:sceneH}=dimensions();
     let camera=viewport.fresh(sceneW,sceneH),spaceHeld=false;
@@ -410,7 +415,7 @@
         });
       }
     };
-    const create=(kind,preset='')=>{
+    const create=(kind,preset='',position=null)=>{
       const model=get();
       if(kind==='connection'){
         if(model.connections.length>=MAX_CONNECTIONS)return;
@@ -418,7 +423,7 @@
         const hydraulic=preset==='hydraulic';
         if(!hydraulic&&preset!=='electric')return;
         const connection={id:freshId('c'),type:preset,label:'',
-          points:[{x:180+n*10,y:120+n*12},{x:470+n*10,y:120+n*12}],
+          points:position?[{x:position.x-80,y:position.y},{x:position.x+80,y:position.y}]:[{x:180+n*10,y:120+n*12},{x:470+n*10,y:120+n*12}],
           style:{color:hydraulic?'hot':'electric',width:hydraulic?7:5,cap_start:hydraulic,cap_end:hydraulic},
           animation:{flow_mode:hydraulic?'auto':'off',flow_entity:'',flow_direction:'forward',flow_speed:1,...HASSStudioPowerFlow.defaults()},
           accessories:[]};
@@ -426,7 +431,7 @@
       }else{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
-        const node={id:freshId('n'),type:kind,x:80+(n%6)*170,y:100+Math.floor(n/6)*170,
+        const node={id:freshId('n'),type:kind,x:position?position.x:80+(n%6)*170,y:position?position.y:100+Math.floor(n/6)*170,
           scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?HASSStudioBuilding.defaults():undefined,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
@@ -500,6 +505,7 @@
       const tag=event.target?.tagName?.toLowerCase();
       if(['input','textarea','select'].includes(tag)||event.target?.isContentEditable)return;
       if(event.key===' '){spaceHeld=true;event.preventDefault();return;}
+      if((event.ctrlKey||event.metaKey)&&['c','v','d'].includes(event.key.toLowerCase())){event.preventDefault();const k=event.key.toLowerCase();if(k==='c')copySelection();else if(k==='v')pasteSelection(clipboard);else duplicateSelection();return;}
       if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){
         event.preventDefault();historyStep(event.shiftKey?redo:undo,event.shiftKey?undo:redo);return;
       }
@@ -522,8 +528,55 @@
     });
     modal.addEventListener('keyup',event=>{if(event.key===' ')spaceHeld=false;});
     window.addEventListener('blur',()=>{spaceHeld=false;});
-    root.querySelectorAll('[data-add]').forEach(button=>button.addEventListener('click',()=>create(button.dataset.add,button.dataset.variant||'')));
-    root.querySelectorAll('[data-add-preset]').forEach(button=>button.addEventListener('click',()=>create('boiler',button.dataset.addPreset)));
+    const library=root.querySelector('.ss-library'),search=root.getElementById('ss-library-search'),results=root.getElementById('ss-lib-results'),recent=root.getElementById('ss-lib-recent'),catalog=root.getElementById('ss-lib-catalog');
+    const lang=pickLang(this._config,this._hass),entries=registry.libraryEntries(lang);
+    const makeButton=item=>'<button type="button" class="ss-lib-item" draggable="true" data-lib-type="'+esc(item.type)+'" data-lib-variant="'+esc(item.variant)+'"><ha-icon class="ss-lib-icon" icon="'+esc(item.icon)+'"></ha-icon><span class="ss-lib-label">'+esc(item.label)+'</span></button>';
+    const refreshLibrary=()=>{
+      const q=search.value.trim();catalog.hidden=!!q;recent.hidden=!!q;results.hidden=!q;
+      if(q){const matches=HASSStudioEditorLibrary.filter(registry,lang,q);results.innerHTML='<strong>'+(lang==='en'?'Results':'Wyniki')+' ('+matches.length+')</strong>'+matches.map(makeButton).join('');}
+      else{const items=HASSStudioEditorLibrary.readRecent(window.localStorage).map(x=>entries.find(e=>e.type===x.type&&e.variant===x.variant)).filter(Boolean);recent.hidden=!items.length;recent.innerHTML=items.length?'<strong>'+(lang==='en'?'Recently added':'Ostatnio dodawane')+'</strong>'+items.map(makeButton).join(''):'';}
+    };
+    const addLibrary=(kind,preset,pos)=>{
+      if(!entries.some(x=>x.type===kind&&x.variant===preset))return;
+      const before=get(),size=before.nodes.length+before.connections.length;create(kind,preset,pos);
+      const after=get();if(after.nodes.length+after.connections.length===size)return;
+      HASSStudioEditorLibrary.recordRecent(window.localStorage,kind,preset);
+      search.value='';refreshLibrary();
+    };
+    const choice=button=>({kind:button.dataset.libType||(button.dataset.addPreset?'boiler':button.dataset.add),preset:button.dataset.libVariant||button.dataset.addPreset||button.dataset.variant||''});
+    search.addEventListener('input',refreshLibrary);
+    library.addEventListener('click',event=>{const btn=event.target.closest('button[data-lib-type],button[data-add],button[data-add-preset]');if(btn){const x=choice(btn);addLibrary(x.kind,x.preset);}});
+    const desktop=()=>!window.matchMedia?.('(pointer: coarse)').matches;
+    library.addEventListener('dragstart',event=>{
+      const btn=event.target.closest('button[data-lib-type],button[data-add],button[data-add-preset]');
+      if(!btn||!desktop()){event.preventDefault();return;}
+      const x=choice(btn);if(!entries.some(e=>e.type===x.kind&&e.variant===x.preset)){event.preventDefault();return;}
+      event.dataTransfer.setData('application/x-ha-studio-device',JSON.stringify(x));event.dataTransfer.effectAllowed='copy';
+    });
+    stage.addEventListener('dragover',event=>{if(desktop()&&Array.from(event.dataTransfer.types).includes('application/x-ha-studio-device')){event.preventDefault();event.dataTransfer.dropEffect='copy';}});
+    stage.addEventListener('drop',event=>{
+      if(!desktop())return;const data=event.dataTransfer.getData('application/x-ha-studio-device');if(!data)return;
+      event.preventDefault();try{const x=JSON.parse(data),rect=stage.getBoundingClientRect();
+        const pos=viewport.worldAt(camera,event.clientX-rect.left,event.clientY-rect.top,Math.max(1,rect.width),Math.max(1,rect.height),sceneW,sceneH,1.06);
+        addLibrary(x.kind,x.preset,{x:Math.round(pos.x),y:Math.round(pos.y)});
+      }catch{}
+    });
+    library.querySelectorAll('button[data-add],button[data-add-preset]').forEach(btn=>btn.setAttribute('draggable','true'));
+    refreshLibrary();
+    const copySelection=()=>{const obj=selectedObject(get());if(obj&&selection)clipboard={type:selection.type,value:JSON.parse(JSON.stringify(obj))};};
+    const pasteSelection=source=>{
+      if(!source)return;const model=get(),node=source.type==='node';
+      if(node?model.nodes.length>=MAX_NODES:model.connections.length>=MAX_CONNECTIONS)return;
+      const obj=JSON.parse(JSON.stringify(source.value));
+      const renew=x=>{if(!x||typeof x!=='object')return;if(Array.isArray(x)){x.forEach(renew);return;}
+        if(typeof x.id==='string')x.id=freshId('n');Object.values(x).forEach(renew);};
+      renew(obj);
+      if(node){obj.x+=25;obj.y+=25;model.nodes.push(obj);}
+      else{obj.points.forEach(p=>{p.x+=25;p.y+=25;});model.connections.push(obj);}
+      commit(model);selection={type:source.type,id:obj.id};selectedPartId=null;expandedPartId=null;render();
+    };
+    const duplicateSelection=()=>{copySelection();pasteSelection(clipboard);};
+    root.getElementById('ss-duplicate').addEventListener('click',duplicateSelection);
     properties.addEventListener('change',event=>{
       const el=event.target,key=el.dataset.field;
       if(!key||!selection)return;
