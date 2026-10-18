@@ -84,13 +84,19 @@ const HASSStudioEnergyBalance=(()=>{
       const backup=p.grid_strategy==='signed_total'?c.manual.total_kw:c.manual.import_kw-c.manual.export_kw;
       return preferred(measured,backup,fallbackAllowed(n,c.mode));
     }
-    if(n.type==='pump')return preferred(powerEntity(h,n.energy_power_entity),n.energy_manual_kw,
-      n.energy_fallback_enabled===true);
+    if(n.type==='pump'){
+      const v=preferred(powerEntity(h,n.energy_power_entity),n.energy_manual_kw,n.energy_fallback_enabled===true);
+      return {kw:v.kw===null?null:-v.kw,source:v.source};
+    }
     if(n.type==='boiler'){
-      if(['electric','electric_modern'].includes(n.variant))
-        return preferred(powerEntity(h,n.electric_power_entity),n.energy_manual_kw,n.energy_fallback_enabled===true);
-      if(['heatpump','heatpump_modern'].includes(n.variant))
-        return preferred(powerEntity(h,n.hp_power_entity),n.hp_manual_kw,fallbackAllowed(n,n.hp_test_mode===true?'manual':'live'));
+      if(['electric','electric_modern'].includes(n.variant)){
+        const v=preferred(powerEntity(h,n.electric_power_entity),n.energy_manual_kw,n.energy_fallback_enabled===true);
+        return {kw:v.kw===null?null:-v.kw,source:v.source};
+      }
+      if(['heatpump','heatpump_modern'].includes(n.variant)){
+        const v=preferred(powerEntity(h,n.hp_power_entity),n.hp_manual_kw,fallbackAllowed(n,n.hp_test_mode===true?'manual':'live'));
+        return {kw:v.kw===null?null:-v.kw,source:v.source};
+      }
     }
     return {kw:null,source:'missing'};
   };

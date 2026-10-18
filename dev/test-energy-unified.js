@@ -31,7 +31,6 @@ const almost=(a,b)=>assert(Math.abs(a-b)<1e-6,String(a)+' != '+b);
 
 const hn=home('home',3.5);
 let outcome=solve([grid,hn,boiler,pump]),net=outcome.balance.networks[0];
-console.log('DEBUG-FIRST',JSON.stringify({net, warnings:outcome.balance.warnings}));
 assert.equal(net.state,'balanced');
 almost(entry(net,'home').injection_kw,-1.45);
 almost(entry(net,'boiler').injection_kw,-2);
