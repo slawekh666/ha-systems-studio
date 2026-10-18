@@ -108,7 +108,7 @@ const HASSStudioEnergyBalance=(()=>{
       demand_kw:sum(e=>e.injection_kw<0)
     };
   };
-  const solve=entries=>{
+  const solve=(entries,tolerance_kw=.05)=>{
     const active=entries.filter(e=>e.mode!=='off');
     if(!active.length)return {state:'no_devices',residual_kw:null,totals:null,reasons:['no_devices']};
     const aggregate=active.filter(e=>e.role==='load'&&e.node_type==='building'&&e.measurement==='aggregate');
@@ -131,9 +131,9 @@ const HASSStudioEnergyBalance=(()=>{
       e.injection_kw=inferred;e.source='calculated';
     }
     const residual=round(active.reduce((s,e)=>s+e.injection_kw,0));
-    return {state:Math.abs(residual)<=entries.tolerance_kw?'balanced':'unbalanced',
+    return {state:Math.abs(residual)<=tolerance_kw?'balanced':'unbalanced',
       residual_kw:residual,totals:totals(active),
-      reasons:Math.abs(residual)<=entries.tolerance_kw?[]:['imbalance']};
+      reasons:Math.abs(residual)<=tolerance_kw?[]:['imbalance']};
   };
   const resolve=(layout,hass)=>{
     const src=layout?.studio_layout||layout||{},config=normalize(src.energy_balance);
@@ -186,9 +186,7 @@ const HASSStudioEnergyBalance=(()=>{
     }
     const networks=[...grouped.values()].map(g=>{
       const entries=g.devices;
-      // Store tolerance on the array without modifying its elements.
-      entries.tolerance_kw=config.tolerance_kw;
-      const result=solve(entries);
+      const result=solve(entries,config.tolerance_kw);
       return {id:g.id,medium:g.medium,connection_ids:g.connection_ids,
         port_keys:[...g.ports],devices:entries,state:result.state,
         residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons};

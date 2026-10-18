@@ -122,7 +122,9 @@ const HASSStudioLayout = (() => {
         accessories:hydraulic?(Array.isArray(v.accessories)?v.accessories:[]).slice(0,20).map(normalizeAccessory):[]
       };
     }).filter(v=>v.points.length>=2);
-    return {width,height,name:String(source.name||'').trim().slice(0,64),nodes,connections};
+    return {width,height,name:String(source.name||'').trim().slice(0,64),
+      energy_balance:HASSStudioEnergyBalance.normalize(source.energy_balance),
+      nodes,connections};
   };
 
   return Object.freeze({normalized,normalizeItem,normalizeAccessory});
