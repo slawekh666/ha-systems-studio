@@ -57,7 +57,7 @@ const selectedFuelVariants=registry.variantOptionsForNode({type:'boiler',variant
 assert.equal(selectedFuelVariants.map(row=>row[0]).join(','),'wood,solid_fuel');
 assert.equal(registry.variantOptionsForNode({type:'boiler',variant:'pellet_modern'},'pl').map(row=>row[0]).join(','),'pellet,pellet_modern');
 assert.equal(registry.variantOptionsForNode({type:'boiler',variant:'gas_modern'},'pl').map(row=>row[0]).join(','),'gas,gas_modern');
-assert(src.includes("create(button.dataset.add,button.dataset.variant||'')"));
+assert(src.includes('addLibrary(x.kind,x.preset)'));
 assert(src.includes('registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind)'));
 console.log('OK: nested equipment catalog and family-scoped graphic selection.');
 // Part selection: only active part fields are rendered, even after layer reordering.
