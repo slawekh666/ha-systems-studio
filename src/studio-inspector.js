@@ -49,7 +49,7 @@ const HASSStudioEditorInspector = (() => {
         sectionIcon('mdi:chevron-down')+'</summary><section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
 
-        const electrical=HASSStudioEnergyTopology.electricalType(obj);
+        const electrical=typeof HASSStudioEnergyTopology!=='undefined'&&HASSStudioEnergyTopology.electricalType(obj);
         if(electrical&&obj.type!=='distribution_board'){
           const c=obj.type==='inverter'?HASSStudioInverter.normalize(obj):
             obj.type==='building'?HASSStudioBuilding.normalize(obj):
