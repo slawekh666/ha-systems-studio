@@ -6,7 +6,7 @@ const ctx={isEnt:x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x),
   document:{createElement:()=>({hidden:true,appendChild(){},replaceChildren(){}})}};
 vm.createContext(ctx);
 for(const name of ['readout-scale.js','ha-state.js','power-flow.js','device-registry.js','studio-viewport.js',
-  'studio-layout.js','animation-state.js','studio-canvas.js','studio-inspector.js']){
+  'energy-topology.js','studio-layout.js','animation-state.js','studio-canvas.js','studio-inspector.js']){
   const code=fs.readFileSync('src/'+name,'utf8');
   vm.runInContext(code,ctx,{filename:name});
 }
@@ -27,6 +27,32 @@ const libraryMarkup=library.render({registry,language:'pl',esc:String});
 assert(libraryMarkup.includes('data-add="connection" data-variant="hydraulic"'));
 assert(libraryMarkup.includes('data-add="connection" data-variant="electric"'));
 assert(libraryMarkup.includes('Rury hydrauliczne')&&libraryMarkup.includes('Przewody elektryczne'));
+
+const topology=vm.runInContext('HASSStudioEnergyTopology',ctx);
+const energyLayout={studio_layout:{nodes:[
+ {id:'grid',type:'power_grid',energy_ports:[{id:'out',medium:'ac',x:100,y:50,bus:'main'}]},
+ {id:'panel',type:'distribution_board',energy_ports:[{id:'in',medium:'ac',x:0,y:50,bus:'main'},{id:'out',medium:'ac',x:100,y:50,bus:'main'}]},
+ {id:'pv',type:'inverter',energy_ports:[{id:'dc',medium:'dc'},{id:'ac',medium:'ac'}]}
+],connections:[
+ {id:'g1',type:'electric',points:[{x:1,y:1},{x:2,y:2},{x:3,y:2}],
+   energy_start:{node_id:'grid',port_id:'out'},energy_end:{node_id:'panel',port_id:'in'}},
+ {id:'g2',type:'electric',points:[{x:3,y:3},{x:4,y:4}],
+   energy_start:{node_id:'panel',port_id:'out'},energy_end:{node_id:'pv',port_id:'ac'}},
+ {id:'bad',type:'electric',points:[{x:3,y:3},{x:4,y:4}],
+   energy_start:{node_id:'panel',port_id:'out'},energy_end:{node_id:'pv',port_id:'dc'}}
+]}};
+const graphLayout=ctx.layout.normalized(energyLayout);
+assert.equal(graphLayout.nodes[0].energy_role,'grid');
+assert.equal(graphLayout.nodes[1].energy_role,'junction');
+assert.equal(graphLayout.nodes[2].energy_role,'source');
+assert.equal(graphLayout.connections[0].points.length,3);
+assert.equal(graphLayout.connections[0].energy_start.port_id,'out');
+const g=topology.graph(graphLayout);
+assert.equal(g.edges.length,2);
+assert.equal(g.errors.length,1);
+assert.equal(g.errors[0].reason,'medium_mismatch');
+const saved=ctx.layout.normalized({studio_layout:graphLayout});
+assert.equal(JSON.stringify(saved),JSON.stringify(graphLayout));
 
 const points=[{x:30,y:60},{x:150,y:60},{x:150,y:100}];
 const hydraulic={id:'hydro',type:'hydraulic',label:'Zasilanie',points,
