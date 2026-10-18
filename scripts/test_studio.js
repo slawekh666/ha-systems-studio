@@ -149,7 +149,7 @@ assert(bareTank.includes('>T1</text>'));
 assert(src.includes('data-field=') && src.includes("key"),'missing dynamic field template');
 assert(src.includes("'partDisplayScale'")&&src.includes("'partLabel'"),'sensor editor fields missing');
 assert(src.includes("'accessoryLabel'"),'accessory label editor missing');
-assert(src.includes('symbolOnConnection(item,connection,hass,language)'), 'pipe caption renderer missing');
+assert(src.includes('symbolOnConnection(item,c,hass,language)'), 'connection accessory caption renderer missing');
 const tallBoiler=api.render(wood,state({'sensor.boiler':65}));
 assert.match(tallBoiler,/y="-104" width="18" height="150"/);
 assert.match(tallBoiler,/y="30" width="91" height="169"/);
