@@ -5,7 +5,7 @@ vm.createContext(ctx);
 for(const file of ['ha-state.js','readout-scale.js','device-registry.js','studio-viewport.js',
   'inverter.js','building.js','ev-charger.js','energy-storage.js','power-grid.js',
   'distribution-board.js','radiator.js','manifold.js',
-  'energy-topology.js','energy-balance.js','power-flow.js','studio-layout.js']){
+  'energy-topology.js','energy-balance.js','energy-flow.js','energy-diagnostics.js','power-flow.js','studio-layout.js']){
   vm.runInContext(fs.readFileSync('src/'+file,'utf8'),ctx,{filename:file});
 }
 vm.runInContext('this.layout=HASSStudioLayout;this.balance=HASSStudioEnergyBalance;',ctx);

@@ -5,7 +5,7 @@ vm.createContext(ctx);
 for(const f of ['ha-state.js','readout-scale.js','device-registry.js','studio-viewport.js',
  'inverter.js','building.js','ev-charger.js','energy-storage.js','power-grid.js',
  'distribution-board.js','radiator.js','manifold.js','energy-topology.js',
- 'energy-balance.js','energy-flow.js','power-flow.js','studio-layout.js'])
+ 'energy-balance.js','energy-flow.js','energy-diagnostics.js','power-flow.js','studio-layout.js'])
  vm.runInContext(fs.readFileSync('src/'+f,'utf8'),ctx,{filename:f});
 vm.runInContext('this.layout=HASSStudioLayout;this.balance=HASSStudioEnergyBalance;this.flow=HASSStudioEnergyFlow;this.topology=HASSStudioEnergyTopology;this.power=HASSStudioPowerFlow;',ctx);
 const {layout,balance,flow,topology,power}=ctx;
