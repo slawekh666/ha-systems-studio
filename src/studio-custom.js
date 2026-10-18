@@ -3,7 +3,7 @@
  * No external dependencies or service calls in the designer.
  */
 (() => {
-  const W=1200,H=720,MAX_NODES=60,MAX_PIPES=80;
+  const W=1200,H=720,MAX_NODES=60,MAX_CONNECTIONS=80;
   const viewport=HASSStudioViewport;
   const registry=HASSStudioDeviceRegistry;
   const types=registry.listTypes();
@@ -18,12 +18,12 @@
       entities:'Dodatkowe encje',sensors:'Elementy wewnętrzne',height:'Wysokość od dołu (%)',
       side:'Strona',left:'Lewa',right:'Prawa',inside:'Wewnątrz',sensor:'Czujnik',
       heater:'Grzałka',coil:'Wężownica',accessories:'Elementy na rurze',
-      pump:'Pompa',valve:'Zawór',pipe:'Rura',pipeColor:'Rodzaj rury',pipeWidth:'Grubość',
+      pump:'Pompa',valve:'Zawór',connection:'Rura',pipeColor:'Rodzaj rury',pipeWidth:'Grubość',
       hot:'Ciepła woda',cold:'Zimna woda',solarFlow:'Obieg solarny',returnFlow:'Powrót',
       newBend:'Dodaj punkt załamania',removeBend:'Usuń ostatni punkt',
       pipeHelp:'Przeciągnij linię, aby przesunąć całą rurę. Przeciągnij punkt, aby zmienić jej kształt. Dwuklik dodaje załamanie.',
       accessoryPos:'Położenie na rurze (%)',editHelp:'Wybierz element po lewej i ustaw jego właściwości po prawej.',
-      boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',pipes:'Rury',
+      boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',connections:'Rury',
       link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
       zoom:'Powiększenie',noValues:'Bez pomiaru',editor:'Projektant instalacji'},
     en:{sensorScale:'Reading scale',accessoryLabel:'Icon caption',boilerState:'Burner / heating state',burnerEntity:'Burner entity (optional; otherwise temperature)',burnerOnTemp:'Boiler on above (°C)',burnerOffTemp:'Boiler off below (°C)',solarTank:'Tank temperature (reference)',solarOnDelta:'Collector active – delta (°C)',solarOffDelta:'Collector inactive – delta (°C)',solarSensors:'Collector sensors',solarPump:'Solar pump entity',pipeStart:'Start connector',pipeEnd:'End connector',yes:'Yes',no:'No',compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
@@ -35,17 +35,17 @@
       name:'Name',graphic:'Type / graphic',scale:'Scale',position:'Position',entity:'HA entity',
       entities:'Additional entities',sensors:'Internal components',height:'Height from bottom (%)',
       side:'Side',left:'Left',right:'Right',inside:'Inside',sensor:'Sensor',
-      heater:'Heating element',coil:'Coil',accessories:'On-pipe equipment',
-      pump:'Pump',valve:'Valve',pipe:'Pipe',pipeColor:'Pipe type',pipeWidth:'Width',
+      heater:'Heating element',coil:'Coil',accessories:'On-connection equipment',
+      pump:'Pump',valve:'Valve',connection:'Pipe',pipeColor:'Pipe type',pipeWidth:'Width',
       hot:'Hot water',cold:'Cold water',solarFlow:'Solar circuit',returnFlow:'Return',
       newBend:'Add bend point',removeBend:'Remove last point',
-      pipeHelp:'Drag the pipe line to move the whole pipe. Drag a handle to change its shape. Double-click to add a bend.',
-      accessoryPos:'Position on pipe (%)',editHelp:'Pick a component on the left; configure it on the right.',
-      boiler:'Boilers',tank:'Tanks',solar:'Solar',pumps:'Pumps',valves:'Valves',sensorsMenu:'Sensors',pipes:'Pipes',
+      pipeHelp:'Drag the connection line to move the whole connection. Drag a handle to change its shape. Double-click to add a bend.',
+      accessoryPos:'Position on connection (%)',editHelp:'Pick a component on the left; configure it on the right.',
+      boiler:'Boilers',tank:'Tanks',solar:'Solar',pumps:'Pumps',valves:'Valves',sensorsMenu:'Sensors',connections:'Pipes',
       link:'Assign entity',addEntity:'Add entity',label:'Description',default:'Default',
       zoom:'Zoom',noValues:'No data',editor:'System diagram designer'}
   };
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{canvasSettings:'Ustawienia schematu',schemeName:'Nazwa schematu (opcjonalna)',canvasWidth:'Szerokość',canvasHeight:'Wysokość',apply:'Zastosuj',fit:'Dopasuj schemat',all:'Pokaż wszystkie',help:'Skróty klawiaturowe',undo:'Cofnij',redo:'Ponów',shortcutTitle:'Sterowanie edytorem',shortcutHint:'Skróty nie działają podczas pisania w polach formularzy.',outside:'Zmniejszenie obszaru nie usuwa urządzeń ani rur.'}:{canvasSettings:'Diagram settings',schemeName:'Diagram name (optional)',canvasWidth:'Width',canvasHeight:'Height',apply:'Apply',fit:'Fit diagram',all:'Show all',help:'Keyboard shortcuts',undo:'Undo',redo:'Redo',shortcutTitle:'Editor controls',shortcutHint:'Shortcuts are disabled while editing form fields.',outside:'Shrinking the canvas does not remove devices or pipes.'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{canvasSettings:'Ustawienia schematu',schemeName:'Nazwa schematu (opcjonalna)',canvasWidth:'Szerokość',canvasHeight:'Wysokość',apply:'Zastosuj',fit:'Dopasuj schemat',all:'Pokaż wszystkie',help:'Skróty klawiaturowe',undo:'Cofnij',redo:'Ponów',shortcutTitle:'Sterowanie edytorem',shortcutHint:'Skróty nie działają podczas pisania w polach formularzy.',outside:'Zmniejszenie obszaru nie usuwa urządzeń ani rur.'}:{canvasSettings:'Diagram settings',schemeName:'Diagram name (optional)',canvasWidth:'Width',canvasHeight:'Height',apply:'Apply',fit:'Fit diagram',all:'Show all',help:'Keyboard shortcuts',undo:'Undo',redo:'Redo',shortcutTitle:'Editor controls',shortcutHint:'Shortcuts are disabled while editing form fields.',outside:'Shrinking the canvas does not remove devices or connections.'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankGlow:'Efekt cieplny grzałek (%)',heaterMode:'Stan grzałki',heaterPower:'Intensywność (%)',heaterWatts:'Encja mocy (W/kW)',partX:'Pozycja pozioma (%)',partLength:'Wysokość / długość (%)',partWidth:'Szerokość (%)',partTurns:'Liczba zwojów',permeability:'Przepuszczalność 0–1',partContainer:'Strefa czujnika',partFlowMode:'Przepływ wężownicy',baffle_horizontal:'Przegroda pozioma',baffle_vertical:'Przegroda pionowa',inner_tank:'Zbiornik wewnętrzny'}:{tankGlow:'Heater visual glow (%)',heaterMode:'Heater status',heaterPower:'Glow intensity (%)',heaterWatts:'Power entity (W/kW)',partX:'Horizontal position (%)',partLength:'Height / length (%)',partWidth:'Width (%)',partTurns:'Coil turns',permeability:'Permeability 0–1',partContainer:'Sensor compartment',partFlowMode:'Coil flow',baffle_horizontal:'Horizontal baffle',baffle_vertical:'Vertical baffle',inner_tank:'Inner tank'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankScaleMode:'Skalowanie zbiornika',tankScaleProportional:'Proporcjonalne',tankScaleFree:'Osobna szerokość i wysokość',tankWidthScale:'Szerokość zbiornika',tankHeightScale:'Wysokość zbiornika'}:{tankScaleMode:'Tank scaling',tankScaleProportional:'Proportional',tankScaleFree:'Independent width and height',tankWidthScale:'Tank width',tankHeightScale:'Tank height'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{partLayer:'Warstwa',partLayerUp:'Przenieś wyżej',partLayerDown:'Przenieś niżej'}:{partLayer:'Layer',partLayerUp:'Move up',partLayerDown:'Move down'});
@@ -66,7 +66,7 @@
   const validEntity=(value)=>typeof value==='string' && isEnt(value);
   const freshId=(prefix)=>prefix+Math.random().toString(36).slice(2,10);
   const normalized=HASSStudioLayout.normalized;
-  const {canvasSvg,pipePath,onPipe,variantShape,translatePipePoints}=HASSStudioCanvas.create({
+  const {canvasSvg,connectionPath,onConnection,variantShape,translateConnectionPoints}=HASSStudioCanvas.create({
     W,H,colors,normalized,pickLang,words,clamp,validEntity,esc
   });
   // Card viewer: fit entire scheme at every responsive width, only zoom after explicit interaction.
@@ -218,8 +218,8 @@
       '.ss-help table{width:100%;border-collapse:collapse;font-size:12px}.ss-help td{padding:7px 5px;border-bottom:1px solid var(--divider-color,#555)}'+
       '.ss-help kbd{font:inherit;background:var(--secondary-background-color,#18222e);border:1px solid #53667a;padding:2px 5px;border-radius:4px}'+
       '.ss-bar .ss-viewport-buttons{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.ss-bar .ss-viewport-buttons button{padding:7px 10px}'+
-      '.ss-svg-editor .ss-node,.ss-svg-editor .ss-pipe-hit,.ss-handle{cursor:default}.ss-svg-editor .ss-pipe-hit{pointer-events:stroke}.ss-stage.ss-dragging,.ss-stage.ss-dragging *{cursor:grabbing!important}'+
-      '.ss-svg-editor .ss-accessory{pointer-events:none}.ss-svg:not(.ss-svg-editor) .ss-pipe{pointer-events:none}'+
+      '.ss-svg-editor .ss-node,.ss-svg-editor .ss-connection-hit,.ss-handle{cursor:default}.ss-svg-editor .ss-connection-hit{pointer-events:stroke}.ss-stage.ss-dragging,.ss-stage.ss-dragging *{cursor:grabbing!important}'+
+      '.ss-svg-editor .ss-accessory{pointer-events:none}.ss-svg:not(.ss-svg-editor) .ss-connection{pointer-events:none}'+
       '.ss-svg:not(.ss-svg-editor) [data-more]{cursor:pointer}'+
       '.ss-props section{border-top:1px solid var(--divider-color,#555);padding:12px 0;display:grid;grid-template-columns:minmax(0,1fr);min-width:0;gap:10px}'+
       '.ss-props section:first-of-type{border-top:0}.ss-props h4{margin:0;font-size:13px}'+
@@ -311,7 +311,7 @@
         grip.addEventListener('pointercancel',end);
       });
     }
-    let selection=null,drag=null,selectedPartId=null,expandedPartId=null,lastPipePointer=null;
+    let selection=null,drag=null,selectedPartId=null,expandedPartId=null,lastConnectionPointer=null;
     const dimensions=()=>viewport.dimensions(this._config);
     let {width:sceneW,height:sceneH}=dimensions();
     let camera=viewport.fresh(sceneW,sceneH),spaceHeld=false;
@@ -333,7 +333,7 @@
     const selectedObject=(model)=>{
       if(!selection)return null;
       return selection.type==='node'?model.nodes.find(x=>x.id===selection.id):
-        model.pipes.find(x=>x.id===selection.id);
+        model.connections.find(x=>x.id===selection.id);
     };
     const renderProps=HASSStudioEditorInspector.create({
       editor:this,L,properties,esc,opts,registry,pickLang,get,selectedObject,
@@ -379,37 +379,41 @@
         const g=[...svg.querySelectorAll('.ss-node')].find(el=>el.dataset.id===node.id);
         if(g)g.setAttribute('transform','translate('+node.x+' '+node.y+') scale('+node.scale+')');
       }
-      for(const pipe of model.pipes){
-        const group=[...svg.querySelectorAll('.ss-pipe')].find(el=>el.dataset.id===pipe.id);
+      for(const connection of model.connections){
+        const group=[...svg.querySelectorAll('.ss-connection')].find(el=>el.dataset.id===connection.id);
         if(!group)continue;
-        const d=pipePath(pipe.points);
-        group.querySelectorAll('path.ss-line,path.ss-pipe-hit').forEach(el=>el.setAttribute('d',d));
+        const d=connectionPath(connection.points);
+        group.querySelectorAll('path.ss-line,path.ss-connection-hit').forEach(el=>el.setAttribute('d',d));
         group.querySelectorAll('.ss-cap').forEach(el=>{
-          const first=el.dataset.cap==='start',pt=first?pipe.points[0]:pipe.points[pipe.points.length-1],
-          near=first?pipe.points[1]:pipe.points[pipe.points.length-2];
+          const first=el.dataset.cap==='start',pt=first?connection.points[0]:connection.points[connection.points.length-1],
+          near=first?connection.points[1]:connection.points[connection.points.length-2];
           el.setAttribute('transform','translate('+pt.x+' '+pt.y+') rotate('+(Math.atan2(pt.y-near.y,pt.x-near.x)*180/Math.PI)+')');
         });
         svg.querySelectorAll('.ss-handle').forEach(el=>{
-          if(el.dataset.id!==pipe.id)return;
-          const p=pipe.points[Number(el.dataset.point)];
+          if(el.dataset.id!==connection.id)return;
+          const p=connection.points[Number(el.dataset.point)];
           if(p){el.setAttribute('cx',p.x);el.setAttribute('cy',p.y);}
         });
-        svg.querySelectorAll('.ss-accessory[data-pipe="'+pipe.id+'"]').forEach((el,i)=>{
-          const accessory=pipe.accessories[i];
-          if(accessory){const p=onPipe(pipe,accessory.position);
+        svg.querySelectorAll('.ss-accessory[data-connection="'+connection.id+'"]').forEach((el,i)=>{
+          const accessory=connection.accessories[i];
+          if(accessory){const p=onConnection(connection,accessory.position);
             el.setAttribute('transform','translate('+p.x+' '+p.y+')');}
         });
       }
     };
     const create=(kind,preset='')=>{
       const model=get();
-      if(kind==='pipe'){
-        if(model.pipes.length>=MAX_PIPES)return;
-        const n=model.pipes.length;
-        const pipe={id:freshId('p'),label:'',color:'hot',width:7,
-          flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,...HASSStudioPowerFlow.defaults(),cap_start:true,cap_end:true,
-          points:[{x:180+n*10,y:120+n*12},{x:470+n*10,y:120+n*12}],accessories:[]};
-        model.pipes.push(pipe);selection={type:'pipe',id:pipe.id};
+      if(kind==='connection'){
+        if(model.connections.length>=MAX_CONNECTIONS)return;
+        const n=model.connections.length;
+        const hydraulic=preset==='hydraulic';
+        if(!hydraulic&&preset!=='electric')return;
+        const connection={id:freshId('c'),type:preset,label:'',
+          points:[{x:180+n*10,y:120+n*12},{x:470+n*10,y:120+n*12}],
+          style:{color:hydraulic?'hot':'electric',width:hydraulic?7:5,cap_start:hydraulic,cap_end:hydraulic},
+          animation:{flow_mode:hydraulic?'auto':'off',flow_entity:'',flow_direction:'forward',flow_speed:1,...HASSStudioPowerFlow.defaults()},
+          accessories:[]};
+        model.connections.push(connection);selection={type:'connection',id:connection.id};
       }else{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
@@ -447,7 +451,7 @@
     root.getElementById('ss-all').addEventListener('click',()=>{
       const model=get(),bounds=[{x:0,y:0},{x:sceneW,y:sceneH}];
       model.nodes.forEach(n=>{bounds.push({x:n.x-60*n.scale,y:n.y-110*n.scale},{x:n.x+220*n.scale,y:n.y+350*n.scale});});
-      model.pipes.forEach(pipe=>bounds.push(...pipe.points));
+      model.connections.forEach(connection=>bounds.push(...connection.points));
       const minX=Math.min(...bounds.map(x=>x.x)),maxX=Math.max(...bounds.map(x=>x.x));
       const minY=Math.min(...bounds.map(x=>x.y)),maxY=Math.max(...bounds.map(x=>x.y));
       const rect=stage.getBoundingClientRect(),scale=Math.min(rect.width/(maxX-minX+40),rect.height/(maxY-minY+40));
@@ -478,7 +482,7 @@
       if(!selection)return;
       const model=get();
       if(selection.type==='node')model.nodes=model.nodes.filter(n=>n.id!==selection.id);
-      else model.pipes=model.pipes.filter(n=>n.id!==selection.id);
+      else model.connections=model.connections.filter(n=>n.id!==selection.id);
       commit(model);selection=null;selectedPartId=null;expandedPartId=null;render();
     };
     root.getElementById('ss-delete').addEventListener('click',deleteSelection);
@@ -517,7 +521,29 @@
       const model=get(),obj=selectedObject(model);if(!obj)return;
       const index=Number(el.dataset.index);
       const val=el.value;
-      if(key==='readout_scale')obj.readout_scale=clamp(val,40,150,100)/100;
+      if(selection.type==='connection'&&key.startsWith('style_')){
+        const attr=key.slice(6),s=obj.style;
+        if(attr==='width')s.width=clamp(val,2,14,s.width);
+        else if(attr==='color'&&obj.type==='hydraulic')s.color=colors[val]?val:s.color;
+        else if(['cap_start','cap_end'].includes(attr)&&obj.type==='hydraulic')s[attr]=val==='true';
+      }else if(selection.type==='connection'&&key.startsWith('anim_')){
+        const attr=key.slice(5),a=obj.animation;
+        if(attr==='flow_mode'&&obj.type==='hydraulic')a.flow_mode=['on','off','auto'].includes(val)?val:'auto';
+        else if(attr==='flow_entity'&&obj.type==='hydraulic')a.flow_entity=validEntity(val)?val:'';
+        else if(attr==='flow_direction')a.flow_direction=val==='reverse'?'reverse':'forward';
+        else if(attr==='flow_speed')a.flow_speed=clamp(val,.35,5,a.flow_speed);
+        else if(obj.type==='electric'){
+          if(attr==='flow_power_mode')a.flow_power_mode=['off','ha','manual'].includes(val)?val:'off';
+          else if(attr==='flow_power_entity')a.flow_power_entity=validEntity(val)?val:'';
+          else if(attr==='flow_pattern')a.flow_pattern=['dots','dashes','arrows'].includes(val)?val:'dots';
+          else if(attr==='flow_power_direction')a.flow_power_direction=val==='true';
+          else if(['flow_power_kw','flow_max_kw','flow_min_width','flow_max_width'].includes(attr)){
+            const range={flow_power_kw:[-10000,10000],flow_max_kw:[.1,10000],
+              flow_min_width:[.5,12],flow_max_width:[.5,16]}[attr];
+            a[attr]=clamp(val,range[0],range[1],a[attr]);
+          }
+        }
+      }else if(key==='readout_scale')obj.readout_scale=clamp(val,40,150,100)/100;
       else if(obj.type==='building'&&key.startsWith('building_')){
         const c=obj.building=obj.building||HASSStudioBuilding.defaults(),k=key.slice(9);
         if(k==='mode')c.mode=val==='manual'?'manual':'live';
@@ -761,7 +787,7 @@
           display_scale:1,variant:'warmwasser',entity:'',x:50,length:58,width:60,turns:12,power:75,mode:'auto',flow_mode:'auto',flow_direction:'forward',flow_speed:1,permeability:kind==='baffle_horizontal'?.35:0,container:'main',power_entity:''};
         obj.parts.push(newPart);selectedPartId=newPart.id;expandedPartId=newPart.id;
       }else if(button.dataset.addAccessory){
-        if(obj.accessories.length>=20)return;
+        if(selection.type!=='connection'||obj.type!=='hydraulic'||obj.accessories.length>=20)return;
         obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,label:'',position:50,entity:''});
       }else if(button.dataset.action==='entity'){
         if(obj.entities.length>=20)return;
@@ -777,7 +803,7 @@
       commit(model);render();
     });
     stage.addEventListener('pointerdown',event=>{
-      lastPipePointer=null;
+      lastConnectionPointer=null;
       if((event.button===0||event.button===1)&&(event.button===1||spaceHeld||event.target===stage||event.target.tagName?.toLowerCase()==='svg'||event.target.classList?.contains('ss-project-boundary'))){
         const rect=stage.getBoundingClientRect();
         drag={type:'pan',pointer:event.pointerId,lastX:event.clientX,lastY:event.clientY};
@@ -787,8 +813,8 @@
       if(event.button!==0)return;
       const hit=event.target.closest?.('.ss-handle');
       if(hit){
-        selection={type:'pipe',id:hit.dataset.id};selectedPartId=null;expandedPartId=null;
-        const obj=get().pipes.find(item=>item.id===hit.dataset.id),initial=obj?.points[Number(hit.dataset.point)];
+        selection={type:'connection',id:hit.dataset.id};selectedPartId=null;expandedPartId=null;
+        const obj=get().connections.find(item=>item.id===hit.dataset.id),initial=obj?.points[Number(hit.dataset.point)];
         if(!initial)return;
         drag={type:'point',id:hit.dataset.id,index:Number(hit.dataset.point),pointer:event.pointerId,
           initialX:initial.x,initialY:initial.y,moved:false,previous:JSON.stringify(this._config.studio_layout||{})};
@@ -807,18 +833,18 @@
             initialX:obj.x,initialY:obj.y,moved:false,previous:JSON.stringify(this._config.studio_layout||{})};
           stage.classList.add('ss-dragging');
         }else{
-          const pipe=event.target.closest?.('.ss-pipe');
-          if(pipe){
-            const model=get(),obj=model.pipes.find(item=>item.id===pipe.dataset.id);
+          const connection=event.target.closest?.('.ss-connection');
+          if(connection){
+            const model=get(),obj=model.connections.find(item=>item.id===connection.dataset.id);
             if(!obj)return;
             const p=point(event,stage.querySelector('svg'));
-            selection={type:'pipe',id:obj.id};selectedPartId=null;expandedPartId=null;
-            drag={type:'pipe',id:obj.id,pointer:event.pointerId,startX:p.x,startY:p.y,
+            selection={type:'connection',id:obj.id};selectedPartId=null;expandedPartId=null;
+            drag={type:'connection',id:obj.id,pointer:event.pointerId,startX:p.x,startY:p.y,
               points:obj.points.map(q=>({x:q.x,y:q.y})),moved:false,captured:false,
               previous:JSON.stringify(this._config.studio_layout||{})};
-            lastPipePointer={id:obj.id,x:event.clientX,y:event.clientY,time:event.timeStamp};
+            lastConnectionPointer={id:obj.id,x:event.clientX,y:event.clientY,time:event.timeStamp};
             stage.classList.add('ss-dragging');
-            renderProps();return; // Keep selection and allow pointerup/dblclick on the original pipe.
+            renderProps();return; // Keep selection and allow pointerup/dblclick on the original connection.
           }
           selection=null;selectedPartId=null;expandedPartId=null;render();return;
         }
@@ -842,21 +868,21 @@
         const y=clamp(Math.round((p.y-drag.offsetY)/5)*5,-5000,10000,n.y);
         if(x===n.x&&y===n.y)return;
         n.x=x;n.y=y;drag.moved=x!==drag.initialX||y!==drag.initialY;
-      }else if(drag.type==='pipe'){
-        const pipe=model.pipes.find(item=>item.id===drag.id);
-        if(!pipe)return;
-        const translated=translatePipePoints(drag.points,p.x-drag.startX,p.y-drag.startY);
-        if(!translated.some((pt,index)=>pt.x!==pipe.points[index]?.x||pt.y!==pipe.points[index]?.y))return;
+      }else if(drag.type==='connection'){
+        const connection=model.connections.find(item=>item.id===drag.id);
+        if(!connection)return;
+        const translated=translateConnectionPoints(drag.points,p.x-drag.startX,p.y-drag.startY);
+        if(!translated.some((pt,index)=>pt.x!==connection.points[index]?.x||pt.y!==connection.points[index]?.y))return;
         if(!drag.captured){stage.setPointerCapture(event.pointerId);drag.captured=true;}
-        pipe.points=translated;
+        connection.points=translated;
         drag.moved=translated.some((pt,index)=>pt.x!==drag.points[index].x||pt.y!==drag.points[index].y);
       }else{
-        const pipe=model.pipes.find(item=>item.id===drag.id);
-        if(!pipe||!pipe.points[drag.index])return;
+        const connection=model.connections.find(item=>item.id===drag.id);
+        if(!connection||!connection.points[drag.index])return;
         const x=clamp(Math.round(p.x/5)*5,-5000,10000,0);
         const y=clamp(Math.round(p.y/5)*5,-5000,10000,0);
-        if(x===pipe.points[drag.index].x&&y===pipe.points[drag.index].y)return;
-        pipe.points[drag.index]={x,y};drag.moved=x!==drag.initialX||y!==drag.initialY;
+        if(x===connection.points[drag.index].x&&y===connection.points[drag.index].y)return;
+        connection.points[drag.index]={x,y};drag.moved=x!==drag.initialX||y!==drag.initialY;
       }
       this._config={...this._config,studio_layout:model};repaint(model);
     });
@@ -877,23 +903,23 @@
     stage.addEventListener('pointerup',end);
     stage.addEventListener('pointercancel',end);
     stage.addEventListener('dblclick',event=>{
-      const el=event.target.closest?.('.ss-pipe');
-      const fallback=lastPipePointer&&Math.hypot(event.clientX-lastPipePointer.x,event.clientY-lastPipePointer.y)<10&&event.timeStamp-lastPipePointer.time<800
-        ?lastPipePointer.id:null;
-      const pipeId=el?.dataset.id||fallback;if(!pipeId)return;
-      const model=get(),pipe=model.pipes.find(item=>item.id===pipeId);
-      if(!pipe||pipe.points.length>=30)return;
+      const el=event.target.closest?.('.ss-connection');
+      const fallback=lastConnectionPointer&&Math.hypot(event.clientX-lastConnectionPointer.x,event.clientY-lastConnectionPointer.y)<10&&event.timeStamp-lastConnectionPointer.time<800
+        ?lastConnectionPointer.id:null;
+      const connectionId=el?.dataset.id||fallback;if(!connectionId)return;
+      const model=get(),connection=model.connections.find(item=>item.id===connectionId);
+      if(!connection||connection.points.length>=30)return;
       const p=point(event,stage.querySelector('svg'));
       let index=1,best=Infinity;
-      for(let i=1;i<pipe.points.length;i++){
-        const a=pipe.points[i-1],b=pipe.points[i];
+      for(let i=1;i<connection.points.length;i++){
+        const a=connection.points[i-1],b=connection.points[i];
         const vx=b.x-a.x,vy=b.y-a.y,length=vx*vx+vy*vy;
         const t=length?clamp(((p.x-a.x)*vx+(p.y-a.y)*vy)/length,0,1,0):0;
         const distance=Math.hypot(p.x-(a.x+vx*t),p.y-(a.y+vy*t));
         if(distance<best){best=distance;index=i;}
       }
-      pipe.points.splice(index,0,{x:clamp(p.x,0,W,p.x),y:clamp(p.y,0,H,p.y)});
-      selection={type:'pipe',id:pipe.id};commit(model);render();
+      connection.points.splice(index,0,{x:clamp(p.x,0,W,p.x),y:clamp(p.y,0,H,p.y)});
+      selection={type:'connection',id:connection.id};commit(model);render();
     });
     renderProps();
   };

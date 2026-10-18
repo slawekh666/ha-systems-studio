@@ -17,4 +17,5 @@ validate_card:
     - node dev/test-ev-charger.js
     - node dev/test-buildings-power.js
     - node dev/test-device-properties.js
+    - node dev/test-connections.js
     - git diff --exit-code -- dist/ha-systems-studio.js

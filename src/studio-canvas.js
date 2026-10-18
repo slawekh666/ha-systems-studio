@@ -10,10 +10,10 @@ const HASSStudioCanvas = (() => {
     return state && !['unknown','unavailable'].includes(state.state)
       ?formatReading(state.state)+(state.attributes?.unit_of_measurement?' '+state.attributes.unit_of_measurement:''):'';
   };
-  const pipePath=(points)=>points.map((point,i)=>(i?'L':'M')+point.x+' '+point.y).join(' ');
+  const connectionPath=(points)=>points.map((point,i)=>(i?'L':'M')+point.x+' '+point.y).join(' ');
   // Translate all vertices by one snapped delta, retaining every bend and angle.
   // Clamp the common offset (not individual points), so geometry never deforms at bounds.
-  const translatePipePoints=(points,dx,dy)=>{
+  const translateConnectionPoints=(points,dx,dy)=>{
     if(!Array.isArray(points)||!points.length)return [];
     const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
     const snap=v=>Math.round(v/5)*5;
@@ -21,8 +21,8 @@ const HASSStudioCanvas = (() => {
     const y=clamp(snap(dy),-5000-Math.min(...ys),10000-Math.max(...ys),0);
     return points.map(p=>({x:p.x+x,y:p.y+y}));
   };
-  const onPipe=(pipe,t)=>{
-    const points=pipe.points, segments=[];
+  const onConnection=(connection,t)=>{
+    const points=connection.points, segments=[];
     let total=0;
     for(let i=1;i<points.length;i++){
       const a=points[i-1],b=points[i],length=Math.hypot(b.x-a.x,b.y-a.y);
@@ -75,11 +75,11 @@ const HASSStudioCanvas = (() => {
     return '<circle cx="60" cy="64" r="28" fill="#47647a" stroke="#c0d2de" stroke-width="2"/>'+
       '<path d="M60 38V70" stroke="#ecf2f5" stroke-width="5"/><circle cx="60" cy="79" r="9" fill="#f2bb74"/>';
   };
-  const symbolOnPipe=(item,pipe,hass,language)=>{
-    const at=onPipe(pipe,item.position),isPump=item.type==='pump';
+  const symbolOnConnection=(item,connection,hass,language)=>{
+    const at=onConnection(connection,item.position),isPump=item.type==='pump';
     const enabled=HASSStudioGraphics.on(hass,item.entity);
     const caption=esc(item.label||words[language][item.type]||item.type);
-    return '<g transform="translate('+at.x+' '+at.y+')" class="ss-accessory" data-pipe="'+esc(pipe.id)+'"'+
+    return '<g transform="translate('+at.x+' '+at.y+')" class="ss-accessory" data-connection="'+esc(connection.id)+'"'+
       (item.entity?' data-more="'+esc(item.entity)+'"':'')+'>'+
       '<circle r="17" fill="#405669" stroke="'+(enabled?'#68c69b':'#d7e5ee')+'" stroke-width="2"/>'+ 
       (isPump&&enabled?'<circle class="ss-pump-pulse" r="17" fill="none" stroke="#68c69b"/>':'')+
@@ -93,38 +93,44 @@ const HASSStudioCanvas = (() => {
     const w=data.width,h=data.height;
     const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !['radiator','manifold','power_grid','energy_storage','inverter','distribution_board','ev_charger','building'].includes(node.type) && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(node.variant)))
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
-    const pipes=data.pipes.map(pipe=>{
-      const d=pipePath(pipe.points),powerVisual=HASSStudioPowerFlow.visual(pipe,hass);
-      const enabled=powerVisual?powerVisual.active&&pipe.flow_mode!=='off':HASSStudioAnimation.flowActive(pipe.flow_mode,hass,pipe.flow_entity);
+    const connections=data.connections.map(connection=>{
+      const d=connectionPath(connection.points),s=connection.style,a=connection.animation;
+      const electric=connection.type==='electric';
+      const settings={...s,...a};
+      const powerVisual=electric?HASSStudioPowerFlow.visual(settings,hass):null;
+      const enabled=electric?(powerVisual?.active===true):HASSStudioAnimation.flowActive(a.flow_mode,hass,a.flow_entity);
       const motionArrows=()=>{
-        if(!powerVisual||!enabled||powerVisual.pattern!=='arrows')return '';
-        const pts=powerVisual.direction==='reverse'?[...pipe.points].reverse():pipe.points;
-        const track=pipePath(pts),s=powerVisual.size,half=+(s*.52).toFixed(2);
-        const arrow='<path d="M'+(-s)+' '+(-half)+' L0 0 L'+(-s)+' '+half+
+        if(!electric||!powerVisual||!enabled||powerVisual.pattern!=='arrows')return '';
+        const pts=powerVisual.direction==='reverse'?[...connection.points].reverse():connection.points;
+        const track=connectionPath(pts),size=powerVisual.size,half=+(size*.52).toFixed(2);
+        const arrow='<path d="M'+(-size)+' '+(-half)+' L0 0 L'+(-size)+' '+half+
           '" fill="none" stroke="#fff" stroke-width="'+powerVisual.width+
           '" stroke-linecap="round" stroke-linejoin="round"/>';
         return [0,1,2].map(i=>'<g class="ss-power-arrow">'+arrow+
-          '<animateMotion path="'+track+'" dur="'+pipe.flow_speed+
-          's" begin="'+(-i*pipe.flow_speed/3).toFixed(3)+'s" repeatCount="indefinite" rotate="auto"/></g>').join('');
+          '<animateMotion path="'+track+'" dur="'+a.flow_speed+
+          's" begin="'+(-i*a.flow_speed/3).toFixed(3)+'s" repeatCount="indefinite" rotate="auto"/></g>').join('');
       };
       const endcap=(first)=>{
-        if(first&&pipe.cap_start===false||!first&&pipe.cap_end===false)return '';
-        const pts=pipe.points,at=first?pts[0]:pts[pts.length-1],near=first?pts[1]:pts[pts.length-2];
+        if(electric||(first&&!s.cap_start)||(!first&&!s.cap_end))return '';
+        const pts=connection.points,at=first?pts[0]:pts[pts.length-1],near=first?pts[1]:pts[pts.length-2];
         const angle=Math.atan2(at.y-near.y,at.x-near.x)*180/Math.PI;
         return '<g class="ss-cap" data-cap="'+(first?'start':'end')+'" transform="translate('+at.x+' '+at.y+') rotate('+angle+')">'+
           '<rect x="-6" y="-7" width="12" height="14" rx="2" fill="#7c8793" stroke="#b6c1cc"/></g>';
       };
-      return '<g class="ss-pipe" data-id="'+esc(pipe.id)+'"><path class="ss-pipe-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
-        '<path class="ss-line" d="'+d+'" stroke="#142332" stroke-width="'+(pipe.width+3)+'" fill="none"/>'+
-        '<path class="ss-line" d="'+d+'" stroke="'+colors[pipe.color]+'" stroke-width="'+pipe.width+'" fill="none"/>'+
-        (enabled&&powerVisual?.pattern==='arrows'?motionArrows():enabled?'<path class="ss-line ss-flow'+(powerVisual?' ss-flow-power ss-flow-'+powerVisual.pattern:'')+'" d="'+d+'"'+
-          (powerVisual?' stroke-width="'+powerVisual.width+'" stroke-dasharray="'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:powerVisual.pattern==='dashes'?(powerVisual.size*2)+' '+powerVisual.interval:(powerVisual.size*3)+' '+powerVisual.interval)+'"':'')+
-          ' style="--ss-speed:'+pipe.flow_speed+'s;'+(powerVisual?HASSStudioPowerFlow.style(powerVisual)+';stroke-width:'+powerVisual.width+';stroke-dasharray:'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:(powerVisual.size*2)+' '+powerVisual.interval):'animation-direction:'+pipe.flow_direction)+'"/>':'')+
+      const color=electric?'#e3bc63':colors[s.color];
+      return '<g class="ss-connection ss-connection-'+connection.type+'" data-id="'+esc(connection.id)+'">'+
+        '<path class="ss-connection-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
+        '<path class="ss-line" d="'+d+'" stroke="'+(electric?'#27313a':'#142332')+'" stroke-width="'+(s.width+3)+'" fill="none"/>'+
+        '<path class="ss-line" d="'+d+'" stroke="'+color+'" stroke-width="'+s.width+'" fill="none"/>'+
+        (enabled&&powerVisual?.pattern==='arrows'?motionArrows():enabled?'<path class="ss-line ss-flow'+(electric?' ss-flow-power ss-flow-'+powerVisual.pattern:'')+'" d="'+d+'"'+
+          (electric?' stroke-width="'+powerVisual.width+'" stroke-dasharray="'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:powerVisual.size*2+' '+powerVisual.interval)+'"':'')+
+          ' style="--ss-speed:'+a.flow_speed+'s;'+(electric?HASSStudioPowerFlow.style(powerVisual)+';stroke-width:'+powerVisual.width+';stroke-dasharray:'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:(powerVisual.size*2)+' '+powerVisual.interval):'animation-direction:'+a.flow_direction)+'"/>':'')+
         endcap(true)+endcap(false)+'</g>';
     }).join('');
-    const accessories=data.pipes.map(pipe=>pipe.accessories.map(item=>symbolOnPipe(item,pipe,hass,language)).join('')).join('');
-    const handles=editable&&selected?.type==='pipe'?data.pipes.filter(p=>p.id===selected.id).map(pipe=>pipe.points.map((pt,index)=>
-      '<circle class="ss-handle" data-id="'+esc(pipe.id)+'" data-point="'+index+'" cx="'+pt.x+'" cy="'+pt.y+
+    const accessories=data.connections.filter(c=>c.type==='hydraulic').map(c=>
+      c.accessories.map(item=>symbolOnConnection(item,c,hass,language)).join('')).join('');
+    const handles=editable&&selected?.type==='connection'?data.connections.filter(c=>c.id===selected.id).map(c=>c.points.map((pt,index)=>
+      '<circle class="ss-handle" data-id="'+esc(c.id)+'" data-point="'+index+'" cx="'+pt.x+'" cy="'+pt.y+
       '" r="8" fill="#fff" stroke="#2196f3" stroke-width="2"/>').join('')).join(''):'';
     const nodes=data.nodes.map(node=>{
       const active=selected?.type==='node'&&selected.id===node.id;
@@ -174,10 +180,10 @@ const HASSStudioCanvas = (() => {
       HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
       '<rect class="ss-project-boundary" width="'+w+'" height="'+h+'" rx="4" fill="var(--secondary-background-color,#17222d)" stroke="'+
       (editable?'#52bfff':'none')+'" stroke-width="2" stroke-dasharray="'+(editable?'12 7':'none')+'"/>'+
-      '<g class="ss-devices">'+nodes+'</g><g class="ss-pipe-layer" stroke-linecap="round" stroke-linejoin="round">'+pipes+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-pipe-handles">'+handles+'</g></svg>';
+      '<g class="ss-devices">'+nodes+'</g><g class="ss-connection-layer" stroke-linecap="round" stroke-linejoin="round">'+connections+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-connection-handles">'+handles+'</g></svg>';
   };
 
-    return Object.freeze({canvasSvg,pipePath,onPipe,variantShape,translatePipePoints});
+    return Object.freeze({canvasSvg,connectionPath,onConnection,variantShape,translateConnectionPoints});
   };
   return Object.freeze({create});
 })();

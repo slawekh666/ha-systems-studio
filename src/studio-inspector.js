@@ -40,9 +40,9 @@ const HASSStudioEditorInspector = (() => {
       let markup='<h3>'+esc(L.properties)+'</h3>';
       if(!obj){properties.innerHTML=markup+'<p>'+esc(L.choose)+'</p>';return;}
       const lang=pickLang(editor._config,editor._hass);
-      const deviceName=selection.type==='pipe'?(L.pipe||'Rura'):
+      const deviceName=selection.type==='connection'?(obj.type==='electric'?'Przewód elektryczny':'Rura'):
         (registry.resolve(obj.type,obj.variant)?.device?.[lang]||L[obj.type]||obj.type);
-      markup+='<div class="ss-inspector-heading">'+sectionIcon(selection.type==='pipe'?'mdi:pipe':(registry.categoryIcons[registry.resolve(obj.type,obj.variant)?.category]||'mdi:cube-outline'))+
+      markup+='<div class="ss-inspector-heading">'+sectionIcon(selection.type==='connection'?(obj.type==='electric'?'mdi:power-plug':'mdi:pipe'):(registry.categoryIcons[registry.resolve(obj.type,obj.variant)?.category]||'mdi:cube-outline'))+
         '<span>'+esc(obj.label||deviceName)+'</span></div>'+
         '<details class="ss-section-details" data-section="device"'+sectionAttr('device')+'><summary>'+
         sectionIcon('mdi:tune-variant')+'<span>'+esc(obj.type==='tank'?(L.tankSettings||'Ustawienia zbiornika'):(L.properties||'Właściwości'))+'</span>'+
@@ -354,39 +354,50 @@ const HASSStudioEditorInspector = (() => {
             '<button type="button" data-add-part="'+v[0]+'">+ '+esc(v[1])+'</button>').join('')+'</div></section></details>';
         }
       }else{
-        markup+=field(L.pipeColor,'color',obj.color,'text',colorsList);
-        markup+=field(L.pipeWidth,'width',obj.width,'range',null,'min="3" max="14" step="1"');
-        markup+=field(L.pipeStart,'cap_start',obj.cap_start?'true':'false','text',[['true',L.yes],['false',L.no]]);
-        markup+=field(L.pipeEnd,'cap_end',obj.cap_end?'true':'false','text',[['true',L.yes],['false',L.no]]);
-        markup+=field(L.flowMode||'Flow animation','flow_mode',obj.flow_mode,'text',
-          [['off',L.flowOff||'Off'],['auto',L.flowAuto||'Entity-controlled'],['on',L.flowOn||'On (preview)']]);
-        markup+=field(L.flowDirection||'Flow direction','flow_direction',obj.flow_direction,'text',
-          [['forward',L.forward||'Start → End'],['reverse',L.reverse||'End → Start']]);
-        markup+=field('Animacja zależna od mocy','flow_power_mode',obj.flow_power_mode||'off','text', [['off','Wyłączona (stare zachowanie)'],['ha','Pomiar mocy z HA'],['manual','Symulacja kW']]);
-        if(obj.flow_power_mode!=='off'){
-          markup+=field('Encja przepływu mocy (W/kW)','flow_power_entity',obj.flow_power_entity||'','search',null,'list="ss-entity-list"');
-          markup+=field('Moc testowa (kW)','flow_power_kw',obj.flow_power_kw??0,'number',null,'step="0.1"');
-          markup+=field('Moc maksymalna skali (kW)','flow_max_kw',obj.flow_max_kw??10,'number',null,'min="0.1" step="0.1"');
-          markup+=field('Grubość animacji min','flow_min_width',obj.flow_min_width??1.5,'number',null,'min="0.5" max="12" step="0.5"');
-          markup+=field('Grubość animacji max','flow_max_width',obj.flow_max_width??6,'number',null,'min="0.5" max="16" step="0.5"');
-          markup+=field('Wzór przepływu','flow_pattern',obj.flow_pattern||'dots','text',[['dots','Kropki'],['dashes','Kreski'],['arrows','Strzałki']]);
-          markup+=field('Odwracaj kierunek dla ujemnych kW','flow_power_direction',obj.flow_power_direction!==false?'true':'false','text',[['true','Tak'],['false','Nie']]);
+        const isHydraulic=obj.type==='hydraulic',s=obj.style,a=obj.animation;
+        markup+='<p class="ss-note">'+(isHydraulic?'Rura hydrauliczna':'Przewód elektryczny')+
+          ' — rodzaj wybiera się w bibliotece połączeń.</p>';
+        markup+=field(L.pipeWidth,'style_width',s.width,'range',null,'min="2" max="14" step="1"');
+        if(isHydraulic){
+          markup+=field(L.pipeColor,'style_color',s.color,'text',colorsList);
+          markup+=field(L.pipeStart,'style_cap_start',s.cap_start?'true':'false','text',[['true',L.yes],['false',L.no]]);
+          markup+=field(L.pipeEnd,'style_cap_end',s.cap_end?'true':'false','text',[['true',L.yes],['false',L.no]]);
+          markup+=field(L.flowMode||'Flow animation','anim_flow_mode',a.flow_mode,'text',
+            [['off',L.flowOff||'Off'],['auto',L.flowAuto||'Controlled by entity'],['on',L.flowOn||'On (preview)']]);
+          markup+=field(L.flowEntity||'Animation state entity','anim_flow_entity',a.flow_entity,'search',null,'list="ss-entity-list"');
+        }else{
+          markup+=field('Animacja mocy','anim_flow_power_mode',a.flow_power_mode||'off','text',
+            [['off','Wyłączona'],['ha','Pomiar mocy z HA'],['manual','Symulacja ręczna']]);
+          if(a.flow_power_mode==='ha')
+            markup+=field('Encja mocy (W/kW)','anim_flow_power_entity',a.flow_power_entity,'search',null,'list="ss-entity-list"');
+          if(a.flow_power_mode==='manual')
+            markup+=field('Moc testowa (kW)','anim_flow_power_kw',a.flow_power_kw,'number',null,'step="0.1"');
+          if(a.flow_power_mode!=='off'){
+            markup+=field('Moc maksymalna skali (kW)','anim_flow_max_kw',a.flow_max_kw,'number',null,'min="0.1" step="0.1"');
+            markup+=field('Grubość animacji min','anim_flow_min_width',a.flow_min_width,'number',null,'min="0.5" max="12" step="0.5"');
+            markup+=field('Grubość animacji max','anim_flow_max_width',a.flow_max_width,'number',null,'min="0.5" max="16" step="0.5"');
+            markup+=field('Wzór przepływu','anim_flow_pattern',a.flow_pattern,'text',[['dots','Kropki'],['dashes','Kreski'],['arrows','Strzałki']]);
+            markup+=field('Odwracanie przy ujemnej mocy','anim_flow_power_direction',a.flow_power_direction?'true':'false','text',[['true','Tak'],['false','Nie']]);
+          }
         }
-        markup+=field(L.flowSpeed||'Animation duration (s)','flow_speed',obj.flow_speed,'number',null,'min="0.35" max="5" step="0.1"');
-        markup+=field(L.flowEntity||'Animation state entity','flow_entity',obj.flow_entity,'search',null,'list="ss-entity-list"');
+        markup+=field(L.flowDirection||'Flow direction','anim_flow_direction',a.flow_direction,'text',
+          [['forward',L.forward||'Start → End'],['reverse',L.reverse||'End → Start']]);
+        markup+=field(L.flowSpeed||'Animation duration (s)','anim_flow_speed',a.flow_speed,'number',null,'min="0.35" max="5" step="0.1"');
         markup+='<p>'+esc(L.pipeHelp)+'</p><div class="ss-row">'+
           '<button type="button" data-action="bend">+ '+esc(L.newBend)+'</button>'+
-          '<button type="button" data-action="unbend">'+esc(L.removeBend)+'</button></div></section>'+
-          '<section><h4>'+esc(L.accessories)+'</h4>'+
-          obj.accessories.map((a,index)=>
-            '<div class="ss-row"><strong>'+esc(L[a.type]||a.type)+'</strong>'+
-            '<button type="button" data-delete-accessory="'+index+'">×</button></div>'+
-            field(L.accessoryPos,'accessoryPos',a.position,'range',null,
-              'min="0" max="100" step="1" data-index="'+index+'"')+
-            field(L.accessoryLabel,'accessoryLabel',a.label,'text',null,'data-index="'+index+'"')+
-            '<label>'+esc(L.entity)+entityField(a.entity,'accessoryEntity',index)+'</label>').join('')+
-          '<div class="ss-add-parts"><button type="button" data-add-accessory="pump">+ '+esc(L.pump)+'</button>'+
-          '<button type="button" data-add-accessory="valve">+ '+esc(L.valve)+'</button></div></section>';
+          '<button type="button" data-action="unbend">'+esc(L.removeBend)+'</button></div></section>';
+        if(isHydraulic){
+          markup+='<section><h4>'+esc(L.accessories)+'</h4>'+
+            obj.accessories.map((a,index)=>
+              '<div class="ss-row"><strong>'+esc(L[a.type]||a.type)+'</strong>'+
+              '<button type="button" data-delete-accessory="'+index+'">×</button></div>'+
+              field(L.accessoryPos,'accessoryPos',a.position,'range',null,
+                'min="0" max="100" step="1" data-index="'+index+'"')+
+              field(L.accessoryLabel,'accessoryLabel',a.label,'text',null,'data-index="'+index+'"')+
+              '<label>'+esc(L.entity)+entityField(a.entity,'accessoryEntity',index)+'</label>').join('')+
+            '<div class="ss-add-parts"><button type="button" data-add-accessory="pump">+ '+esc(L.pump)+'</button>'+
+            '<button type="button" data-add-accessory="valve">+ '+esc(L.valve)+'</button></div></section>';
+        }
       }
       const scroll=properties.scrollTop;
       properties.innerHTML=markup+'<datalist id="ss-entity-list">'+entityList()+'</datalist>';
