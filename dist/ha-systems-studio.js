@@ -3138,6 +3138,9 @@ const HASSStudioEnergyTopology=(()=>{
    buses:(Array.isArray(n?.energy_buses)?n.energy_buses:[]).slice(0,MAX_BUSES).map(b=>({
      id:ident(b?.id),label:String(b?.label||'').slice(0,40),medium:medium(b?.medium)
    })).filter((b,i,a)=>b.id&&a.findIndex(x=>x.id===b.id)===i)});
+ // AC and DC never share an electrical bus, even if an older diagram
+ // assigned the same text identifier (for example "main") to both.
+ const busKey=(nodeId,p)=>nodeId+':'+p.medium+':'+(p.bus||p.id);
  const end=e=>({node_id:ident(e?.node_id),port_id:ident(e?.port_id)});
  const connection=c=>({start:end(c?.energy_start),end:end(c?.energy_end)});
  const graph=layout=>{
@@ -3149,14 +3152,18 @@ const HASSStudioEnergyTopology=(()=>{
      if(!n){errors.push({connection:cid,side,reason:'missing_node'});return null;}
      const p=ports(n).find(x=>x.id===ref.port_id);
      if(!p){errors.push({connection:cid,side,reason:'missing_port'});return null;}
-     const key=ref.node_id+':'+(p.bus||p.id);
-     if(junctions.has(key)&&junctions.get(key).medium!==p.medium){errors.push({connection:cid,side,reason:'bus_medium_mismatch'});return null;}
+     const key=busKey(ref.node_id,p);
      if(!junctions.has(key))junctions.set(key,{node_id:ref.node_id,port_id:p.id,medium:p.medium});
      return {key,medium:p.medium};
    };
    for(const c of layout?.connections||[]){
      if(c.type!=='electric')continue;
-     const a=check(end(c.energy_start),c.id,'start'),b=check(end(c.energy_end),c.id,'end');
+     const start=end(c.energy_start),finish=end(c.energy_end);
+     if(!start.node_id||!start.port_id||!finish.node_id||!finish.port_id){
+       errors.push({connection:c.id,reason:'unconnected_or_missing_endpoints'});
+       continue;
+     }
+     const a=check(start,c.id,'start'),b=check(finish,c.id,'end');
      if(a&&b){
        if(a.medium!==b.medium){errors.push({connection:c.id,reason:'medium_mismatch'});continue;}
        edges.push({id:c.id,from:a.key,to:b.key,medium:a.medium});
@@ -3214,16 +3221,17 @@ const HASSStudioEnergyTopology=(()=>{
    c.points[side==='start'?0:c.points.length-1]=anchor(n,a.id);
    return true;
  };
- const nearest=(layout,point,maxDistance=25,mediumFilter=null)=>{
+ const nearest=(layout,point,maxDistance=25,mediumFilter=null,excludeNode=null)=>{
    let best=null,distance=maxDistance;
    for(const n of layout.nodes||[])for(const p of ports(n)){
+     if(n.id===excludeNode)continue;
      if(mediumFilter&&p.medium!==mediumFilter)continue;
      const at=anchor(n,p.id),d=Math.hypot(at.x-point.x,at.y-point.y);
      if(d<distance){distance=d;best={node_id:n.id,port_id:p.id};}
    }
    return best;
  };
- return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,defaultPorts,electricalType,node,end,connection,graph,
+ return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,busKey,defaultPorts,electricalType,node,end,connection,graph,
    geometry,anchor,locate,moveAttached,attach,nearest});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyTopology;
@@ -3544,13 +3552,13 @@ const HASSStudioEnergyBalance=(()=>{
         overrides.get(n.id)||participant({node_id:n.id});
       if(p.mode==='off')continue;
       const ports=HASSStudioEnergyTopology.ports(n);
-      let matches=ports.filter(port=>keyGroup.has(n.id+':'+(port.bus||port.id)));
+      let matches=ports.filter(port=>keyGroup.has(HASSStudioEnergyTopology.busKey(n.id,port)));
       if(p.port_id){
         matches=matches.filter(port=>port.id===p.port_id);
         if(!matches.length){warnings.push({reason:'invalid_or_unconnected_port',node_id:n.id});continue;}
       }else if(n.type==='inverter'&&matches.some(port=>port.medium==='ac'))
         matches=matches.filter(port=>port.medium==='ac');
-      const unique=new Map(matches.map(port=>[keyGroup.get(n.id+':'+(port.bus||port.id)),port]));
+      const unique=new Map(matches.map(port=>[keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port)),port]));
       if(!unique.size){warnings.push({reason:'unconnected_device',node_id:n.id});continue;}
       if(unique.size!==1){warnings.push({reason:'ambiguous_device_network',node_id:n.id});continue;}
       const [group,port]=[...unique][0];
@@ -3608,8 +3616,8 @@ const HASSStudioEnergyFlow=(()=>{
        }
        const participants=network.devices.filter(d=>{
          const n=(layout.nodes||[]).find(n=>n.id===d.node_id);
-         const port=n?.energy_ports?.find(p=>p.id===d.port_id);
-         return seen.has(d.node_id+':'+(port?.bus||d.port_id));
+         const port=HASSStudioEnergyTopology.ports(n).find(p=>p.id===d.port_id);
+         return !!port&&seen.has(HASSStudioEnergyTopology.busKey(d.node_id,port));
        });
        const kw=round(participants.reduce((sum,d)=>sum+d.injection_kw,0));
        const sources=[...new Set(network.devices.map(d=>d.source))].sort();
