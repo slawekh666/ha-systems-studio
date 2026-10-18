@@ -48,7 +48,7 @@ const HASSStudioEditorInspector = (() => {
         sectionIcon('mdi:tune-variant')+'<span>'+esc(obj.type==='tank'?(L.tankSettings||'Ustawienia zbiornika'):(L.properties||'Właściwości'))+'</span>'+
         sectionIcon('mdi:chevron-down')+'</summary><section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
-        if(HASSStudioEnergyTopology.electricalType(obj)){
+        if((typeof HASSStudioEnergyTopology!=='undefined'&&HASSStudioEnergyTopology.electricalType(obj))){
           markup+=field('Rola elektryczna','energy_role',obj.energy_role,'text',
             [['source','Źródło'],['load','Odbiornik'],['grid','Sieć'],['storage','Magazyn'],['junction','Węzeł / rozdzielnica'],['neutral','Neutralna']]);
           markup+='<h4>Porty elektryczne (AC/DC)</h4>';
@@ -63,7 +63,7 @@ const HASSStudioEditorInspector = (() => {
           markup+='<button type="button" data-add-energy-port>+ Dodaj port AC/DC</button>'+
             '<p class="ss-note">Wspólna nazwa szyny łączy porty logicznie. Przecięcie przewodów ich nie łączy.</p>';
         }
-        if(HASSStudioEnergyTopology.electricalType(obj)&&obj.type!=='distribution_board'){
+        if((typeof HASSStudioEnergyTopology!=='undefined'&&HASSStudioEnergyTopology.electricalType(obj))&&obj.type!=='distribution_board'){
            markup+='<h4>Bilans elektryczny</h4>'+
              field('Test przy braku danych HA','energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',[['true','Włączony'],['false','Wyłączony']]);
            if(obj.type==='power_grid')markup+=field('Automatycznie obliczaj moc sieci','energy_grid_auto',obj.energy_grid_auto?'true':'false','text',[['true','Tak'],['false','Nie']]);
