@@ -31,8 +31,8 @@ const HASSStudioEnergyFlow=(()=>{
        }
        const participants=network.devices.filter(d=>{
          const n=(layout.nodes||[]).find(n=>n.id===d.node_id);
-         const port=n?.energy_ports?.find(p=>p.id===d.port_id);
-         return seen.has(d.node_id+':'+(port?.bus||d.port_id));
+         const port=HASSStudioEnergyTopology.ports(n).find(p=>p.id===d.port_id);
+         return !!port&&seen.has(HASSStudioEnergyTopology.busKey(d.node_id,port));
        });
        const kw=round(participants.reduce((sum,d)=>sum+d.injection_kw,0));
        const sources=[...new Set(network.devices.map(d=>d.source))].sort();

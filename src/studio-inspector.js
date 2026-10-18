@@ -605,15 +605,36 @@ const HASSStudioEditorInspector = (() => {
             [['off',L.flowOff||'Off'],['auto',L.flowAuto||'Controlled by entity'],['on',L.flowOn||'On (preview)']]);
           markup+=field(L.flowEntity||'Animation state entity','anim_flow_entity',a.flow_entity,'search',null,'list="ss-entity-list"');
         }else{
-          const attachOptions=[['','Nieprzypięty']].concat(model.nodes.flatMap(n=>
-            HASSStudioEnergyTopology.ports(n).map(p=>[n.id+':'+p.id,
-              (n.label||n.id)+' / '+(p.label||p.id)+' ('+p.medium.toUpperCase()+')'])));
+          const nameNode=n=>n.label||({
+            inverter:'Falownik',distribution_board:'Rozdzielnia',power_grid:'Sieć energetyczna',
+            building:'Budynek',energy_storage:'Magazyn energii',
+            ev_charger:'Ładowarka EV',pump:'Pompa',boiler:'Kocioł elektryczny'
+          })[n.type]||n.type;
+          const namePort=(n,p)=>{
+            if(n.type==='inverter'&&p.medium==='ac')return 'wyjście AC';
+            if(n.type==='distribution_board'&&p.medium==='ac')
+              return 'port AC '+(HASSStudioEnergyTopology.ports(n)
+                .filter(t=>t.medium==='ac').findIndex(t=>t.id===p.id)+1);
+            return p.label&&p.label!==p.id?p.label:p.medium.toUpperCase()+' '+p.id;
+          };
+          const attachOptions=side=>{
+            const other=obj['energy_'+(side==='start'?'end':'start')];
+            const peer=model.nodes.find(n=>n.id===other?.node_id);
+            const compatible=HASSStudioEnergyTopology.ports(peer)
+              .find(p=>p.id===other?.port_id)?.medium;
+            return [['','Nieprzypięty']].concat(model.nodes.flatMap(n=>
+              HASSStudioEnergyTopology.ports(n).filter(p=>!compatible||p.medium===compatible)
+                .map(p=>[n.id+':'+p.id,nameNode(n)+' → '+namePort(n,p)+
+                  ' ('+p.medium.toUpperCase()+')'])));
+          };
           markup+=field('Początek → port','energy_attach_start',
             obj.energy_start?.node_id?obj.energy_start.node_id+':'+obj.energy_start.port_id:'',
-            'text',attachOptions);
+            'text',attachOptions('start'));
           markup+=field('Koniec → port','energy_attach_end',
             obj.energy_end?.node_id?obj.energy_end.node_id+':'+obj.energy_end.port_id:'',
-            'text',attachOptions);
+            'text',attachOptions('end'));
+          markup+='<button type="button" data-auto-attach-energy>Dopasuj porty i animuj z bilansu</button>'+
+            '<p class="ss-note">Przeciągnięcie końca przewodu na port AC/DC przypina go automatycznie; ręczne załamania pozostają.</p>';
           markup+=field('Animacja mocy','anim_flow_power_mode',a.flow_power_mode||'off','text',
             [['off','Wyłączona'],['ha','Pomiar mocy z HA'],['manual','Symulacja ręczna'],
              ['balance','Automatycznie z bilansu']]);

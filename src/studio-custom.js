@@ -378,6 +378,16 @@
       balancePopover.hidden=!balancePopover.hidden;
       balanceToggle.setAttribute('aria-expanded',String(!balancePopover.hidden));
     });
+    balancePopover.addEventListener('click',event=>{
+      const jump=event.target.closest?.('[data-energy-jump]');
+      if(!jump)return;
+      const kind=jump.dataset.energyJumpKind,id=jump.dataset.energyJump;
+      const model=get();
+      if(kind==='node'&&model.nodes.some(n=>n.id===id)||
+         kind==='connection'&&model.connections.some(c=>c.id===id)){
+        setSelected(kind,id);
+      }
+    });
     properties.addEventListener('change',event=>{
       if(!event.target.matches('[data-diagnostics-enable],[data-diagnostics-devices],[data-diagnostics-cables],[data-diagnostics-warnings]'))return;
       const el=event.target,model=get(),e=model.energy_balance;
@@ -477,8 +487,16 @@
           style:{color:hydraulic?'hot':'electric',width:hydraulic?7:5,cap_start:hydraulic,cap_end:hydraulic},
           animation:{flow_mode:hydraulic?'auto':'off',flow_entity:'',flow_direction:'forward',flow_speed:1,...HASSStudioPowerFlow.defaults(),flow_power_mode:hydraulic?'off':'balance'},
           accessories:[]};
-        if(!hydraulic)model.energy_balance.enabled=true;
-         model.connections.push(connection);selection={type:'connection',id:connection.id};
+        if(!hydraulic){
+          model.energy_balance.enabled=true;
+          for(const side of ['start','end']){
+            const at=connection.points[side==='start'?0:connection.points.length-1];
+            const other=connection['energy_'+(side==='start'?'end':'start')];
+            const nearest=HASSStudioEnergyTopology.nearest(model,at,25,null,other?.node_id||null);
+            if(nearest)HASSStudioEnergyTopology.attach(model,connection,side,nearest);
+          }
+        }
+        model.connections.push(connection);selection={type:'connection',id:connection.id};
       }else{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
@@ -946,6 +964,23 @@
           expandedPartId=expandedPartId===selectedPartId?null:selectedPartId;renderProps();
         }
         return;
+      }
+      if(selection.type==='connection'&&obj.type==='electric'&&
+        button.hasAttribute('data-auto-attach-energy')){
+        for(const side of ['start','end']){
+          const current=obj['energy_'+side];
+          const valid=model.nodes.some(n=>n.id===current?.node_id&&
+            HASSStudioEnergyTopology.ports(n).some(p=>p.id===current?.port_id));
+          if(valid)continue;
+          const other=obj['energy_'+(side==='start'?'end':'start')];
+          const peer=model.nodes.find(n=>n.id===other?.node_id);
+          const medium=HASSStudioEnergyTopology.ports(peer).find(p=>p.id===other?.port_id)?.medium||null;
+          const at=obj.points[side==='start'?0:obj.points.length-1];
+          const near=HASSStudioEnergyTopology.nearest(model,at,35,medium,other?.node_id||null);
+          if(near)HASSStudioEnergyTopology.attach(model,obj,side,near);
+        }
+        obj.animation.flow_power_mode='balance';
+        commit(model);render();return;
       }
       if(obj.type==='inverter'&&
         (button.hasAttribute('data-inv-row-add')||button.hasAttribute('data-inv-row-delete')||
