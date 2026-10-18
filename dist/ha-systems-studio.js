@@ -2690,21 +2690,21 @@ const HASSStudioInverter=(()=>{
  const defaultRow=(key='custom',input=0)=>({key:DEFAULT_KEYS.includes(key)?key:'custom',
    input,entity:'',label:'',unit:'auto',decimals:1,manual_value:''});
  const panelRows=(raw,node,count)=>{
-   // A stored empty array is meaningful. Only older layouts need migration.
-   if(Array.isArray(raw.panel_rows))return raw.panel_rows.slice(0,MAX_ROWS).map((row)=>{
-     const key=DEFAULT_KEYS.includes(row?.key)?row.key:'custom';
-     return {key,input:Math.round(clamp(row?.input,0,count-1,0)),
-       entity:entity(row?.entity),
-       label:String(row?.label??'').slice(0,42),
-       unit:['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].includes(row?.unit)?row.unit:'auto',
-       decimals:Math.round(clamp(row?.decimals,0,3,1)),
-       manual_value:String(row?.manual_value??'').slice(0,60)};
-   });
-   const legacy=Array.from({length:count},(_,i)=>defaultRow('pv_summary',i));
-   const extras=Array.isArray(node?.entities)?node.entities.slice(0,MAX_ROWS-count).map(item=>({
-     ...defaultRow('custom'),entity:entity(item?.entity),label:String(item?.label||'').slice(0,42)
-   })):[];
-   return legacy.concat(extras);
+   // Built-in inverter metrics (including PV1/PV2) are configured under
+   // "Device data", not duplicated as independently editable panel rows.
+   // Keep only user-defined HA entities, including those from legacy layouts.
+   const source=Array.isArray(raw.panel_rows)?raw.panel_rows:
+     Array.isArray(node?.entities)?node.entities.map(item=>({
+       key:'custom',entity:item?.entity,label:item?.label
+     })):[];
+   return source.filter(row=>row&&(row.key==null||row.key==='custom'))
+     .slice(0,MAX_ROWS).map(row=>({
+       key:'custom',input:0,entity:entity(row.entity),
+       label:String(row.label??'').slice(0,42),
+       unit:['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].includes(row.unit)?row.unit:'auto',
+       decimals:Math.round(clamp(row.decimals,0,3,1)),
+       manual_value:String(row.manual_value??'').slice(0,60)
+     }));
  };
  const panelHeight=c=>Math.max(52,40+c.panel_rows.length*ROW_HEIGHT);
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
@@ -3052,7 +3052,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioBuilding
 /* Data-driven electric flow. Numeric HA power only; no guessed network topology. */
 const HASSStudioPowerFlow=(()=>{
  const clamp=(n,a,b,d)=>n!==''&&n!==null&&n!==undefined&&Number.isFinite(Number(n))?Math.max(a,Math.min(b,Number(n))):d;
- const defaults=()=>({flow_power_entity:'',flow_power_mode:'off',flow_power_kw:0,flow_max_kw:10,flow_min_width:1.5,flow_max_width:6,flow_pattern:'dots',flow_power_direction:true});
+ const colorHex=(value,fallback='#38BDF8')=>
+   typeof value==='string'&&/^#[0-9a-fA-F]{6}$/.test(value)?value.toUpperCase():fallback;
+ const defaults=()=>({flow_power_entity:'',flow_power_mode:'off',flow_power_kw:0,flow_max_kw:10,flow_min_width:1.5,flow_max_width:6,flow_pattern:'dots',flow_color:'#38BDF8',flow_power_direction:true});
  const normalize=x=>{
    const d=defaults(),c={...d,...x};
    return {...c,flow_power_entity:typeof c.flow_power_entity==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(c.flow_power_entity)?c.flow_power_entity:'',
@@ -3061,6 +3063,7 @@ const HASSStudioPowerFlow=(()=>{
     flow_min_width:clamp(c.flow_min_width,.5,12,1.5),
     flow_max_width:clamp(c.flow_max_width,.5,16,6),
     flow_pattern:['dots','dashes','arrows'].includes(c.flow_pattern)?c.flow_pattern:'dots',
+    flow_color:colorHex(c.flow_color),
     flow_power_direction:c.flow_power_direction!==false};
  };
  const measure=(p,h)=>{
@@ -3098,8 +3101,8 @@ const HASSStudioPowerFlow=(()=>{
      ';--ss-flow-gap:'+v.interval+';--ss-flow-cycle:-'+cycle+
      ';animation-direction:'+v.direction;
  };
- const arrowPath=(d,w)=>'<path class="ss-power-arrow" d="'+d+'" stroke="#fff" stroke-width="'+w+'" stroke-dasharray="1 17" fill="none"/>';
- return Object.freeze({defaults,normalize,measure,visual,style,arrowPath});
+ const arrowPath=(d,w,color='#38BDF8')=>'<path class="ss-power-arrow" d="'+d+'" stroke="'+colorHex(color)+'" stroke-width="'+w+'" stroke-dasharray="1 17" fill="none"/>';
+ return Object.freeze({defaults,normalize,measure,visual,style,arrowPath,colorHex});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioPowerFlow;
 
@@ -4803,20 +4806,10 @@ const HASSStudioEditorInspector = (() => {
         ports+='<button type="button" data-add-energy-port>+ Dodaj port</button>';
         markup+=sect('inverter-ports','3. Porty i połączenia','mdi:connection',ports,false);
 
-        let extra='<p class="ss-note">Parametry panelu korzystają z odczytów urządzenia. Własną encję przypisujesz tylko dla wiersza „Dowolna encja”.</p>';
-        const types=HASSStudioInverter.DEFAULT_KEYS.map(key=>[key,({
-          ac_power:'Moc AC',temperature:'Temperatura falownika',status:'Stan falownika',
-          alarm:'Alarm',pv_summary:'Podsumowanie wejścia PV',pv_voltage:'Napięcie PV',
-          pv_current:'Prąd PV',pv_power:'Moc PV',custom:'Dowolna encja HA'
-        })[key]]);
+        let extra='<p class="ss-note">Tutaj dodajesz wyłącznie własne odczyty HA. PV1/PV2, moc i temperatura są już skonfigurowane w „Dane urządzenia”.</p>';
         c.panel_rows.forEach((row,i)=>{
-          let fields=field('Wyświetlany parametr','inv_row_'+i+'_key',row.key,'text',types)+
-            field('Etykieta w panelu','inv_row_'+i+'_label',row.label);
-          if(row.key.startsWith('pv_'))
-            fields+=field('Wejście PV (1, 2, …)','inv_row_'+i+'_input',row.input+1,
-              'number',null,'min="1" max="'+c.count+'"');
-          if(row.key==='custom')
-            fields+=field('Encja Home Assistant','inv_row_'+i+'_entity',row.entity,
+          let fields=field('Nazwa odczytu','inv_row_'+i+'_label',row.label);
+          fields+=field('Encja Home Assistant','inv_row_'+i+'_entity',row.entity,
               'search',null,'list="ss-entity-list"')+
               (test?'<div class="ss-metric-test">'+
                 field('Wartość TEST','inv_row_'+i+'_manual_value',row.manual_value)+'</div>':'');
@@ -4831,7 +4824,7 @@ const HASSStudioEditorInspector = (() => {
             'mdi:table-row',fields,false);
         });
         extra+='<button type="button" data-inv-row-add="true">+ Dodaj parametr panelu</button>';
-        markup+=sect('inverter-extra','4. Dodatkowe encje i parametry panelu',
+        markup+=sect('inverter-extra','4. Dodatkowe encje',
           'mdi:chart-timeline-variant',extra,false);
       }else{
       markup+='<div class="ss-inspector-heading">'+sectionIcon(selection.type==='connection'?(obj.type==='electric'?'mdi:power-plug':'mdi:pipe'):(registry.categoryIcons[registry.resolve(obj.type,obj.variant)?.category]||'mdi:cube-outline'))+
@@ -5260,6 +5253,24 @@ const HASSStudioEditorInspector = (() => {
         markup+='<p class="ss-note">'+(isHydraulic?'Rura hydrauliczna':'Przewód elektryczny')+
           ' — rodzaj wybiera się w bibliotece połączeń.</p>';
         markup+=field(L.pipeWidth,'style_width',s.width,'range',null,'min="2" max="14" step="1"');
+        if(!isHydraulic){
+          const palette=['#E3BC63','#F87171','#FB923C','#FACC15','#4ADE80','#2DD4BF',
+            '#38BDF8','#818CF8','#C084FC','#F472B6','#E2E8F0','#64748B'];
+          const colorEditor=(title,key,value)=>{
+            const c=HASSStudioPowerFlow.colorHex(value);
+            return '<div class="ss-wire-colors"><strong>'+title+'</strong>'+
+              '<div class="ss-color-palette">'+palette.map(hex=>
+                '<button type="button" data-color-pick="'+key+'" data-color-value="'+hex+
+                '" title="'+hex+'" aria-label="Ustaw kolor '+hex+'"'+
+                (hex===c?' aria-pressed="true"':' aria-pressed="false"')+
+                ' style="background:'+hex+'"></button>').join('')+'</div>'+
+              '<div class="ss-color-inputs">'+field('Próbnik',key+'_picker',c,'color')+
+              field('Kolor HEX (#RRGGBB)',key+'_hex',c,'text',null,'maxlength="7" spellcheck="false"')+
+              '</div></div>';
+          };
+          markup+=colorEditor('Kolor przewodu','style_wire_color',s.color);
+          markup+=colorEditor('Kolor animacji','anim_flow_color',a.flow_color);
+        }
         if(isHydraulic){
           markup+=field(L.pipeColor,'style_color',s.color,'text',colorsList);
           markup+=field(L.pipeStart,'style_cap_start',s.cap_start?'true':'false','text',[['true',L.yes],['false',L.no]]);
