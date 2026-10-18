@@ -47,7 +47,7 @@ eq(x.get('pv').injection_kw,0);eq(x.get('grid').injection_kw,2);
 eq(inverter.data(x.data.nodes[0],hass).power,0);
 
 // Explicit HA-only with an unavailable sensor cannot be invented from defaults.
-x=resolve({...pv,energy_mode:'ha'},{},{states:{'sensor.pv':entity('unavailable','W')}});
+x=resolve({...pv,energy_mode:'ha'},[],{states:{'sensor.pv':entity('unavailable','W')}});
 assert.equal(x.network.state,'insufficient');
 
 const noData={states:{'sensor.pv':entity('unavailable','W')}};
