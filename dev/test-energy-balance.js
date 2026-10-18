@@ -143,7 +143,7 @@ const gridNative=balance.resolve(layout.normalized(cfg(liveNodes,connections,[
  'sensor.grid_import':{state:'800',attributes:{unit_of_measurement:'W'}},
  'sensor.grid_export':{state:'0',attributes:{unit_of_measurement:'W'}}
 }});
-assert.equal(gridNative.networks[0].state,'insufficient'); // no grid entities configured
+assert.equal(gridNative.networks[0].state,'balanced'); // Grid is the inferred residual without meter entities.
 const acdc=balance.resolve(layout.normalized(cfg([
  node('battery','energy_storage',{energy_ports:[port('dc','dc')]}),
  node('grid','power_grid',{energy_ports:[port('ac','ac')]})
