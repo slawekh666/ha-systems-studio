@@ -21,25 +21,25 @@ const HASSStudioPowerGrid=(()=>{
    mode:raw.mode==='manual'?'manual':'live',
    entities:Object.fromEntries([...FIELDS,'grid_status','voltage_alarm','phase_loss'].map(k=>[k,typeof entities[k]==='string'?entities[k]:''])),
    manual:Object.fromEntries([...FIELDS,'grid_status','voltage_alarm','phase_loss'].map(k=>[k,num(manual[k],-10000,10000,d.manual[k])])),
-   show_extras:EXTRAS.filter(k=>Array.isArray(raw.show_extras)&&raw.show_extras.includes(k))};
+   show_extras:['frequency'].filter(k=>Array.isArray(raw.show_extras)&&raw.show_extras.includes(k))};
  };
  const reading=(key,conf,hass)=>{
-  if(conf.mode==='manual')return conf.manual[key];
+  if(conf.energy_mode==='test'||conf.energy_mode==null&&conf.mode==='manual')return conf.manual[key];
   const id=conf.entities[key];
-  if(!id||!/^[-\w]+\.[-\w]+$/.test(id))return null;
+  if(!id||!/^[-\w]+\.[-\w]+$/.test(id))return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
   const state=hass?.states?.[id];
-  if(!state||['unknown','unavailable','none',''].includes(String(state.state).toLowerCase()))return null;
+  if(!state||['unknown','unavailable','none',''].includes(String(state.state).toLowerCase()))return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
   const n=Number(state.state);
-  if(!Number.isFinite(n))return null;
+  if(!Number.isFinite(n))return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
   const unit=String(state.attributes?.unit_of_measurement||'').trim();
   if(key==='total_kw'||key==='import_kw'||key==='export_kw'){
    if(unit==='W')return n/1000;
    if(unit===''||unit==='kW')return n;
    return null;
   }
-  if(key.endsWith('_v')&&unit!==''&&unit!=='V')return null;
-  if(key.endsWith('_a')&&unit!==''&&unit!=='A')return null;
-  if(key==='frequency'&&unit!==''&&unit!=='Hz')return null;
+  if(key.endsWith('_v')&&unit!==''&&unit!=='V')return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
+  if(key.endsWith('_a')&&unit!==''&&unit!=='A')return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
+  if(key==='frequency'&&unit!==''&&unit!=='Hz')return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
   if(key==='power_factor'&&unit!==''&&unit!=='%'&&unit!=='1')return null;
   return n;
  };
@@ -53,7 +53,7 @@ const HASSStudioPowerGrid=(()=>{
   return null;
  };
  const resolve=(node,hass)=>{
-  const c=normalize(node);const phase={};let alarm=false;
+  const c={...normalize(node),energy_mode:node?.energy_mode||null,fallback:node?.energy_fallback_enabled===true};const phase={};let alarm=false;
   for(const n of [1,2,3]){
    const v=reading('l'+n+'_v',c,hass),a=reading('l'+n+'_a',c,hass);
    const voltageAlert=v!==null&&(v<c.min_voltage||v>c.max_voltage);
