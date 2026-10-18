@@ -3344,7 +3344,7 @@ const HASSStudioEnergyBalance=(()=>{
       kw=r.kw;source=kw===null?'missing':r.source;
       if(n.type==='power_grid'&&n.energy_grid_auto===true&&p.mode==='device')
         return {mode:'calculate',source:'pending',injection_kw:null};
-      if(scenario==='live'&&source==='simulated'&&n.energy_mode!=='test'){
+      if(scenario==='live'&&source==='simulated'&&n.energy_mode==null&&n.energy_fallback_enabled!==true){
         kw=null;source='missing';
       }
     }
@@ -3526,7 +3526,10 @@ const HASSStudioEnergyBalance=(()=>{
     for(const n of allNodes){
       const role=HASSStudioEnergyTopology.node(n).role;
       if(!roles.includes(role))continue;
-      const p=overrides.get(n.id)||participant({node_id:n.id});
+      const p=n.type==='power_grid'&&n.energy_grid_auto===true?
+        participant({node_id:n.id,mode:'calculate'}):
+        n.energy_mode!=null?participant({node_id:n.id}):
+        overrides.get(n.id)||participant({node_id:n.id});
       if(p.mode==='off')continue;
       const ports=HASSStudioEnergyTopology.ports(n);
       let matches=ports.filter(port=>keyGroup.has(n.id+':'+(port.bus||port.id)));
@@ -4373,7 +4376,8 @@ const HASSStudioLayout = (() => {
       };
     }).filter(v=>v.points.length>=2);
     return {width,height,name:String(source.name||'').trim().slice(0,64),
-      energy_balance:HASSStudioEnergyBalance.normalize(source.energy_balance),
+      energy_balance:{...HASSStudioEnergyBalance.normalize(source.energy_balance),
+        enabled:connections.some(c=>c.type==='electric')},
       energy_diagnostics:HASSStudioEnergyDiagnostics.normalize(source.energy_diagnostics),
       nodes,connections};
   };
@@ -4946,6 +4950,8 @@ const HASSStudioEditorInspector = (() => {
         if(isGrid){
           const g=HASSStudioPowerGrid.normalize(obj);
           markup+='<h4>Wygląd panelu słupa</h4>'+
+            field('Pokaż częstotliwość (Hz)','grid_extra_frequency',
+              g.show_extras.includes('frequency')?'true':'false','text',[['true','Tak'],['false','Nie']])+
             field('Skala panelu (%)','grid_panel_scale',Math.round(g.panel_scale*100),'range',null,'min="40" max="150" step="5"')+
             field('Pozycja panelu','grid_panel_position',g.panel_position,'text',[['right','Prawo'],['left','Lewo'],['bottom','Pod słupem']])+
             field('Pokaż panel','grid_show_panel',g.show_panel?'true':'false','text',[['true','Tak'],['false','Nie']]);
@@ -5862,6 +5868,8 @@ const HASSStudioEditorLibrary=(()=>{
           val?{node_id:parts[0],port_id:parts[1]}:null);
       }else if(selection.type==='node'&&key==='energy_mode'){
          obj.energy_mode=['auto','ha','test'].includes(val)?val:'ha';
+         model.energy_balance.participants=model.energy_balance.participants.filter(p=>p.node_id!==obj.id);
+         model.energy_balance.scenario='hybrid';
          obj.energy_test_configured=true;
        }else if(selection.type==='node'&&key==='energy_manual_w'){
          obj.energy_manual_kw=val===''?null:clamp(val,0,10000000,0)/1000;

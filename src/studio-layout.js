@@ -129,7 +129,8 @@ const HASSStudioLayout = (() => {
       };
     }).filter(v=>v.points.length>=2);
     return {width,height,name:String(source.name||'').trim().slice(0,64),
-      energy_balance:HASSStudioEnergyBalance.normalize(source.energy_balance),
+      energy_balance:{...HASSStudioEnergyBalance.normalize(source.energy_balance),
+        enabled:connections.some(c=>c.type==='electric')},
       energy_diagnostics:HASSStudioEnergyDiagnostics.normalize(source.energy_diagnostics),
       nodes,connections};
   };

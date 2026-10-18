@@ -325,6 +325,8 @@ const HASSStudioEditorInspector = (() => {
         if(isGrid){
           const g=HASSStudioPowerGrid.normalize(obj);
           markup+='<h4>Wygląd panelu słupa</h4>'+
+            field('Pokaż częstotliwość (Hz)','grid_extra_frequency',
+              g.show_extras.includes('frequency')?'true':'false','text',[['true','Tak'],['false','Nie']])+
             field('Skala panelu (%)','grid_panel_scale',Math.round(g.panel_scale*100),'range',null,'min="40" max="150" step="5"')+
             field('Pozycja panelu','grid_panel_position',g.panel_position,'text',[['right','Prawo'],['left','Lewo'],['bottom','Pod słupem']])+
             field('Pokaż panel','grid_show_panel',g.show_panel?'true':'false','text',[['true','Tak'],['false','Nie']]);

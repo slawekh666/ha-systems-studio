@@ -632,6 +632,8 @@
           val?{node_id:parts[0],port_id:parts[1]}:null);
       }else if(selection.type==='node'&&key==='energy_mode'){
          obj.energy_mode=['auto','ha','test'].includes(val)?val:'ha';
+         model.energy_balance.participants=model.energy_balance.participants.filter(p=>p.node_id!==obj.id);
+         model.energy_balance.scenario='hybrid';
          obj.energy_test_configured=true;
        }else if(selection.type==='node'&&key==='energy_manual_w'){
          obj.energy_manual_kw=val===''?null:clamp(val,0,10000000,0)/1000;

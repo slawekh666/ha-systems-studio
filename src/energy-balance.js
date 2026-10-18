@@ -125,7 +125,7 @@ const HASSStudioEnergyBalance=(()=>{
       kw=r.kw;source=kw===null?'missing':r.source;
       if(n.type==='power_grid'&&n.energy_grid_auto===true&&p.mode==='device')
         return {mode:'calculate',source:'pending',injection_kw:null};
-      if(scenario==='live'&&source==='simulated'&&n.energy_mode!=='test'){
+      if(scenario==='live'&&source==='simulated'&&n.energy_mode==null&&n.energy_fallback_enabled!==true){
         kw=null;source='missing';
       }
     }
@@ -307,7 +307,10 @@ const HASSStudioEnergyBalance=(()=>{
     for(const n of allNodes){
       const role=HASSStudioEnergyTopology.node(n).role;
       if(!roles.includes(role))continue;
-      const p=overrides.get(n.id)||participant({node_id:n.id});
+      const p=n.type==='power_grid'&&n.energy_grid_auto===true?
+        participant({node_id:n.id,mode:'calculate'}):
+        n.energy_mode!=null?participant({node_id:n.id}):
+        overrides.get(n.id)||participant({node_id:n.id});
       if(p.mode==='off')continue;
       const ports=HASSStudioEnergyTopology.ports(n);
       let matches=ports.filter(port=>keyGroup.has(n.id+':'+(port.bus||port.id)));
