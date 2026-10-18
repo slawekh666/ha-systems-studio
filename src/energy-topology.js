@@ -116,9 +116,10 @@ const HASSStudioEnergyTopology=(()=>{
    c.points[side==='start'?0:c.points.length-1]=anchor(n,a.id);
    return true;
  };
- const nearest=(layout,point,maxDistance=25,mediumFilter=null)=>{
+ const nearest=(layout,point,maxDistance=25,mediumFilter=null,excludeNode=null)=>{
    let best=null,distance=maxDistance;
    for(const n of layout.nodes||[])for(const p of ports(n)){
+     if(n.id===excludeNode)continue;
      if(mediumFilter&&p.medium!==mediumFilter)continue;
      const at=anchor(n,p.id),d=Math.hypot(at.x-point.x,at.y-point.y);
      if(d<distance){distance=d;best={node_id:n.id,port_id:p.id};}
