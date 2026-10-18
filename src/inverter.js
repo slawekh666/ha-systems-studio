@@ -132,6 +132,7 @@ const HASSStudioInverter=(()=>{
      const conversions={'W:kW':.001,'kW:W':1000,'Wh:kWh':.001,'kWh:Wh':1000,
        'kWh:MWh':.001,'MWh:kWh':1000,'Wh:MWh':.000001,'MWh:Wh':1000000};
      if(target!=='auto'&&target!==unit){
+       if(!unit)unit=target;
        const ratio=conversions[unit+':'+target];
        if(ratio!==undefined){number*=ratio;unit=target;}
        // Never mislabel incompatible units: retain the measured unit.
