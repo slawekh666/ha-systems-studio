@@ -3473,6 +3473,16 @@ const HASSStudioLayout = (() => {
       solid_glow:clamp(v.solid_glow,0,100,78),
       pellet_level_entity:validEntity(v.pellet_level_entity)?v.pellet_level_entity:'',
       pellet_level_manual:v.pellet_level_manual===true,pellet_level_test:clamp(v.pellet_level_test,0,100,80),pellet_alarm_pct:clamp(v.pellet_alarm_pct,0,100,20),
+      pellet_test_mode:v.pellet_test_mode===true,
+      pellet_manual_state:['off','ignition','burning','embers'].includes(v.pellet_manual_state)?v.pellet_manual_state:'burning',
+      pellet_manual_temperature:clamp(v.pellet_manual_temperature,-40,150,65),
+      pellet_manual_power_unit:v.pellet_manual_power_unit==='kW'?'kW':'%',
+      pellet_manual_power:clamp(v.pellet_manual_power,0,v.pellet_manual_power_unit==='kW'?500:100,65),
+      pellet_manual_feeder:v.pellet_manual_feeder===true,
+      pellet_manual_alarm:v.pellet_manual_alarm===true,
+      pellet_burner_power_entity:validEntity(v.pellet_burner_power_entity)?v.pellet_burner_power_entity:'',
+      pellet_feeder_entity:validEntity(v.pellet_feeder_entity)?v.pellet_feeder_entity:'',
+      pellet_alarm_entity:validEntity(v.pellet_alarm_entity)?v.pellet_alarm_entity:'',
       hp_power_entity:validEntity(v.hp_power_entity)?v.hp_power_entity:'',hp_fan_entity:validEntity(v.hp_fan_entity)?v.hp_fan_entity:'',
       hp_max_rpm:clamp(v.hp_max_rpm,100,20000,1800),hp_glow:clamp(v.hp_glow,0,100,65),hp_test_mode:v.hp_test_mode===true,hp_manual_kw:clamp(v.hp_manual_kw,0,500,0),hp_manual_fan:clamp(v.hp_manual_fan,0,100,0),
       gas_draw_entity:validEntity(v.gas_draw_entity)?v.gas_draw_entity:'',gas_glow:clamp(v.gas_glow,0,100,62),
@@ -3992,10 +4002,29 @@ const HASSStudioEditorInspector = (() => {
           if(obj.variant==='gas_modern')markup+=field(L.gasDraw,'gas_draw_entity',obj.gas_draw_entity,'search',null,'list="ss-entity-list"')+
             field(L.gasGlow,'gas_glow',obj.gas_glow,'range',null,'min="0" max="100" step="5"')+
             '<p class="ss-note">'+esc(L.gasHelp)+'</p>';
-          if(obj.variant==='pellet_modern')markup+=field(L.pelletLevelEntity,'pellet_level_entity',obj.pellet_level_entity||'','search',null,'list="ss-entity-list"')+
-              field(L.pelletLevelMode,'pellet_level_manual',obj.pellet_level_manual?'true':'false','text',[['false',L.pelletLevelHA],['true',L.pelletLevelManual]])+
-              (obj.pellet_level_manual||!obj.pellet_level_entity?field(L.pelletLevelTest,'pellet_level_test',obj.pellet_level_test??80,'number',null,'min="0" max="100" step="1"'):'')+
-              field(L.pelletAlarm,'pellet_alarm_pct',obj.pellet_alarm_pct??20,'number',null,'min="0" max="100" step="1"');
+          if(obj.variant==='pellet_modern'){
+             const test=obj.pellet_test_mode===true;
+             markup+=field('Tryb danych kotła pelletowego','pellet_test_mode',test?'true':'false','text',
+                [['false','Home Assistant'],['true','Symulacja ręczna']]);
+             if(test){
+               markup+=field('Test temperatury (°C)','pellet_manual_temperature',obj.pellet_manual_temperature??65,'number',null,'min="-40" max="150" step="0.5"')+
+                 field('Test stanu palnika','pellet_manual_state',obj.pellet_manual_state||'burning','text',
+                   [['off','Wyłączony'],['ignition','Rozpalanie'],['burning','Praca'],['embers','Wygaszanie']])+
+                 field('Jednostka mocy palnika','pellet_manual_power_unit',obj.pellet_manual_power_unit||'%','text',[['%','%'],['kW','kW']])+
+                 field('Test mocy palnika','pellet_manual_power',obj.pellet_manual_power??65,'number',null,'min="0" step="0.1"')+
+                 field('Test podajnika','pellet_manual_feeder',obj.pellet_manual_feeder?'true':'false','text',[['false','Wyłączony'],['true','Aktywny']])+
+                 field('Test alarmu','pellet_manual_alarm',obj.pellet_manual_alarm?'true':'false','text',[['false','Brak'],['true','Alarm']])+
+                 field(L.pelletLevelTest,'pellet_level_test',obj.pellet_level_test??80,'number',null,'min="0" max="100" step="1"');
+             }else{
+               markup+=field('Encja mocy/modulacji palnika (% / W / kW)','pellet_burner_power_entity',obj.pellet_burner_power_entity||'','search',null,'list="ss-entity-list"')+
+                 field('Encja podajnika','pellet_feeder_entity',obj.pellet_feeder_entity||'','search',null,'list="ss-entity-list"')+
+                 field('Encja alarmu','pellet_alarm_entity',obj.pellet_alarm_entity||'','search',null,'list="ss-entity-list"')+
+                 field(L.pelletLevelEntity,'pellet_level_entity',obj.pellet_level_entity||'','search',null,'list="ss-entity-list"')+
+                 field(L.pelletLevelMode,'pellet_level_manual',obj.pellet_level_manual?'true':'false','text',[['false',L.pelletLevelHA],['true',L.pelletLevelManual]])+
+                 (obj.pellet_level_manual?field(L.pelletLevelTest,'pellet_level_test',obj.pellet_level_test??80,'number',null,'min="0" max="100" step="1"'):'');
+             }
+             markup+=field(L.pelletAlarm,'pellet_alarm_pct',obj.pellet_alarm_pct??20,'number',null,'min="0" max="100" step="1"');
+           }
           if(obj.variant==='heatpump_modern')markup+=field('Tryb testowy pompy','hp_test_mode',obj.hp_test_mode?'true':'false','text',[['false','Home Assistant'],['true','Symulacja ręczna']])+
              (obj.hp_test_mode?field('Test mocy (kW)','hp_manual_kw',obj.hp_manual_kw??0,'number',null,'min="0" max="500" step="0.1"')+field('Test wentylatora (%)','hp_manual_fan',obj.hp_manual_fan??0,'number',null,'min="0" max="100" step="1"'):'')+
              field(L.hpPower,'hp_power_entity',obj.hp_power_entity,'search',null,'list="ss-entity-list"')+
@@ -4004,7 +4033,7 @@ const HASSStudioEditorInspector = (() => {
             field(L.hpGlow,'hp_glow',obj.hp_glow,'range',null,'min="0" max="100" step="5"');
           if(['solid_fuel','pellet_modern','fireplace_modern'].includes(obj.variant)){
             markup+=(obj.variant==='solid_fuel'?field(L.solidFuel,'solid_fuel',obj.solid_fuel,'text',[['wood',L.solidWood],['coal',L.solidCoal]]):'')+
-              field(L.solidState,'solid_state',obj.solid_state,'text',[['auto',L.solidAuto],['burning',L.solidBurning],['embers',L.solidEmbers],['off',L.solidOff]])+
+              (obj.variant==='pellet_modern'&&obj.pellet_test_mode?'':field(L.solidState,'solid_state',obj.solid_state,'text',[['auto',L.solidAuto],['burning',L.solidBurning],['embers',L.solidEmbers],['off',L.solidOff]]))+
               field(L.solidGlow,'solid_glow',obj.solid_glow,'range',null,'min="0" max="100" step="5"')+
               '<p class="ss-note">'+esc(L.solidHelp)+'</p>';
           }else if(obj.variant==='heatpump')markup+=field('Tryb pracy pompy (wizualizacja)','burner_mode',obj.burner_mode,'text',[['auto','Automatyczny'],['on','Pracuje — test'],['off','Wyłączona — test']]);
@@ -4014,7 +4043,7 @@ const HASSStudioEditorInspector = (() => {
             markup+=field('Próg startu animacji przy braku encji (°C)','burner_on_temp',obj.burner_on_temp,'number',null,'min="20" max="90" step="1"');
             markup+=field('Próg zakończenia animacji (°C)','burner_off_temp',obj.burner_off_temp,'number',null,'min="10" max="89" step="1"');
             markup+='<p class="ss-note">Progi sterują tylko animacją starszej grafiki, nie uruchamiają pompy.</p>';
-          }else if(obj.variant!=='heatpump_modern'){
+          }else if(obj.variant!=='heatpump_modern'&&!(obj.variant==='pellet_modern'&&obj.pellet_test_mode)){
             markup+=field(L.burnerEntity,'burner_entity',obj.burner_entity,'search',null,'list="ss-entity-list"');
             markup+=field(L.burnerOnTemp,'burner_on_temp',obj.burner_on_temp,'number',null,'min="20" max="90" step="1"');
             markup+=field(L.burnerOffTemp,'burner_off_temp',obj.burner_off_temp,'number',null,'min="10" max="89" step="1"');
@@ -4640,7 +4669,7 @@ const HASSStudioEditorLibrary=(()=>{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:position?position.x:80+(n%6)*170,y:position?position.y:100+Math.floor(n/6)*170,
-          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?HASSStudioBuilding.defaults():undefined,entities:[],parts:[]};
+          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,pellet_test_mode:false,pellet_manual_state:'burning',pellet_manual_temperature:65,pellet_manual_power_unit:'%',pellet_manual_power:65,pellet_manual_feeder:false,pellet_manual_alarm:false,pellet_burner_power_entity:'',pellet_feeder_entity:'',pellet_alarm_entity:'',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?HASSStudioBuilding.defaults():undefined,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -4972,13 +5001,16 @@ const HASSStudioEditorLibrary=(()=>{
       }else if(['flow_power_kw','flow_max_kw','flow_min_width','flow_max_width'].includes(key)){
         const ranges={flow_power_kw:[-10000,10000],flow_max_kw:[.1,10000],flow_min_width:[.5,12],flow_max_width:[.5,16]};
         obj[key]=clamp(val,ranges[key][0],ranges[key][1],HASSStudioPowerFlow.defaults()[key]);
-      }else if(['x','y','scale','width','solid_glow','gas_glow','electric_glow','electric_max_kw','hp_glow','hp_max_rpm','hp_manual_kw','hp_manual_fan','pellet_level_test','pellet_alarm_pct','flow_speed','burner_on_temp','burner_off_temp','solar_on_delta','solar_off_delta'].includes(key)){
-        const min={scale:0.5,width_scale:0.5,height_scale:0.5,width:3,solid_glow:0,gas_glow:0,electric_glow:0,electric_max_kw:0.1,hp_glow:0,hp_max_rpm:100,hp_manual_kw:0,hp_manual_fan:0,pellet_level_test:0,pellet_alarm_pct:0,flow_speed:0.35,burner_on_temp:20,burner_off_temp:10,solar_on_delta:1,solar_off_delta:0};
-        const max={scale:2.4,width_scale:2.4,height_scale:2.4,width:14,solid_glow:100,gas_glow:100,electric_glow:100,electric_max_kw:100,hp_glow:100,hp_max_rpm:20000,hp_manual_kw:500,hp_manual_fan:100,pellet_level_test:100,pellet_alarm_pct:100,flow_speed:5,burner_on_temp:90,burner_off_temp:89,solar_on_delta:40,solar_off_delta:39,x:W,y:H};
+      }else if(['x','y','scale','width','solid_glow','gas_glow','electric_glow','electric_max_kw','hp_glow','hp_max_rpm','hp_manual_kw','hp_manual_fan','pellet_level_test','pellet_alarm_pct','pellet_manual_temperature','pellet_manual_power','flow_speed','burner_on_temp','burner_off_temp','solar_on_delta','solar_off_delta'].includes(key)){
+        const min={scale:0.5,width_scale:0.5,height_scale:0.5,width:3,solid_glow:0,gas_glow:0,electric_glow:0,electric_max_kw:0.1,hp_glow:0,hp_max_rpm:100,hp_manual_kw:0,hp_manual_fan:0,pellet_level_test:0,pellet_alarm_pct:0,pellet_manual_temperature:-40,pellet_manual_power:0,flow_speed:0.35,burner_on_temp:20,burner_off_temp:10,solar_on_delta:1,solar_off_delta:0};
+        const max={scale:2.4,width_scale:2.4,height_scale:2.4,width:14,solid_glow:100,gas_glow:100,electric_glow:100,electric_max_kw:100,hp_glow:100,hp_max_rpm:20000,hp_manual_kw:500,hp_manual_fan:100,pellet_level_test:100,pellet_alarm_pct:100,pellet_manual_temperature:150,pellet_manual_power:obj.pellet_manual_power_unit==='kW'?500:100,flow_speed:5,burner_on_temp:90,burner_off_temp:89,solar_on_delta:40,solar_off_delta:39,x:W,y:H};
         obj[key]=clamp(val,min[key]??0,max[key],obj[key]);
-      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity','pellet_level_entity','pellet_level_manual','burner_entity','gas_draw_entity','electric_power_entity','electric_load_entity','hp_power_entity','hp_fan_entity','hp_test_mode','burner_mode','solid_fuel','solid_state','pump_entity','tank_entity','cap_start','cap_end','flow_power_mode','flow_pattern','flow_power_direction','flow_power_entity'].includes(key)){
-        if(['entity','flow_entity','pellet_level_entity','burner_entity','gas_draw_entity','electric_power_entity','electric_load_entity','hp_power_entity','hp_fan_entity','pump_entity','tank_entity'].includes(key))obj[key]=validEntity(val)?val:'';
+      }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity','pellet_level_entity','pellet_level_manual','pellet_test_mode','pellet_manual_state','pellet_manual_power_unit','pellet_manual_feeder','pellet_manual_alarm','pellet_burner_power_entity','pellet_feeder_entity','pellet_alarm_entity','burner_entity','gas_draw_entity','electric_power_entity','electric_load_entity','hp_power_entity','hp_fan_entity','hp_test_mode','burner_mode','solid_fuel','solid_state','pump_entity','tank_entity','cap_start','cap_end','flow_power_mode','flow_pattern','flow_power_direction','flow_power_entity'].includes(key)){
+        if(['entity','flow_entity','pellet_level_entity','pellet_burner_power_entity','pellet_feeder_entity','pellet_alarm_entity','burner_entity','gas_draw_entity','electric_power_entity','electric_load_entity','hp_power_entity','hp_fan_entity','pump_entity','tank_entity'].includes(key))obj[key]=validEntity(val)?val:'';
         else if(key==='pellet_level_manual')obj.pellet_level_manual=val==='true';
+        else if(['pellet_test_mode','pellet_manual_feeder','pellet_manual_alarm'].includes(key))obj[key]=val==='true';
+        else if(key==='pellet_manual_state')obj.pellet_manual_state=['off','ignition','burning','embers'].includes(val)?val:'burning';
+        else if(key==='pellet_manual_power_unit'){obj.pellet_manual_power_unit=val==='kW'?'kW':'%';obj.pellet_manual_power=Math.min(obj.pellet_manual_power,obj.pellet_manual_power_unit==='%'?100:500);}
         else if(key==='hp_test_mode')obj.hp_test_mode=val==='true';
         else if(key==='burner_mode')obj.burner_mode=['auto','on','off'].includes(val)?val:'auto';
         else if(key==='solid_fuel')obj.solid_fuel=val==='coal'?'coal':'wood';
