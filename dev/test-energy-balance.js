@@ -4,6 +4,7 @@ const ctx={isEnt:id=>typeof id==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(id)};
 vm.createContext(ctx);
 for(const file of ['ha-state.js','readout-scale.js','device-registry.js','studio-viewport.js',
   'inverter.js','building.js','ev-charger.js','energy-storage.js','power-grid.js',
+  'distribution-board.js','radiator.js','manifold.js',
   'energy-topology.js','energy-balance.js','power-flow.js','studio-layout.js']){
   vm.runInContext(fs.readFileSync('src/'+file,'utf8'),ctx,{filename:file});
 }
