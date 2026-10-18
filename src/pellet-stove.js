@@ -42,10 +42,23 @@ const HASSStudioPellet = (() => {
     const arc=t===null?0:(46+amount*118),hue=118-amount*95;
     const glow=clamp(node.solid_glow,0,100,76)/100;
     const prefix='sspellet'+String(node.id||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24);
+    const haLevel=HASSStudioHA.percentage(hass,node.pellet_level_entity);
+    const manualLevel=Number(node.pellet_level_test);
+    const useManual=node.pellet_level_manual===true||!node.pellet_level_entity;
+    const meter=useManual?(Number.isFinite(manualLevel)&&manualLevel>=0&&manualLevel<=100?manualLevel:null):haLevel;
+    const known=meter!==null&&Number.isFinite(meter);
+    const low=known&&meter<=clamp(node.pellet_alarm_pct,0,100,20);
+    const levelBindings={'pellet-level-warning':{visibility:low?'visible':'hidden'}};
+    for(let i=1;i<=5;i++){
+      const active=known&&meter>=[18,38,58,78,98][i-1];
+      levelBindings['pellet-level-'+i]={opacity:known?'1':'.35',
+        fill:!known?'#65727c':active?(low?'#ed4d47':meter<=40?'#efa647':meter<=60?'#e8cf50':'#42db8a'):'#46535d'};
+    }
     const image = HASSStudioSvg.namespaceIds(
       HASSStudioSvg.inject(
         HASSStudioSvg.apply(HASSStudioIconTemplates.pellet, {
           tempValue: { text: actual === null ? '—' : actual.toFixed(1) + '°' },
+          ...levelBindings,
           statusArc: {
             stroke: actual === null ? '#586779' : 'hsl(' + hue.toFixed(1) + ' 88% 48%)',
             'stroke-dasharray': arc.toFixed(1) + ' 176'
