@@ -1,11 +1,11 @@
 /* Radiator renderer: user-supplied SVG, HA sensors, independent proportional screen scale. */
 const HASSStudioRadiator=(()=>{
  const clamp=(v,a,z,d)=>v!==''&&v!=null&&Number.isFinite(Number(v))?Math.max(a,Math.min(z,Number(v))):d;
- const defaults=()=>({display:true,display_scale:1,mode:'live',temperature_entity:'',valve_entity:'',manual_temperature:55,manual_open:42,glow:62});
+ const defaults=()=>({display:true,display_scale:1,mode:'live',mirror_horizontal:false,temperature_entity:'',valve_entity:'',manual_temperature:55,manual_open:42,glow:62});
  const normalize=node=>{
   const o=node?.radiator||{},d=defaults();
   return {...d,...o,display:o.display!==false,display_scale:HASSStudioReadoutScale.factor(o.display_scale),
-   mode:o.mode==='manual'?'manual':'live',temperature_entity:typeof o.temperature_entity==='string'?o.temperature_entity:'',
+   mode:o.mode==='manual'?'manual':'live',mirror_horizontal:o.mirror_horizontal===true,temperature_entity:typeof o.temperature_entity==='string'?o.temperature_entity:'',
    valve_entity:typeof o.valve_entity==='string'?o.valve_entity:'',
    manual_temperature:clamp(o.manual_temperature,-40,150,55),manual_open:clamp(o.manual_open,0,100,42),
    glow:clamp(o.glow,0,100,62)};
@@ -44,10 +44,13 @@ const HASSStudioRadiator=(()=>{
   svg=svg.replace(/(<text\b[^>]*x="1040"[^>]*>[\s\S]*?<\/text>)/g,'');
   svg=svg.replace(/(<text\b[^>]*\bid="(?:tempLarge|openLarge)"[^>]*>[\s\S]*?<\/text>)/g,'');
   const screenScale=c.display_scale,screenPivotX=960,screenPivotY=355;
+  // Counter-reflect only the display assembly, keeping its typography legible.
+  const readableMirror=c.mirror_horizontal?'translate(1920 0) scale(-1 1) ':'';
   // Apply to the entire display assembly, not just its border: text/ring/bars scale together.
   svg=svg.replace('<g id="displayGroup">','<g id="displayGroup" transform="'+
-    HASSStudioReadoutScale.around(screenPivotX,screenPivotY,screenScale)+'"'+(c.display?'':' visibility="hidden"')+'>');
-  svg=svg.replace('<g id="displayMountGroup">','<g id="displayMountGroup"'+(c.display?'':' visibility="hidden"')+'>');
+    readableMirror+HASSStudioReadoutScale.around(screenPivotX,screenPivotY,screenScale)+'"'+(c.display?'':' visibility="hidden"')+'>');
+  svg=svg.replace('<g id="displayMountGroup">','<g id="displayMountGroup" transform="'+readableMirror.trim()+'"'+(c.display?'':' visibility="hidden"')+'>');
+  if(c.mirror_horizontal)svg='<g class="ss-radiator-mirror" transform="translate(1470 0) scale(-1 1)">'+svg+'</g>';
   // Hide unknown readings and keep SVG fully read-only.
   const prefix='ssradiator'+String(node?.id||'preview').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24)+'-';
   return '<svg x="0" y="0" width="176" height="132" viewBox="120 110 1230 840" preserveAspectRatio="xMidYMid meet">'+

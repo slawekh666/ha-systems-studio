@@ -206,6 +206,7 @@ const HASSStudioEditorInspector = (() => {
         }
         if(isRadiator){
           const c=obj.radiator||HASSStudioRadiator.defaults();
+          markup+=field('Odbicie lustrzane (lewo/prawo)','rad_mirror_horizontal',c.mirror_horizontal?'true':'false','text',[['false','Normalny'],['true','Odbity']]);
           markup+=field('Skala wyświetlacza (%)','rad_display_scale',Math.round((c.display_scale||1)*100),'range',null,'min="40" max="150" step="5"');
           markup+=field('Wyświetlacz','rad_display',c.display!==false?'true':'false','text',[['true','Widoczny'],['false','Ukryty']]);
           markup+=field('Źródło danych','rad_mode',c.mode||'live','text',[['live','Home Assistant'],['manual','Symulacja']]);
