@@ -56,21 +56,18 @@ const configured=node({show_extra:true,panel_title:'Bilans & pomiary',panel_rows
 const readings=api.panelData(configured,{states:{...h.states,
  'sensor.temp':value(42.5,'°C'),'sensor.state':value('Producing'),
  'sensor.daily':value(1200,'Wh'),'sensor.message':value('Online')}});
-assert.equal(readings.length,5);
-assert.equal(readings[0].reading.text,'6500 W');
-assert.equal(readings[1].reading.text,'42.5 °C');
-assert.equal(readings[2].reading.text,'Producing');
-assert.equal(readings[3].reading.text,'1.20 kWh');
-assert.equal(readings[4].reading.text,'Online');
+assert.equal(readings.length,2); // Only custom parameters belong to extra panel.
+assert.equal(readings[0].reading.text,'1.20 kWh');
+assert.equal(readings[1].reading.text,'Online');
 const html=api.render(configured,{states:{...h.states,
  'sensor.temp':value(42.5,'°C'),'sensor.state':value('Producing'),
  'sensor.daily':value(1200,'Wh'),'sensor.message':value('Online')}});
 assert.match(html,/Bilans &amp; pomiary/);
 assert.match(html,/1.20 kWh/);
-assert.match(html,/Producing/);
+assert(!html.includes('Producing')); // Status remains a built-in reading.
 assert(!html.includes('NaN'));
 const missing=api.panelData(configured,{states:{}});
-assert.equal(missing[3].reading.text,'—');
+assert.equal(missing[0].reading.text,'—');
 assert.equal(api.normalize(node({panel_rows:[]})).panel_rows.length,0);
 assert.equal(api.normalize(node({count:4})).panel_rows.length,0); // PV readouts do not create duplicate extra fields.
 assert.equal(api.normalize(node({count:2,panel_rows:[{key:'custom',entity:'bad-entity'}]})).panel_rows[0].entity,'');
