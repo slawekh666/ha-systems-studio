@@ -30,7 +30,7 @@ assert.equal(result.balance.networks[0].state,'balanced');
 assert.equal(result.balance.networks[0].totals.grid_import_kw,.77);
 assert.equal(result.byConnection.pvlink.kw,1.73);
 assert.equal(result.byConnection.homelink.kw,-2.5);
-assert.equal(result.byConnection.gridlink.kw,-.77);
+assert.equal(result.byConnection.gridlink.kw,.77);
 assert.equal(result.byConnection.homelink.direction,'reverse');
 assert(result.byConnection.pvlink.sources.includes('simulated'));
 let visual=power.visual(x.connections[0].animation,{states:{}},result.byConnection.pvlink);
@@ -40,7 +40,7 @@ assert.equal(power.visual({...x.connections[0].animation,flow_power_mode:'balanc
 x=cfg([pv,building('home',1),grid,panel],cs,[{node_id:'grid',mode:'calculate'}]);
 result=flow.resolve(x,{states:{}});
 assert.equal(result.balance.networks[0].totals.grid_export_kw,.73);
-assert.equal(result.byConnection.gridlink.kw,.73);
+assert.equal(result.byConnection.gridlink.kw,-.73);
 x=cfg([pv,building('home',1.73),grid,panel],cs,[{node_id:'grid',mode:'calculate'}]);
 result=flow.resolve(x,{states:{}});
 assert.equal(result.byConnection.gridlink.kw,0);
