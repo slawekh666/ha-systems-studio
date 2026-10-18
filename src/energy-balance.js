@@ -10,7 +10,7 @@ const HASSStudioEnergyBalance=(()=>{
   const ident=HASSStudioEnergyTopology.ident;
   const roles=['source','load','grid','storage'];
   const modes=['device','ha','manual','calculate','off'];
-  const defaults=()=>({enabled:false,tolerance_kw:.05,participants:[]});
+  const defaults=()=>({enabled:false,scenario:'hybrid',tolerance_kw:.05,participants:[]});
   const participant=p=>({
     node_id:ident(p?.node_id),
     port_id:ident(p?.port_id),
@@ -22,7 +22,8 @@ const HASSStudioEnergyBalance=(()=>{
   });
   const normalize=raw=>{
     const c=raw||{},seen=new Set();
-    return {enabled:c.enabled===true,tolerance_kw:finite(c.tolerance_kw,.001,100,.05),
+    return {enabled:c.enabled===true,scenario:['live','hybrid','simulation'].includes(c.scenario)?c.scenario:'hybrid',
+      tolerance_kw:finite(c.tolerance_kw,.001,100,.05),
       participants:(Array.isArray(c.participants)?c.participants:[]).slice(0,MAX_ASSIGNMENTS)
         .map(participant).filter(p=>{
           if(!p.node_id||seen.has(p.node_id))return false;
@@ -76,9 +77,13 @@ const HASSStudioEnergyBalance=(()=>{
   // except for loads where positive means consumption.
   const injection=(kw,role)=>role==='load'?-kw:kw;
   const validDirection=(kw,role)=>role==='source'?kw>=-EPS:role==='load'?kw<=EPS:true;
-  const measure=(n,role,p,h)=>{
+  const measure=(n,role,p,h,scenario='hybrid')=>{
     if(p.mode==='off')return {mode:p.mode,source:'excluded',injection_kw:null};
     if(p.mode==='calculate')return {mode:p.mode,source:'pending',injection_kw:null};
+    // Never present a manual or native simulated value as a live measurement.
+    if((scenario==='live'&&p.mode==='manual')||
+      (scenario==='simulation'&&p.mode!=='manual'))
+      return {mode:p.mode,source:'missing',injection_kw:null,reason:'scenario_requires_other_source'};
     let kw=null,source='missing';
     if(p.mode==='manual'){kw=injection(p.manual_kw,role);source='simulated';}
     else if(p.mode==='ha'){
@@ -87,6 +92,7 @@ const HASSStudioEnergyBalance=(()=>{
     }else{
       const r=deviceReading(n,h,p);
       kw=r.kw;source=kw===null?'missing':r.source;
+      if(scenario==='live'&&source==='simulated'){kw=null;source='missing';}
     }
     if(kw!==null&&p.reverse_sign)kw=-kw;
     if(kw!==null&&(!Number.isFinite(kw)||Math.abs(kw)>10000))
@@ -178,7 +184,7 @@ const HASSStudioEnergyBalance=(()=>{
       if(!unique.size){warnings.push({reason:'unconnected_device',node_id:n.id});continue;}
       if(unique.size!==1){warnings.push({reason:'ambiguous_device_network',node_id:n.id});continue;}
       const [group,port]=[...unique][0];
-      const reading=measure(n,role,p,hass);
+      const reading=measure(n,role,p,hass,config.scenario);
       const measurement=n.type==='building'?HASSStudioBuilding.normalize(n).measurement:null;
       group.devices.push({node_id:n.id,node_type:n.type,port_id:port.id,role,measurement,
         mode:reading.mode,source:reading.source,injection_kw:reading.injection_kw,
