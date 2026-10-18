@@ -45,8 +45,8 @@ const HASSStudioHA = (() => {
     const manual=typeof test==='number'&&Number.isFinite(test)&&(signed||test>=0)?test:null;
     if(mode==='test')return {kw:manual,source:manual===null?'missing':'simulated'};
     if(measured!==null)return {kw:measured,source:'measured'};
-    const fallback=mode==='auto'&&node?.energy_fallback_enabled===true&&
-      node?.energy_test_configured===true;
+    const fallback=(mode==='auto'||node?.energy_mode==null)&&
+      node?.energy_fallback_enabled===true;
     return {kw:fallback?manual:null,source:fallback&&manual!==null?'simulated':'missing'};
   };
   return Object.freeze({ entity, reading, temperature, powerKw, percentage, active, powerInput });
