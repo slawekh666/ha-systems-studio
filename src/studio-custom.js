@@ -647,7 +647,11 @@
          obj.energy_power_entity=validEntity(val)?val:'';
        }else if(selection.type==='node'&&key==='energy_manual_kw'){
          obj.energy_manual_kw=val===''?null:clamp(val,0,10000,0);
-       }else if(selection.type==='node'&&key==='energy_role'){
+        }else if(selection.type==='node'&&key==='energy_fallback_enabled')obj.energy_fallback_enabled=val==='true';
+       else if(selection.type==='node'&&key==='energy_grid_auto')obj.energy_grid_auto=val==='true';
+       else if(selection.type==='node'&&key==='energy_power_entity')obj.energy_power_entity=validEntity(val)?val:'';
+       else if(selection.type==='node'&&key==='energy_manual_kw')obj.energy_manual_kw=val===''?null:clamp(val,0,10000,0);
+       else if(selection.type==='node'&&key==='energy_role'){
         obj.energy_role=HASSStudioEnergyTopology.role(val);
       }else if(selection.type==='node'&&key.startsWith('energy_port_')){
         const port=obj.energy_ports?.[index];if(!port)return;

@@ -48,7 +48,7 @@ const HASSStudioEditorInspector = (() => {
         sectionIcon('mdi:tune-variant')+'<span>'+esc(obj.type==='tank'?(L.tankSettings||'Ustawienia zbiornika'):(L.properties||'Właściwości'))+'</span>'+
         sectionIcon('mdi:chevron-down')+'</summary><section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
-        if(['power_grid','inverter','building','energy_storage','ev_charger','distribution_board'].includes(obj.type)){
+        if(HASSStudioEnergyTopology.electricalType(obj)){
           markup+=field('Rola elektryczna','energy_role',obj.energy_role,'text',
             [['source','Źródło'],['load','Odbiornik'],['grid','Sieć'],['storage','Magazyn'],['junction','Węzeł / rozdzielnica'],['neutral','Neutralna']]);
           markup+='<h4>Porty elektryczne (AC/DC)</h4>';
@@ -63,7 +63,16 @@ const HASSStudioEditorInspector = (() => {
           markup+='<button type="button" data-add-energy-port>+ Dodaj port AC/DC</button>'+
             '<p class="ss-note">Wspólna nazwa szyny łączy porty logicznie. Przecięcie przewodów ich nie łączy.</p>';
         }
-        markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
+        if(HASSStudioEnergyTopology.electricalType(obj)&&obj.type!=='distribution_board'){
+           markup+='<h4>Bilans elektryczny</h4>'+
+             field('Test przy braku danych HA','energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',[['true','Włączony'],['false','Wyłączony']]);
+           if(obj.type==='power_grid')markup+=field('Automatycznie obliczaj moc sieci','energy_grid_auto',obj.energy_grid_auto?'true':'false','text',[['true','Tak'],['false','Nie']]);
+           if(obj.type==='pump'||obj.type==='boiler'&&['electric','electric_modern'].includes(obj.variant)){
+             if(obj.type==='pump')markup+=field('Czujnik mocy (W/kW)','energy_power_entity',obj.energy_power_entity,'search',null,'list="ss-entity-list"');
+             markup+=field('Test mocy (kW)','energy_manual_kw',obj.energy_manual_kw??'','number',null,'min="0" step="0.01"');
+           }
+         }
+         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
         const isGrid=obj.type==='power_grid';
         const isRadiator=obj.type==='radiator',isManifold=obj.type==='manifold',isStorage=obj.type==='energy_storage',isInverter=obj.type==='inverter',isDistribution=obj.type==='distribution_board',isEV=obj.type==='ev_charger',isBuilding=obj.type==='building';
