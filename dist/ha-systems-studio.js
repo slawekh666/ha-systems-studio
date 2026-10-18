@@ -2710,7 +2710,7 @@ const HASSStudioInverter=(()=>{
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
    rated_kw:10,production_threshold_w:10,positive_power:true,entities:{ac_power:'',temperature:'',status:'',alarm:''},
-   manual:{ac_power:6.4,temperature:32},inputs:[]});
+   manual:{ac_power:6.4,temperature:32,status:'auto',alarm:false},inputs:[]});
  const normalize=node=>{
    const raw=node?.inverter||node||{},d=defaults(),count=Math.round(clamp(raw.count,1,MAX_INPUTS,2));
    return {...d,...raw,mode:raw.mode==='manual'?'manual':'live',count,
@@ -2722,7 +2722,10 @@ const HASSStudioInverter=(()=>{
     panel_title:String(raw.panel_title??'Parametry falownika').slice(0,46),
     panel_rows:panelRows(raw,node,count),
     entities:Object.fromEntries(['ac_power','temperature','status','alarm'].map(k=>[k,entity(raw.entities?.[k])])),
-    manual:{ac_power:clamp(raw.manual?.ac_power,-500,500,6.4),temperature:clamp(raw.manual?.temperature,-40,150,32)},
+    manual:{ac_power:clamp(raw.manual?.ac_power,-500,500,6.4),
+       temperature:clamp(raw.manual?.temperature,-40,150,32),
+       status:['auto','generating','standby','off','fault'].includes(raw.manual?.status)?raw.manual.status:'auto',
+       alarm:raw.manual?.alarm===true},
     inputs:Array.from({length:count},(_,i)=>{
       const original=raw.inputs?.[i]||{},d=defaultInput(i);
       return {name:String(original.name??d.name).slice(0,12),visible:original.visible!==false,
@@ -2739,23 +2742,32 @@ const HASSStudioInverter=(()=>{
    return ['on','alarm','fault','error','critical','warning'].includes(value)?'alarm':
      ['off','normal','ok','clear'].includes(value)?'ok':null;
  };
+ const effective=(node,live,backup)=>{
+   if(node?.energy_mode==='test')return backup;
+   if(node?.energy_mode==null&&node?.inverter?.mode==='manual')return backup;
+   if(live!==null&&live!==undefined)return live;
+   return node?.energy_mode==='auto'&&node?.energy_fallback_enabled===true?backup:null;
+ };
  const data=(node,h)=>{
    const c=normalize(node),manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
    const power=HASSStudioHA.powerInput(node,h,c.entities.ac_power,c.manual.ac_power,c.mode,true).kw;
-   const temperature=manual?c.manual.temperature:read(h,c.entities.temperature,['°C','C',''], -40,150);
-   const fault=manual?false:status(h,c.entities.alarm)==='alarm'||status(h,c.entities.status)==='alarm';
+   const temperature=effective(node,read(h,c.entities.temperature,['°C','C',''], -40,150),c.manual.temperature);
+   const alarm=effective(node,status(h,c.entities.alarm),c.manual.alarm?'alarm':'ok');
+   const fault=alarm==='alarm'||(manual&&c.manual.status==='fault')||
+     (!manual&&status(h,c.entities.status)==='alarm');
    const generating=power===null?null:((c.positive_power?power:-power)*1000>c.production_threshold_w);
    const inputs=c.inputs.map(q=>{
-     const voltage=manual?q.manual.voltage:read(h,q.entities.voltage,['V',''],0,2000);
-     const current=manual?q.manual.current:read(h,q.entities.current,['A',''],0,200);
-     const direct=manual?q.manual.power:(()=>{
+     const voltage=effective(node,read(h,q.entities.voltage,['V',''],0,2000),q.manual.voltage);
+     const current=effective(node,read(h,q.entities.current,['A',''],0,200),q.manual.current);
+     const direct=effective(node,(()=>{
        const r=HASSStudioHA.reading(h,q.entities.power);
        return r&&['W','kW'].includes(r.unit)&&r.value>=0?r.value*(r.unit==='kW'?1000:1):null;
-     })();
+     })(),q.manual.power);
      const watts=direct!==null?direct:voltage!==null&&current!==null?voltage*current:null;
      return {...q,voltage,current,watts,calculated:direct===null&&watts!==null};
    });
-   return {c,power,temperature,fault,generating,inputs,state:fault?'alarm':generating===null?'unknown':generating?'generating':'standby'};
+   return {c,power,temperature,fault,generating,inputs,manual,
+      state:fault?'alarm':manual&&c.manual.status!=='auto'?c.manual.status:generating===null?'unknown':generating?'generating':'standby'};
  };
  const esc=x=>String(x).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));
  const fmt=(v,d=0)=>v===null?'—':Number(v).toFixed(d);
@@ -2773,16 +2785,16 @@ const HASSStudioInverter=(()=>{
    return pv?(row.key==='pv_summary'?c.inputs[row.input]?.name||'PV':prefix+' '+(c.inputs[row.input]?.name||'PV'+(row.input+1))):prefix;
  };
  const readingFor=(row,d,h)=>{
-   const c=d.c,manual=c.mode==='manual';
+   const c=d.c,manual=d.manual;
    const index=c.inputs[row.input];
    let value=null,unit='';
    if(row.key==='ac_power'){value=d.power;unit='kW';}
    else if(row.key==='temperature'){value=d.temperature;unit='°C';}
    else if(row.key==='status'){
-     if(manual)value=d.state==='generating'?'Produkcja':d.state==='standby'?'Czuwanie':'Brak danych';
+     if(manual)value=({generating:'Produkcja',standby:'Czuwanie',off:'Wyłączony',fault:'Awaria'})[d.state]||'Brak danych';
      else value=HASSStudioHA.entity(h,c.entities.status)?.state??null;
    }else if(row.key==='alarm'){
-     if(manual)value=d.fault?'Alarm':'Brak';
+     if(manual)value=d.c.manual.alarm?'Alarm':'Brak';
      else value=HASSStudioHA.entity(h,c.entities.alarm)?.state??null;
    }else if(index&&row.key==='pv_voltage'){value=d.inputs[row.input].voltage;unit='V';}
    else if(index&&row.key==='pv_current'){value=d.inputs[row.input].current;unit='A';}
@@ -3526,7 +3538,7 @@ const HASSStudioEnergyBalance=(()=>{
     for(const n of allNodes){
       const role=HASSStudioEnergyTopology.node(n).role;
       if(!roles.includes(role))continue;
-      const p=n.type==='power_grid'&&n.energy_grid_auto===true?
+      const p=n.type==='power_grid'?
         participant({node_id:n.id,mode:'calculate'}):
         n.energy_mode!=null?participant({node_id:n.id}):
         overrides.get(n.id)||participant({node_id:n.id});
