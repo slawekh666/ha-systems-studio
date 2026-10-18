@@ -68,8 +68,8 @@ assert.equal(result.byConnection.gridlink.available,false);
 assert.equal(power.visual(x.connections[2].animation,{states:{}},result.byConnection.gridlink).active,false);
 x=cfg([pv,home,grid,panel],cs,[{node_id:'grid',mode:'manual',manual_kw:4}]);
 result=flow.resolve(x,{states:{}});
-assert.equal(result.balance.networks[0].state,'unbalanced');
-assert.equal(result.byConnection.pvlink.available,false);
+assert.equal(result.balance.networks[0].state,'balanced');
+assert.equal(result.byConnection.pvlink.available,true); // Old manual grid override ignored.
 const loop=cable('loop','panel','d','panel','a');
 x=cfg([pv,home,grid,panel],[...cs,loop],[{node_id:'grid',mode:'calculate'}]);
 result=flow.resolve(x,{states:{}});
