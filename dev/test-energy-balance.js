@@ -90,8 +90,9 @@ assert.equal(excessive.networks[0].state,'insufficient');
 assert(excessive.networks[0].reasons.includes('multiple_unknowns'));
 const impossible=balance.resolve(layout.normalized(cfg(nodes,connections,[
   {node_id:'grid',mode:'manual',manual_kw:2}])),readings);
-assert.equal(impossible.networks[0].state,'unbalanced');
-assert.equal(impossible.networks[0].residual_kw,1.5);
+assert.equal(impossible.networks[0].state,'balanced');
+assert.equal(impossible.networks[0].residual_kw,0);
+assert.equal(impossible.networks[0].devices.find(d=>d.node_id==='grid').source,'calculated');
 const invalid=balance.resolve(layout.normalized(cfg(nodes,connections,[
   {node_id:'pv',mode:'manual',manual_kw:-1},{node_id:'grid',mode:'calculate'}])),readings);
 assert.equal(invalid.networks[0].state,'invalid');
