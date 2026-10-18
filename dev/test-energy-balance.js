@@ -157,8 +157,8 @@ assert(detachedMeter.warnings.some(w=>w.reason==='unconnected_device'&&w.node_id
 assert.equal(detachedMeter.networks[0].totals.generation_kw,2.5);
 
 const off=balance.resolve(layout.normalized(cfg(nodes,connections,[],false)),readings);
-assert.equal(off.enabled,false);
-assert.equal(off.networks.length,0);
+assert.equal(off.enabled,true); // Electrical cables now activate the display balance automatically.
+assert(off.networks.length>0);
 assert.equal(balance.haPower({states:{'sensor.invalid':{state:'99',attributes:{unit_of_measurement:'kWh'}}}},'sensor.invalid'),null);
 assert.equal(balance.haPower({states:{'sensor.unknown':{state:'unavailable',attributes:{unit_of_measurement:'kW'}}}},'sensor.unknown'),null);
 console.log('Energy balance: multi-node AC network, PV/grid/building/storage, HA/manual, unknown, contradictions and isolation PASS');
