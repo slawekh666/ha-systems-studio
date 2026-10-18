@@ -545,6 +545,60 @@ assert(src.includes("const viewTouchMode=fullscreen?'none':'pan-y'"));
 disconnectTouch();
 console.log('OK: mobile Fit / minus pinch and pan, HA tap history, touch-action lifecycle.');
 
+// Wheel gestures: preserve native HA scroll, use cursor anchor and respond to
+// Firefox Shift-horizontal wheel, high-resolution touchpads, and wheel units.
+const wr=makeEventSource(),ww=makeEventSource(),wd=makeEventSource();
+const wheelDoc={...wd.source,fullscreenElement:null};
+let wheelCamera=viewport.fresh(1200,700);
+const wheelView={id:'ss-card-viewport',querySelector:()=>touchSvg};
+const disconnectWheel=touchGestureApi.install({
+  root:wr.source,win:ww.source,doc:wheelDoc,host:{},viewport,
+  getView:()=>wheelView,getDimensions:()=>({width:1200,height:700}),
+  getCamera:()=>wheelCamera,setCamera:c=>{wheelCamera=c;}
+});
+const spin=(deltaY,options={})=>{
+  const e={clientX:150,clientY:100,deltaY,deltaX:0,deltaMode:0,shiftKey:false,
+    composedPath:()=>[touchSvg,wheelView],preventDefault(){this.prevented=true;},...options};
+  wr.events.get('wheel')(e);
+  return e;
+};
+assert.equal(wr.events.has('wheel'),true);
+const normalSpin=spin(-120);
+assert.equal(normalSpin.prevented,undefined,'plain wheel must scroll HA');
+assert.equal(wheelCamera.zoom,1,'plain wheel must not zoom dashboard card');
+const offCard=spin(-120,{shiftKey:true,composedPath:()=>[{}]});
+assert.equal(offCard.prevented,undefined,'Shift+wheel outside viewport must be ignored');
+const cursorBefore=viewport.worldAt(wheelCamera,150,100,600,350,1200,700);
+const zoomIn=spin(-120,{shiftKey:true});
+assert.equal(zoomIn.prevented,true,'Shift+wheel should cancel page scroll');
+assert(wheelCamera.zoom>1&&wheelCamera.zoom<1.2,'wheel notch must zoom smoothly');
+const cursorAfter=viewport.worldAt(wheelCamera,150,100,600,350,1200,700);
+assert(Math.abs(cursorBefore.x-cursorAfter.x)<1e-8&&Math.abs(cursorBefore.y-cursorAfter.y)<1e-8,
+  'wheel zoom must preserve location beneath cursor');
+const zoomAfterNotch=wheelCamera.zoom;
+spin(-1,{shiftKey:true});
+assert(wheelCamera.zoom>zoomAfterNotch&&wheelCamera.zoom<zoomAfterNotch*1.01,
+  'small touchpad motion should create a small zoom step');
+const beforeHorizontal=wheelCamera.zoom;
+spin(0,{deltaX:-3,deltaMode:1,shiftKey:true});
+assert(wheelCamera.zoom>beforeHorizontal,'Firefox Shift+horizontal wheel must zoom in');
+spin(0,{deltaX:3,deltaMode:1,shiftKey:true});
+assert(Math.abs(wheelCamera.zoom-beforeHorizontal)<1e-10,'opposite horizontal wheel deltas should cancel');
+const beforeZero=wheelCamera.zoom;
+assert.equal(spin(0,{shiftKey:true}).prevented,undefined,'zero wheel movement should not be swallowed');
+assert.equal(wheelCamera.zoom,beforeZero);
+spin(-10000,{shiftKey:true});
+assert(wheelCamera.zoom<=8,'very large deltas must respect maximum zoom');
+spin(10000,{shiftKey:true});
+assert(wheelCamera.zoom>=.2,'very large deltas must respect minimum zoom');
+wheelDoc.fullscreenElement=wheelView;
+const beforeFull=wheelCamera.zoom;
+assert.equal(spin(-120).prevented,true,'fullscreen wheel must zoom without Shift');
+assert(wheelCamera.zoom>beforeFull);
+disconnectWheel();
+assert.equal(wr.events.has('wheel'),false,'wheel event must be removed on cleanup');
+console.log('OK: Shift+wheel anchored zoom, HA scroll, Firefox horizontal delta, touchpad and fullscreen.');
+
 // Header toolbar must be outside SVG drawing but within full-screen viewer.
 const toolbarSrc=fs.readFileSync('src/studio-custom.js','utf8');
 assert(toolbarSrc.includes('ss-card-header')&&toolbarSrc.includes('ss-card-title'));
