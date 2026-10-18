@@ -7,14 +7,15 @@ const HASSStudioDeviceRegistry = (() => {
     heat_sources: {pl:'Źródła ciepła',en:'Heat sources'},
     tanks: {pl:'Zbiorniki i wymienniki',en:'Tanks and heat exchangers'},
     solar: {pl:'Solary',en:'Solar thermal'},
-    hydraulics: {pl:'Pompy, zawory i osprzęt',en:'Pumps, valves and accessories'},
+    hydraulics: {pl:'Hydraulika',en:'Hydraulics'},
     measurements: {pl:'Czujniki i pomiary',en:'Sensors and measurements'},
     connections: {pl:'Połączenia',en:'Connections'},
-    electricity: {pl:'Sieć elektryczna',en:'Electrical grid'}
+    electricity: {pl:'Elektryka',en:'Electricity'},
+    buildings: {pl:'Budynki',en:'Buildings'}
   });
   // MDI identifiers refer to native Home Assistant icons, not custom SVG assets.
   const categoryIcons=Object.freeze({heat_sources:'mdi:fire',tanks:'mdi:water-boiler',solar:'mdi:white-balance-sunny',
-    hydraulics:'mdi:pump',measurements:'mdi:thermometer',connections:'mdi:pipe',electricity:'mdi:transmission-tower'});
+    hydraulics:'mdi:pump',measurements:'mdi:thermometer',connections:'mdi:connection',electricity:'mdi:flash',buildings:'mdi:home-city'});
   const familyIcons=Object.freeze({solid_fuel_boiler:'mdi:fire',pellet_boiler:'mdi:fire',gas_boiler:'mdi:fire',
     electric_boiler:'mdi:flash',oil_boiler:'mdi:fire',heat_pump:'mdi:heat-pump',fireplace:'mdi:fireplace',
     tank:'mdi:water-boiler',solar_collector:'mdi:white-balance-sunny',pump:'mdi:pump',valve:'mdi:valve',
@@ -119,11 +120,11 @@ const HASSStudioDeviceRegistry = (() => {
   const libraryPresets = Object.freeze([
     ['boiler','solid_fuel','solid_fuels'],
     ['boiler','pellet_modern','solid_fuels'],
-    ['boiler','gas_modern','other_heat'],
-    ['boiler','electric_modern','other_heat'],
+    ['boiler','gas_modern','gas_heat'],
+    ['boiler','electric_modern','electric_heat'],
     ['boiler','oil','other_heat'],
-    ['boiler','heatpump_modern','other_heat'],
-    ['boiler','fireplace_modern','other_heat'],
+    ['boiler','heatpump_modern','heat_pumps'],
+    ['boiler','fireplace_modern','solid_fuels'],
     ['tank','modular','tank_group'],
     ['solar','flat','solar_group'],
     ['pump','circulation','pump_group'],
@@ -146,8 +147,11 @@ const HASSStudioDeviceRegistry = (() => {
     ['connection','electric','electric_connections']
   ]);
   const subgroups = Object.freeze({
-    solid_fuels: Object.freeze({pl:'Kotły na paliwo stałe',en:'Solid-fuel boilers',icon:'mdi:fire'}),
-    other_heat: Object.freeze({pl:'Pozostałe źródła ciepła',en:'Other heat sources',icon:'mdi:fireplace'}),
+    solid_fuels: Object.freeze({pl:'Paliwo stałe',en:'Solid fuels',icon:'mdi:stove'}),
+    gas_heat: Object.freeze({pl:'Gazowe',en:'Gas boilers',icon:'mdi:fire'}),
+    electric_heat: Object.freeze({pl:'Elektryczne',en:'Electric heating',icon:'mdi:flash'}),
+    heat_pumps: Object.freeze({pl:'Pompy ciepła',en:'Heat pumps',icon:'mdi:heat-pump'}),
+    other_heat: Object.freeze({pl:'Pozostałe',en:'Other',icon:'mdi:oil'}),
     tank_group: Object.freeze({pl:'Zbiorniki',en:'Tanks',icon:'mdi:water-boiler'}),
     solar_group: Object.freeze({pl:'Kolektory solarne',en:'Solar collectors',icon:'mdi:white-balance-sunny'}),
     pump_group: Object.freeze({pl:'Pompy',en:'Pumps',icon:'mdi:pump'}),
@@ -165,6 +169,7 @@ const HASSStudioDeviceRegistry = (() => {
     electric_connections: Object.freeze({pl:'Przewody elektryczne',en:'Electrical cables',icon:'mdi:power-plug'})
   });
   const presetNames = Object.freeze({
+    'building:house':{pl:'Dom',en:'House'},'building:garage':{pl:'Garaż',en:'Garage'},'building:workshop':{pl:'Budynek gospodarczy',en:'Workshop'},
     'connection:hydraulic':{pl:'Rura',en:'Pipe'},
     'connection:electric':{pl:'Przewód elektryczny',en:'Electrical cable'},
     'pump:circulation':{pl:'Pompa obiegowa',en:'Circulation pump'},
@@ -184,7 +189,7 @@ const HASSStudioDeviceRegistry = (() => {
     const label=presetNames[type+':'+variant]?.[language] || families[choice.family]?.[language]
       || choice.device[language];
     return Object.freeze({
-      type,variant,category:choice.category,family:choice.family,
+      type,variant,category:type==='building'?'buildings':choice.category,family:choice.family,
       subgroup:subgroup||null,label,icon:familyIcons[choice.family]||'mdi:cube-outline'
     });
   });
