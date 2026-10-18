@@ -368,10 +368,10 @@ fullCtx.fragment=assets.pellet;
 vm.runInContext('const HASSStudioIconTemplates={pellet:this.fragment};',fullCtx);
 vm.runInContext(solidSrc+'\n'+pelletSource+'\nthis.pellet=HASSStudioPellet;',fullCtx);
 const p=fullCtx.pellet;
-const state=(value,unit)=>({state:String(value),attributes:{unit_of_measurement:unit||''}});
-const realHA={states:{'sensor.boiler':state(62,'°C'),'sensor.mod':state(53,'%'),
-  'binary_sensor.burner':state('on'),'binary_sensor.feeder':state('on'),
-  'binary_sensor.alarm':state('off'),'sensor.level':state(75,'%')}};
+const pelletHAValue=(value,unit)=>({state:String(value),attributes:{unit_of_measurement:unit||''}});
+const realHA={states:{'sensor.boiler':pelletHAValue(62,'°C'),'sensor.mod':pelletHAValue(53,'%'),
+  'binary_sensor.burner':pelletHAValue('on'),'binary_sensor.feeder':pelletHAValue('on'),
+  'binary_sensor.alarm':pelletHAValue('off'),'sensor.level':pelletHAValue(75,'%')}};
 const manualNode={...pelletNode,pellet_test_mode:true,pellet_manual_state:'burning',
  pellet_manual_temperature:72,pellet_manual_power:65,pellet_manual_power_unit:'%',
  pellet_manual_feeder:true,pellet_manual_alarm:false,pellet_level_test:80};
@@ -394,8 +394,8 @@ const liveNode={...pelletNode,pellet_test_mode:false,solid_state:'auto',pellet_l
 assert.equal(p.readings(liveNode,realHA).power.value,53);
 assert.match(p.render(liveNode,realHA),/PRACA 53%/);
 assert.equal(p.readings({...liveNode,pellet_burner_power_entity:'sensor.missing'},realHA).power,null);
-assert.equal(p.powerReading({states:{'sensor.watt':state(5200,'W')}},'sensor.watt').value,5.2);
-assert.equal(p.powerReading({states:{'sensor.invalid':state(120,'V')}},'sensor.invalid'),null);
+assert.equal(p.powerReading({states:{'sensor.watt':pelletHAValue(5200,'W')}},'sensor.watt').value,5.2);
+assert.equal(p.powerReading({states:{'sensor.invalid':pelletHAValue(120,'V')}},'sensor.invalid'),null);
 const unknown=p.render({...pelletNode,entity:'',burner_entity:'',pellet_level_entity:'',
   pellet_level_manual:false}, {states:{}});
 assert.match(unknown,/PALNIK —/);
