@@ -5,7 +5,7 @@ const HASSStudioPowerFlow=(()=>{
  const normalize=x=>{
    const d=defaults(),c={...d,...x};
    return {...c,flow_power_entity:typeof c.flow_power_entity==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(c.flow_power_entity)?c.flow_power_entity:'',
-    flow_power_mode:['off','ha','manual'].includes(c.flow_power_mode)?c.flow_power_mode:'off',
+    flow_power_mode:['off','ha','manual','balance'].includes(c.flow_power_mode)?c.flow_power_mode:'off',
     flow_power_kw:clamp(c.flow_power_kw,-10000,10000,0),flow_max_kw:clamp(c.flow_max_kw,.1,10000,10),
     flow_min_width:clamp(c.flow_min_width,.5,12,1.5),
     flow_max_width:clamp(c.flow_max_width,.5,16,6),
@@ -19,8 +19,9 @@ const HASSStudioPowerFlow=(()=>{
    const value=HASSStudioHA.reading(h,c.flow_power_entity);
    return value&&(value.unit==='W'||value.unit==='kW')?(value.unit==='W'?value.value/1000:value.value):null;
  };
- const visual=(pipe,hass)=>{
-   const c=normalize(pipe),kw=measure(c,hass);
+ const visual=(pipe,hass,derived=null)=>{
+   const c=normalize(pipe),byBalance=c.flow_power_mode==='balance';
+   const kw=byBalance?(derived?.available===true?derived.kw:null):measure(c,hass);
    if(c.flow_power_mode==='off')return null;
    const nonzero=kw!==null&&Math.abs(kw)>0.0001;
    const factor=nonzero?Math.min(1,Math.abs(kw)/c.flow_max_kw):0;
@@ -29,8 +30,13 @@ const HASSStudioPowerFlow=(()=>{
    const size=+(2+factor*7).toFixed(2);
    const interval=+(Math.max(size+6,18-factor*5)).toFixed(2);
    const reverse=c.flow_power_direction&&kw!==null&&kw<0;
-   const direction=reverse?(pipe.flow_direction==='reverse'?'forward':'reverse'):(pipe.flow_direction==='reverse'?'reverse':'forward');
-   return {known:kw!==null,active:nonzero,kw,width,size,interval,direction,pattern:c.flow_pattern};
+   const direction=byBalance?(kw!==null&&kw<0?'reverse':'forward'):
+     reverse?(pipe.flow_direction==='reverse'?'forward':'reverse'):
+     (pipe.flow_direction==='reverse'?'reverse':'forward');
+   return {known:kw!==null,active:nonzero,kw,width,size,interval,direction,
+     pattern:c.flow_pattern,source:byBalance?(derived?.source||'unavailable'):
+       c.flow_power_mode==='manual'?'simulation':'ha',
+     availability:kw===null?'unavailable':'known'};
  };
  // A seamless dash animation advances exactly one dash+gap period per loop.
  // Hydraulic flows deliberately keep the independent legacy 28-unit cycle.

@@ -4,10 +4,11 @@ The energy balance is **read-only** and **opt-in**. It computes instantaneous ac
 power (kW) for each *connected* AC or DC electrical network from the typed
 topology introduced in MR !49.
 
-This release is the **model/engine only**. It does **not** yet provide UI port
-placement, automatic cable connection, inferred cable-by-cable flows, any
-auto-routing, new animations or a diagnostic panel. Those features are separate
-MR 4/5 work. Existing manually edited cable bends remain unchanged.
+MR 3 introduced the model. MR 4 provides manual port editing and assignment,
+conservative branch animation, and three test scenarios (HA/hybrid/simulation).
+Manual bends remain authoritative. There is **no automatic cable routing**,
+no inference from SVG crossings, and no HA service calls.
+See [ENERGY_FLOW.md](ENERGY_FLOW.md) for animation limits and test behavior.
 
 ## Model
 

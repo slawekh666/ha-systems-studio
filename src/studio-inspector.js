@@ -48,6 +48,21 @@ const HASSStudioEditorInspector = (() => {
         sectionIcon('mdi:tune-variant')+'<span>'+esc(obj.type==='tank'?(L.tankSettings||'Ustawienia zbiornika'):(L.properties||'Właściwości'))+'</span>'+
         sectionIcon('mdi:chevron-down')+'</summary><section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
+        if(['power_grid','inverter','building','energy_storage','ev_charger','distribution_board'].includes(obj.type)){
+          markup+=field('Rola elektryczna','energy_role',obj.energy_role,'text',
+            [['source','Źródło'],['load','Odbiornik'],['grid','Sieć'],['storage','Magazyn'],['junction','Węzeł / rozdzielnica'],['neutral','Neutralna']]);
+          markup+='<h4>Porty elektryczne (AC/DC)</h4>';
+          markup+=(obj.energy_ports||[]).map((p,i)=>'<div class="ss-energy-port-edit">'+
+            '<strong>'+esc(p.id)+'</strong>'+
+            field('Etykieta','energy_port_label',p.label,'text',null,'data-index="'+i+'"')+
+            field('Typ','energy_port_medium',p.medium,'text',[['ac','AC'],['dc','DC']],'data-index="'+i+'"')+
+            field('Szyna','energy_port_bus',p.bus,'text',null,'data-index="'+i+'"')+
+            field('X (%)','energy_port_x',p.x,'number',null,'min="0" max="100" step="1" data-index="'+i+'"')+
+            field('Y (%)','energy_port_y',p.y,'number',null,'min="0" max="100" step="1" data-index="'+i+'"')+
+            '<button type="button" data-remove-energy-port="'+i+'">Usuń port</button></div>').join('');
+          markup+='<button type="button" data-add-energy-port>+ Dodaj port AC/DC</button>'+
+            '<p class="ss-note">Wspólna nazwa szyny łączy porty logicznie. Przecięcie przewodów ich nie łączy.</p>';
+        }
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
         const isGrid=obj.type==='power_grid';
@@ -415,8 +430,24 @@ const HASSStudioEditorInspector = (() => {
             [['off',L.flowOff||'Off'],['auto',L.flowAuto||'Controlled by entity'],['on',L.flowOn||'On (preview)']]);
           markup+=field(L.flowEntity||'Animation state entity','anim_flow_entity',a.flow_entity,'search',null,'list="ss-entity-list"');
         }else{
+          const attachOptions=[['','Nieprzypięty']].concat(model.nodes.flatMap(n=>
+            HASSStudioEnergyTopology.ports(n).map(p=>[n.id+':'+p.id,
+              (n.label||n.id)+' / '+(p.label||p.id)+' ('+p.medium.toUpperCase()+')'])));
+          markup+=field('Początek → port','energy_attach_start',
+            obj.energy_start?.node_id?obj.energy_start.node_id+':'+obj.energy_start.port_id:'',
+            'text',attachOptions);
+          markup+=field('Koniec → port','energy_attach_end',
+            obj.energy_end?.node_id?obj.energy_end.node_id+':'+obj.energy_end.port_id:'',
+            'text',attachOptions);
           markup+=field('Animacja mocy','anim_flow_power_mode',a.flow_power_mode||'off','text',
-            [['off','Wyłączona'],['ha','Pomiar mocy z HA'],['manual','Symulacja ręczna']]);
+            [['off','Wyłączona'],['ha','Pomiar mocy z HA'],['manual','Symulacja ręczna'],
+             ['balance','Automatycznie z bilansu']]);
+          if(a.flow_power_mode==='balance'){
+            const flow=HASSStudioEnergyFlow.resolve(model,editor._hass).byConnection[obj.id];
+            markup+='<p class="ss-note">Bilans: '+(flow?.available?
+              esc(flow.kw.toFixed(3)+' kW · '+flow.source+' · '+flow.direction):
+              esc(flow?.reason||'brak danych lub portów'))+'</p>';
+          }
           if(a.flow_power_mode==='ha')
             markup+=field('Encja mocy (W/kW)','anim_flow_power_entity',a.flow_power_entity,'search',null,'list="ss-entity-list"');
           if(a.flow_power_mode==='manual')

@@ -127,6 +127,7 @@ const HASSStudioCanvas = (() => {
   };
   const canvasSvg=(config,hass,editable=false,selected=null)=>{
     const data=normalized(config),language=pickLang(config,hass),L=words[language];
+    const energyFlow=HASSStudioEnergyFlow.resolve(data,hass);
     const w=data.width,h=data.height;
     const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !['radiator','manifold','power_grid','energy_storage','inverter','distribution_board','ev_charger','building'].includes(node.type) && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(node.variant)))
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
@@ -134,7 +135,7 @@ const HASSStudioCanvas = (() => {
       const d=connectionPath(connection.points),s=connection.style,a=connection.animation;
       const electric=connection.type==='electric';
       const settings={...s,...a};
-      const powerVisual=electric?HASSStudioPowerFlow.visual(settings,hass):null;
+      const powerVisual=electric?HASSStudioPowerFlow.visual(settings,hass,energyFlow.byConnection[connection.id]):null;
       const enabled=electric?(powerVisual?.active===true):HASSStudioAnimation.flowActive(a.flow_mode,hass,a.flow_entity);
       const motionArrows=()=>{
         if(!electric||!powerVisual||!enabled||powerVisual.pattern!=='arrows')return '';
@@ -155,7 +156,8 @@ const HASSStudioCanvas = (() => {
           '<rect x="-6" y="-7" width="12" height="14" rx="2" fill="#7c8793" stroke="#b6c1cc"/></g>';
       };
       const color=electric?'#e3bc63':colors[s.color];
-      return '<g class="ss-connection ss-connection-'+connection.type+'" data-id="'+esc(connection.id)+'">'+
+      return '<g class="ss-connection ss-connection-'+connection.type+'" data-id="'+esc(connection.id)+'"'+
+         (electric&&settings.flow_power_mode==='balance'?' data-flow-source="'+esc(powerVisual?.source||'unavailable')+'" data-flow-availability="'+esc(powerVisual?.availability||'unavailable')+'"':'')+'>'+
         '<path class="ss-connection-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="'+(electric?'#27313a':'#142332')+'" stroke-width="'+(s.width+3)+'" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="'+color+'" stroke-width="'+s.width+'" fill="none"/>'+
@@ -169,6 +171,12 @@ const HASSStudioCanvas = (() => {
     const handles=editable&&selected?.type==='connection'?data.connections.filter(c=>c.id===selected.id).map(c=>c.points.map((pt,index)=>
       '<circle class="ss-handle" data-id="'+esc(c.id)+'" data-point="'+index+'" cx="'+pt.x+'" cy="'+pt.y+
       '" r="8" fill="#fff" stroke="#2196f3" stroke-width="2"/>').join('')).join(''):'';
+    const ports=editable?data.nodes.map(node=>HASSStudioEnergyTopology.ports(node).map(port=>{
+      const at=HASSStudioEnergyTopology.anchor(node,port.id);
+      return '<circle class="ss-energy-port" data-node="'+esc(node.id)+'" data-port="'+esc(port.id)+
+        '" data-medium="'+port.medium+'" cx="'+at.x+'" cy="'+at.y+'" r="5" fill="'+
+        (port.medium==='ac'?'#e3bc63':'#62c8f3')+'" stroke="#18222c" stroke-width="1.5"/>';
+    }).join('')).join(''):'';
     const nodes=data.nodes.map(node=>{
       const active=selected?.type==='node'&&selected.id===node.id;
       const reading=valueOf(hass,node.entity);
@@ -218,7 +226,7 @@ const HASSStudioCanvas = (() => {
       HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
       '<rect class="ss-project-boundary" width="'+w+'" height="'+h+'" rx="4" fill="var(--secondary-background-color,#17222d)" stroke="'+
       (editable?'#52bfff':'none')+'" stroke-width="2" stroke-dasharray="'+(editable?'12 7':'none')+'"/>'+
-      '<g class="ss-devices">'+nodes+'</g><g class="ss-connection-layer" stroke-linecap="round" stroke-linejoin="round">'+connections+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-connection-handles">'+handles+'</g></svg>';
+      '<g class="ss-devices">'+nodes+'</g><g class="ss-connection-layer" stroke-linecap="round" stroke-linejoin="round">'+connections+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-port-layer">'+ports+'</g><g class="ss-connection-handles">'+handles+'</g></svg>';
   };
 
     return Object.freeze({canvasSvg,connectionPath,onConnection,variantShape,translateConnectionPoints});

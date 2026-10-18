@@ -17,6 +17,7 @@ validate_card:
     - node dev/test-ev-charger.js
     - node dev/test-buildings-power.js
     - node dev/test-energy-balance.js
+    - node dev/test-energy-flow.js
     - node dev/test-device-properties.js
     - node dev/test-connections.js
     - node dev/test-pellet-level.js
