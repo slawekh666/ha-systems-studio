@@ -41,9 +41,10 @@ const HASSStudioEVCharger=(()=>{
   return ['on','true','1','alarm','fault','error','critical'].includes(s);
  };
  const data=(node,h)=>{
-  const c=normalize(node),manual=c.mode==='manual';
+  const c=normalize(node),manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
   const get=(key,kind)=>manual?(key==='power'?c.manual.power:key==='session_energy'?c.manual.session_energy:null):reading(h,c.entities[key],null,kind);
-  const power=get('power','power'),session=get('session_energy','energy');
+  const power=HASSStudioHA.powerInput(node,h,c.entities.power,c.manual.power,c.mode,true).kw,
+    session=get('session_energy','energy');
   const diagnostics={};
   for(const k of numeric.filter(k=>!['power','session_energy'].includes(k))){
     const kind=k.endsWith('_energy')?'energy':k==='temperature'?'temp':k==='vehicle_soc'?'soc':k.startsWith('voltage')?'v':'a';

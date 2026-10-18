@@ -59,11 +59,8 @@ const HASSStudioInverter=(()=>{
      ['off','normal','ok','clear'].includes(value)?'ok':null;
  };
  const data=(node,h)=>{
-   const c=normalize(node),manual=c.mode==='manual';
-   const power=manual?c.manual.ac_power:(()=>{
-     const r=HASSStudioHA.reading(h,c.entities.ac_power);
-     return r&&['W','kW'].includes(r.unit)&&Number.isFinite(r.value)?r.value/(r.unit==='W'?1000:1):null;
-   })();
+   const c=normalize(node),manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
+   const power=HASSStudioHA.powerInput(node,h,c.entities.ac_power,c.manual.ac_power,c.mode,true).kw;
    const temperature=manual?c.manual.temperature:read(h,c.entities.temperature,['°C','C',''], -40,150);
    const fault=manual?false:status(h,c.entities.alarm)==='alarm'||status(h,c.entities.status)==='alarm';
    const generating=power===null?null:((c.positive_power?power:-power)*1000>c.production_threshold_w);

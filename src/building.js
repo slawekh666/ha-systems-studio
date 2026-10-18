@@ -20,7 +20,8 @@ const HASSStudioBuilding=(()=>{
  };
  const data=(node,h)=>{
   const c=normalize(node);
-  const power=c.mode==='manual'?c.power_kw:numeric(h,c.power_entity,'power');
+  const power=HASSStudioHA.powerInput(node,h,c.power_entity,
+    c.measurement==='individual'&&c.remaining_enabled?c.remaining_kw:c.power_kw,c.mode).kw;
   const daily=c.mode==='manual'?c.daily_kwh:numeric(h,c.daily_entity,'energy');
   return {c,power,daily,measurement:c.measurement};
  };
