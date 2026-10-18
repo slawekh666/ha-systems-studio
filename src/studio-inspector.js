@@ -587,6 +587,24 @@ const HASSStudioEditorInspector = (() => {
         markup+='<p class="ss-note">'+(isHydraulic?'Rura hydrauliczna':'Przewód elektryczny')+
           ' — rodzaj wybiera się w bibliotece połączeń.</p>';
         markup+=field(L.pipeWidth,'style_width',s.width,'range',null,'min="2" max="14" step="1"');
+        if(!isHydraulic){
+          const palette=['#E3BC63','#F87171','#FB923C','#FACC15','#4ADE80','#2DD4BF',
+            '#38BDF8','#818CF8','#C084FC','#F472B6','#E2E8F0','#64748B'];
+          const colorEditor=(title,key,value)=>{
+            const c=HASSStudioPowerFlow.colorHex(value);
+            return '<div class="ss-wire-colors"><strong>'+title+'</strong>'+
+              '<div class="ss-color-palette">'+palette.map(hex=>
+                '<button type="button" data-color-pick="'+key+'" data-color-value="'+hex+
+                '" title="'+hex+'" aria-label="Ustaw kolor '+hex+'"'+
+                (hex===c?' aria-pressed="true"':' aria-pressed="false"')+
+                ' style="background:'+hex+'"></button>').join('')+'</div>'+
+              '<div class="ss-color-inputs">'+field('Próbnik',key+'_picker',c,'color')+
+              field('Kolor HEX (#RRGGBB)',key+'_hex',c,'text',null,'maxlength="7" spellcheck="false"')+
+              '</div></div>';
+          };
+          markup+=colorEditor('Kolor przewodu','style_wire_color',s.color);
+          markup+=colorEditor('Kolor animacji','anim_flow_color',a.flow_color);
+        }
         if(isHydraulic){
           markup+=field(L.pipeColor,'style_color',s.color,'text',colorsList);
           markup+=field(L.pipeStart,'style_cap_start',s.cap_start?'true':'false','text',[['true',L.yes],['false',L.no]]);
