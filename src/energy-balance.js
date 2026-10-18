@@ -32,27 +32,37 @@ const HASSStudioEnergyBalance=(()=>{
   };
   // Device-native readouts retain their own sign conventions and manual modes.
   // This adapter intentionally reads POWER only; cumulative kWh is never kW.
+  const powerEntity=(h,id)=>{
+    const r=HASSStudioHA.reading(h,id);
+    return r&&['W','kW'].includes(r.unit)?r.value/(r.unit==='W'?1000:1):null;
+  };
+  const preferred=(live,manual,enabled)=>live!==null?{kw:live,source:'measured'}:
+    enabled&&manual!==null?{kw:manual,source:'simulated'}:{kw:null,source:'missing'};
   const deviceReading=(n,h,p)=>{
     const type=n.type;
     if(type==='inverter'){
       const d=HASSStudioInverter.data(n,h);
-      return {kw:d.power===null?null:(d.c.positive_power?d.power:-d.power),
-        source:d.c.mode==='manual'?'simulated':'measured'};
+      const v=preferred(powerEntity(h,d.c.entities.ac_power),d.c.manual.ac_power,
+        n.energy_fallback_enabled||d.c.mode==='manual');
+      return {kw:v.kw===null?null:(d.c.positive_power?v.kw:-v.kw),source:v.source};
     }
     if(type==='building'){
       const d=HASSStudioBuilding.data(n,h);
-      return {kw:d.power===null?null:-d.power,
-        source:d.c.mode==='manual'?'simulated':'measured'};
+      const v=preferred(powerEntity(h,d.c.power_entity),d.c.power_kw,
+        n.energy_fallback_enabled||d.c.mode==='manual');
+      return {kw:v.kw===null?null:-v.kw,source:v.source};
     }
     if(type==='ev_charger'){
       const d=HASSStudioEVCharger.data(n,h);
-      return {kw:d.power===null?null:(d.c.charging_positive?-d.power:d.power),
-        source:d.c.mode==='manual'?'simulated':'measured'};
+      const v=preferred(powerEntity(h,d.c.entities.power),d.c.manual.power,
+        n.energy_fallback_enabled||d.c.mode==='manual');
+      return {kw:v.kw===null?null:(d.c.charging_positive?-v.kw:v.kw),source:v.source};
     }
     if(type==='energy_storage'){
       const d=HASSStudioEnergyStorage.data(n,h);
-      return {kw:d.power===null?null:(d.c.charge_positive?-d.power:d.power),
-        source:d.c.mode==='manual'?'simulated':'measured'};
+      const v=preferred(powerEntity(h,d.c.entities.power),d.c.manual.power,
+        n.energy_fallback_enabled||d.c.mode==='manual');
+      return {kw:v.kw===null?null:(d.c.charge_positive?-v.kw:v.kw),source:v.source};
     }
     if(type==='power_grid'){
       const c=HASSStudioPowerGrid.normalize(n);
@@ -65,7 +75,17 @@ const HASSStudioEnergyBalance=(()=>{
         if(incoming!==null&&outgoing!==null&&incoming>=0&&outgoing>=0)
           kw=incoming-outgoing;
       }
-      return {kw,source:c.mode==='manual'?'simulated':'measured'};
+      const measured=p.grid_strategy==='signed_total'?powerEntity(h,c.entities.total_kw):
+        (()=>{const i=powerEntity(h,c.entities.import_kw),e=powerEntity(h,c.entities.export_kw);return i!==null&&e!==null?i-e:null;})();
+      return preferred(measured,kw,n.energy_fallback_enabled||c.mode==='manual');
+    }
+    if(n.type==='pump')return preferred(powerEntity(h,n.energy_power_entity),n.energy_manual_kw,
+      n.energy_fallback_enabled===true);
+    if(n.type==='boiler'){
+      if(['electric','electric_modern'].includes(n.variant))
+        return preferred(powerEntity(h,n.electric_power_entity),n.energy_manual_kw,n.energy_fallback_enabled===true);
+      if(['heatpump','heatpump_modern'].includes(n.variant))
+        return preferred(powerEntity(h,n.hp_power_entity),n.hp_manual_kw,n.energy_fallback_enabled===true||n.hp_test_mode===true);
     }
     return {kw:null,source:'missing'};
   };
@@ -79,10 +99,11 @@ const HASSStudioEnergyBalance=(()=>{
   const validDirection=(kw,role)=>role==='source'?kw>=-EPS:role==='load'?kw<=EPS:true;
   const measure=(n,role,p,h,scenario='hybrid')=>{
     if(p.mode==='off')return {mode:p.mode,source:'excluded',injection_kw:null};
-    if(p.mode==='calculate')return {mode:p.mode,source:'pending',injection_kw:null};
+    if(p.mode==='calculate'||n.type==='power_grid'&&n.energy_grid_auto===true&&p.mode==='device')
+      return {mode:'calculate',source:'pending',injection_kw:null};
     // Never present a manual or native simulated value as a live measurement.
     if((scenario==='live'&&p.mode==='manual')||
-      (scenario==='simulation'&&p.mode!=='manual'))
+      (scenario==='simulation'&&p.mode==='ha'))
       return {mode:p.mode,source:'missing',injection_kw:null,reason:'scenario_requires_other_source'};
     let kw=null,source='missing';
     if(p.mode==='manual'){kw=injection(p.manual_kw,role);source='simulated';}
@@ -185,6 +206,7 @@ const HASSStudioEnergyBalance=(()=>{
       if(unique.size!==1){warnings.push({reason:'ambiguous_device_network',node_id:n.id});continue;}
       const [group,port]=[...unique][0];
       const reading=measure(n,role,p,hass,config.scenario);
+      if(reading.mode==='calculate')p.mode='calculate';
       const measurement=n.type==='building'?HASSStudioBuilding.normalize(n).measurement:null;
       group.devices.push({node_id:n.id,node_type:n.type,port_id:port.id,role,measurement,
         mode:reading.mode,source:reading.source,injection_kw:reading.injection_kw,
