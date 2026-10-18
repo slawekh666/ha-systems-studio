@@ -432,7 +432,7 @@
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:position?position.x:80+(n%6)*170,y:position?position.y:100+Math.floor(n/6)*170,
-          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,pellet_test_mode:false,pellet_manual_state:'burning',pellet_manual_temperature:65,pellet_manual_power_unit:'%',pellet_manual_power:65,pellet_manual_feeder:false,pellet_manual_alarm:false,pellet_burner_power_entity:'',pellet_feeder_entity:'',pellet_alarm_entity:'',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?HASSStudioBuilding.defaults():undefined,entities:[],parts:[]};
+          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,pellet_test_mode:false,pellet_manual_state:'burning',pellet_manual_temperature:65,pellet_manual_power_unit:'%',pellet_manual_power:65,pellet_manual_feeder:false,pellet_manual_alarm:false,pellet_burner_power_entity:'',pellet_feeder_entity:'',pellet_alarm_entity:'',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,equipment_mode:'live',equipment_test_running:false,equipment_test_speed:1,equipment_test_position:0,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?HASSStudioBuilding.defaults():undefined,entities:[],parts:[]};
         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
@@ -687,6 +687,12 @@
         else if(k==='warning_margin')c[k]=clamp(val,0,30,5);
         else if(['temp_low','temp_high','cell_low','cell_high','delta_max'].includes(k))
           c[k]=clamp(val,k==='temp_low'?-50:0,k==='temp_high'?150:k==='temp_low'?100:k==='delta_max'?1000:k.startsWith('cell')?5:100,c[k]);
+      }else if(['pump','valve'].includes(obj.type)&&key.startsWith('eq_')){
+        const field=key.slice(3);
+        if(field==='mode')obj.equipment_mode=val==='manual'?'manual':'live';
+        else if(field==='test_running')obj.equipment_test_running=val==='true';
+        else if(field==='test_speed')obj.equipment_test_speed=clamp(val,.35,5,1);
+        else if(field==='test_position')obj.equipment_test_position=clamp(val,0,100,0);
       }else if(obj.type==='radiator'&&key.startsWith('rad_')){
         const c=obj.radiator=obj.radiator||HASSStudioRadiator.defaults();
         const k=key.slice(4);
@@ -807,7 +813,15 @@
         if(key==='partFlowMode')part.flow_mode=['auto','on','off'].includes(val)?val:'auto';
         if(key==='partFlowDirection')part.flow_direction=val==='reverse'?'reverse':'forward';
         for(const [fieldName,min,max] of [['X',0,100],['Length',15,95],['Width',10,95],['Turns',3,22],['Power',0,100],['Permeability',0,1],['FlowSpeed',.35,5]])if(key==='part'+fieldName){const property=fieldName==='FlowSpeed'?'flow_speed':fieldName==='Permeability'?'permeability':fieldName.toLowerCase();part[property]=clamp(val,min,max,part[property]);}
-      }else if(key==='accessoryPos'&&obj.accessories[index])
+      }else if(key==='accessoryMode'&&obj.accessories[index])
+        obj.accessories[index].mode=val==='manual'?'manual':'live';
+      else if(key==='accessoryRunning'&&obj.accessories[index])
+        obj.accessories[index].test_running=val==='true';
+      else if(key==='accessorySpeed'&&obj.accessories[index])
+        obj.accessories[index].test_speed=clamp(val,.35,5,1);
+      else if(key==='accessoryPosition'&&obj.accessories[index])
+        obj.accessories[index].test_position=clamp(val,0,100,0);
+      else if(key==='accessoryPos'&&obj.accessories[index])
         obj.accessories[index].position=clamp(val,0,100,50);
       else if(key==='accessoryEntity'&&obj.accessories[index])
         obj.accessories[index].entity=validEntity(val)?val:'';
@@ -855,7 +869,7 @@
         obj.parts.push(newPart);selectedPartId=newPart.id;expandedPartId=newPart.id;
       }else if(button.dataset.addAccessory){
         if(selection.type!=='connection'||obj.type!=='hydraulic'||obj.accessories.length>=20)return;
-        obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,label:'',position:50,entity:''});
+        obj.accessories.push({id:freshId('a'),type:button.dataset.addAccessory,label:'',position:50,entity:'',mode:'live',test_running:false,test_speed:1,test_position:0});
       }else if(button.dataset.action==='entity'){
         if(obj.entities.length>=20)return;
         obj.entities.push({label:'',entity:''});

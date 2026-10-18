@@ -30,7 +30,11 @@ const HASSStudioLayout = (() => {
     type:item.type==='valve'?'valve':'pump',
     label:String(item.label||'').slice(0,64),
     position:clamp(item.position,0,100,50),
-    entity:validEntity(item.entity)?item.entity:''
+    entity:validEntity(item.entity)?item.entity:'',
+    mode:item.mode==='manual'?'manual':'live',
+    test_running:item.test_running===true,
+    test_speed:clamp(item.test_speed,.35,5,1),
+    test_position:clamp(item.test_position,0,100,0)
   });
   const normalized=(config)=>{
     const source=config?.studio_layout||{};
@@ -69,6 +73,10 @@ const HASSStudioLayout = (() => {
       electric_max_kw:clamp(v.electric_max_kw,.1,100,8),electric_glow:clamp(v.electric_glow,0,100,60),
       burner_on_temp:clamp(v.burner_on_temp,20,90,35),
       burner_off_temp:clamp(v.burner_off_temp,10,89,32),
+      equipment_mode:v.equipment_mode==='manual'?'manual':'live',
+      equipment_test_running:v.equipment_test_running===true,
+      equipment_test_speed:clamp(v.equipment_test_speed,.35,5,1),
+      equipment_test_position:clamp(v.equipment_test_position,0,100,0),
       pump_entity:validEntity(v.pump_entity)?v.pump_entity:'',
       tank_entity:validEntity(v.tank_entity)?v.tank_entity:'',
       solar_on_delta:clamp(v.solar_on_delta,1,40,6),
