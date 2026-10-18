@@ -123,6 +123,7 @@ const loaded=ctx.layout.normalized({studio_layout:{...testLayout.studio_layout,
   nodes:normTest.nodes,connections:normTest.connections}});
 assert.equal(JSON.stringify(normTest),JSON.stringify(loaded),'manual equipment settings must survive save/load');
 ctx.HASSStudioGraphics.render=()=>'<g class="stub-equipment"/>';
+ctx.HASSStudioGraphics.defs=()=>'';
 const manualSvg=canvas.canvasSvg(testLayout,{states:{
   'sensor.valve':{state:'42',attributes:{unit_of_measurement:'%'}},
   'binary_sensor.active':{state:'off'}
