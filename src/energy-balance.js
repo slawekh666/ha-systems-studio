@@ -313,13 +313,13 @@ const HASSStudioEnergyBalance=(()=>{
         overrides.get(n.id)||participant({node_id:n.id});
       if(p.mode==='off')continue;
       const ports=HASSStudioEnergyTopology.ports(n);
-      let matches=ports.filter(port=>keyGroup.has(n.id+':'+(port.bus||port.id)));
+      let matches=ports.filter(port=>keyGroup.has(HASSStudioEnergyTopology.busKey(n.id,port)));
       if(p.port_id){
         matches=matches.filter(port=>port.id===p.port_id);
         if(!matches.length){warnings.push({reason:'invalid_or_unconnected_port',node_id:n.id});continue;}
       }else if(n.type==='inverter'&&matches.some(port=>port.medium==='ac'))
         matches=matches.filter(port=>port.medium==='ac');
-      const unique=new Map(matches.map(port=>[keyGroup.get(n.id+':'+(port.bus||port.id)),port]));
+      const unique=new Map(matches.map(port=>[keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port)),port]));
       if(!unique.size){warnings.push({reason:'unconnected_device',node_id:n.id});continue;}
       if(unique.size!==1){warnings.push({reason:'ambiguous_device_network',node_id:n.id});continue;}
       const [group,port]=[...unique][0];
