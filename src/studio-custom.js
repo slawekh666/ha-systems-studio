@@ -659,7 +659,23 @@
               q.manual[fieldName.slice(7)]=val===''?null:clamp(val,0,50000,0);
             }
           }
-        }else if(k==='mode')c.mode=val==='manual'?'manual':'live';
+        }else if(k.startsWith('row_')){
+          const match=/^row_(\d+)_(key|label|input|entity|unit|decimals|manual_value)$/.exec(k);
+          if(match){
+            const i=Number(match[1]),field=match[2],rows=c.panel_rows=c.panel_rows||HASSStudioInverter.normalize(obj).panel_rows;
+            if(i>=0&&i<rows.length){
+              const row=rows[i];
+              if(field==='key')row.key=HASSStudioInverter.DEFAULT_KEYS.includes(val)?val:'custom';
+              else if(field==='label')row.label=val.slice(0,42);
+              else if(field==='entity')row.entity=validEntity(val)?val:'';
+              else if(field==='unit')row.unit=['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].includes(val)?val:'auto';
+              else if(field==='input')row.input=clamp(val,0,11,0);
+              else if(field==='decimals')row.decimals=clamp(val,0,3,1);
+              else if(field==='manual_value')row.manual_value=val.slice(0,60);
+            }
+          }
+        }else if(k==='panel_title')c.panel_title=val.slice(0,46);
+        else if(k==='mode')c.mode=val==='manual'?'manual':'live';
         else if(k==='count')c.count=clamp(val,1,12,2);
         else if(k==='display_scale'||k==='extra_scale')c[k]=clamp(val,40,150,100)/100;
         else if(k==='extra_position')c.extra_position=val==='left'?'left':'right';
@@ -843,6 +859,25 @@
           expandedPartId=expandedPartId===selectedPartId?null:selectedPartId;renderProps();
         }
         return;
+      }
+      if(obj.type==='inverter'&&
+        (button.hasAttribute('data-inv-row-add')||button.hasAttribute('data-inv-row-delete')||
+         button.hasAttribute('data-inv-row-up')||button.hasAttribute('data-inv-row-down'))){
+        const c=obj.inverter=obj.inverter||HASSStudioInverter.defaults();
+        const rows=c.panel_rows=c.panel_rows||HASSStudioInverter.normalize(obj).panel_rows;
+        if(button.hasAttribute('data-inv-row-add')){
+          if(rows.length>=HASSStudioInverter.MAX_ROWS)return;
+          rows.push(HASSStudioInverter.defaultRow());
+        }else{
+          const key=button.hasAttribute('data-inv-row-delete')?'invRowDelete':
+            button.hasAttribute('data-inv-row-up')?'invRowUp':'invRowDown';
+          const i=Number(button.dataset[key]);
+          if(!Number.isInteger(i)||i<0||i>=rows.length)return;
+          if(key==='invRowDelete')rows.splice(i,1);
+          else{const j=i+(key==='invRowUp'?-1:1);if(j<0||j>=rows.length)return;
+            [rows[i],rows[j]]=[rows[j],rows[i]];}
+        }
+        commit(model);render();return;
       }
       const index=Number(button.dataset.deletePart||button.dataset.deleteAccessory||button.dataset.deleteEntity);
       if(button.hasAttribute('data-layer-up')&&obj.parts){
