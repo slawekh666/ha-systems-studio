@@ -48,30 +48,79 @@ const HASSStudioEditorInspector = (() => {
         sectionIcon('mdi:tune-variant')+'<span>'+esc(obj.type==='tank'?(L.tankSettings||'Ustawienia zbiornika'):(L.properties||'Właściwości'))+'</span>'+
         sectionIcon('mdi:chevron-down')+'</summary><section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
-        if((typeof HASSStudioEnergyTopology!=='undefined'&&HASSStudioEnergyTopology.electricalType(obj))){
-          markup+=field('Rola elektryczna','energy_role',obj.energy_role,'text',
-            [['source','Źródło'],['load','Odbiornik'],['grid','Sieć'],['storage','Magazyn'],['junction','Węzeł / rozdzielnica'],['neutral','Neutralna']]);
-          markup+='<h4>Porty elektryczne (AC/DC)</h4>';
-          markup+=(obj.energy_ports||[]).map((p,i)=>'<div class="ss-energy-port-edit">'+
-            '<strong>'+esc(p.id)+'</strong>'+
-            field('Etykieta','energy_port_label',p.label,'text',null,'data-index="'+i+'"')+
-            field('Typ','energy_port_medium',p.medium,'text',[['ac','AC'],['dc','DC']],'data-index="'+i+'"')+
-            field('Szyna','energy_port_bus',p.bus,'text',null,'data-index="'+i+'"')+
-            field('X (%)','energy_port_x',p.x,'number',null,'min="0" max="100" step="1" data-index="'+i+'"')+
-            field('Y (%)','energy_port_y',p.y,'number',null,'min="0" max="100" step="1" data-index="'+i+'"')+
-            '<button type="button" data-remove-energy-port="'+i+'">Usuń port</button></div>').join('');
-          markup+='<button type="button" data-add-energy-port>+ Dodaj port AC/DC</button>'+
-            '<p class="ss-note">Porty można przesuwać ręcznie. Port child budynku zasila jego odbiorniki. Szyna logicznie łączy porty.</p>';
+
+        const electrical=HASSStudioEnergyTopology.electricalType(obj);
+        if(electrical&&obj.type!=='distribution_board'){
+          const c=obj.type==='inverter'?HASSStudioInverter.normalize(obj):
+            obj.type==='building'?HASSStudioBuilding.normalize(obj):
+            obj.type==='energy_storage'?HASSStudioEnergyStorage.normalize(obj):
+            obj.type==='ev_charger'?HASSStudioEVCharger.normalize(obj):
+            obj.type==='power_grid'?HASSStudioPowerGrid.normalize(obj):null;
+          const mode=obj.energy_mode||
+            ((c?.mode==='manual'||obj.hp_test_mode===true)?'test':'ha');
+          const test=mode==='test'||mode==='auto'&&obj.energy_fallback_enabled===true;
+          markup+=field('Źródło danych','energy_mode',mode,'text',
+            [['auto','Automatycznie: HA → TEST'],['ha','Tylko Home Assistant'],['test','Symulacja ręczna']]);
+          if(mode==='auto')markup+=field('Wartość testowa, gdy czujnik HA nie działa',
+            'energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',
+            [['true','Włączona'],['false','Wyłączona']]);
+          const metric=(title,entityKey,entity,testKey,testValue,unit='kW')=>{
+            markup+='<div class="ss-metric-group"><strong>'+esc(title)+'</strong>'+
+              field('Czujnik Home Assistant',entityKey,entity||'','search',null,'list="ss-entity-list"');
+            if(test)markup+='<div class="ss-metric-test">'+
+              field(title+' — TEST',testKey,testValue??'','number',null,'step="0.01"')+'</div>';
+            markup+='</div>';
+          };
+          if(obj.type==='power_grid'){
+            const grid=HASSStudioPowerGrid.normalize(obj);
+            for(const phase of [1,2,3]){
+              metric('Napięcie fazy L'+phase+' (V)','grid_entity_l'+phase+'_v',grid.entities['l'+phase+'_v'],
+                'grid_manual_l'+phase+'_v',grid.manual['l'+phase+'_v'],'V');
+              metric('Prąd fazy L'+phase+' (A)','grid_entity_l'+phase+'_a',grid.entities['l'+phase+'_a'],
+                'grid_manual_l'+phase+'_a',grid.manual['l'+phase+'_a'],'A');
+            }
+            metric('Częstotliwość sieci (Hz)','grid_entity_frequency',grid.entities.frequency,
+              'grid_manual_frequency',grid.manual.frequency,'Hz');
+            markup+='<p class="ss-note">Słup wyświetla tylko parametry sieci. Bilans automatycznie oblicza import i eksport z mocy falownika, magazynu i odbiorników.</p>';
+          }else if(obj.type==='inverter')
+            metric('Moc chwilowa falownika (kW)','inv_entity_ac_power',c.entities.ac_power,
+              'inv_manual_ac_power',c.manual.ac_power);
+          else if(obj.type==='building')
+            metric('Moc chwilowa budynku (kW)','building_power_entity',c.power_entity,
+              'building_power_kw',c.power_kw);
+          else if(obj.type==='energy_storage')
+            metric('Moc magazynu (kW): dodatnia — ładowanie','storage_entity_power',c.entities.power,
+              'storage_manual_power',c.manual.power);
+          else if(obj.type==='ev_charger')
+            metric('Moc pobierana przez ładowarkę (kW)','ev_entity_power',c.entities.power,
+              'ev_manual_power',c.manual.power);
+          else if(obj.type==='pump')
+            metric('Moc pobierana przez pompę (W)','energy_power_entity',obj.energy_power_entity,
+              'energy_manual_w',obj.energy_manual_kw===null?'':+(obj.energy_manual_kw*1000).toFixed(2),'W');
+          else if(obj.type==='boiler'&&['electric','electric_modern'].includes(obj.variant))
+            metric('Moc pobierana przez kocioł (kW)','electric_power_entity',obj.electric_power_entity,
+              'energy_manual_kw',obj.energy_manual_kw);
+          else if(obj.type==='boiler'&&['heatpump','heatpump_modern'].includes(obj.variant))
+            metric('Moc elektryczna pompy ciepła (kW)','hp_power_entity',obj.hp_power_entity,
+              'hp_manual_kw',obj.hp_manual_kw);
         }
-        if((typeof HASSStudioEnergyTopology!=='undefined'&&HASSStudioEnergyTopology.electricalType(obj))&&obj.type!=='distribution_board'){
-           markup+='<h4>Bilans elektryczny</h4>'+
-             field('Test przy braku danych HA','energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',[['true','Włączony'],['false','Wyłączony']]);
-           if(obj.type==='power_grid')markup+=field('Automatycznie obliczaj moc sieci','energy_grid_auto',obj.energy_grid_auto?'true':'false','text',[['true','Tak'],['false','Nie']]);
-           if(obj.type==='pump'||obj.type==='boiler'&&['electric','electric_modern'].includes(obj.variant)){
-             if(obj.type==='pump')markup+=field('Czujnik mocy (W/kW)','energy_power_entity',obj.energy_power_entity,'search',null,'list="ss-entity-list"');
-             markup+=field('Test mocy (kW)','energy_manual_kw',obj.energy_manual_kw??'','number',null,'min="0" step="0.01"');
-           }
-         }
+        if(electrical)markup+='<details class="ss-section-details" data-section="electrical-advanced"'+
+          (openSections.get('electrical-advanced')===true?' open':'')+
+          '><summary>'+sectionIcon('mdi:tune')+'<span>Dodatkowe parametry i wygląd</span></summary><section>';
+        if(electrical){
+          markup+='<details data-section="energy-ports"'+
+            (openSections.get('energy-ports')===true?' open':'')+
+            '><summary>Porty — ustawienia zaawansowane</summary>';
+          markup+=(obj.energy_ports||[]).map((port,i)=>'<div class="ss-energy-port-edit">'+
+            '<strong>'+esc(port.label||port.id)+'</strong>'+
+            field('Nazwa','energy_port_label',port.label,'text',null,'data-index="'+i+'"')+
+            field('AC / DC','energy_port_medium',port.medium,'text',[['ac','AC'],['dc','DC']],'data-index="'+i+'"')+
+            field('Szyna','energy_port_bus',port.bus,'text',null,'data-index="'+i+'"')+
+            field('Położenie X (%)','energy_port_x',port.x,'number',null,'data-index="'+i+'"')+
+            field('Położenie Y (%)','energy_port_y',port.y,'number',null,'data-index="'+i+'"')+
+            '<button type="button" data-remove-energy-port="'+i+'">Usuń port</button></div>').join('');
+          markup+='<button type="button" data-add-energy-port>+ Dodaj port AC/DC</button></details>';
+        }
          markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
         const isGrid=obj.type==='power_grid';
@@ -377,6 +426,7 @@ const HASSStudioEditorInspector = (() => {
           markup+=field(L.solarOnDelta,'solar_on_delta',obj.solar_on_delta,'number',null,'min="1" max="40" step="0.5"');
           markup+=field(L.solarOffDelta,'solar_off_delta',obj.solar_off_delta,'number',null,'min="0" max="39" step="0.5"');
         }
+        if(electrical)markup+='</section></details>';
         markup+='</section></details><details class="ss-section-details" data-section="entities"'+sectionAttr('entities')+'><summary>'+
            sectionIcon('mdi:chart-timeline-variant')+'<span>'+esc(L.entities)+'</span>'+sectionIcon('mdi:chevron-down')+
            '</summary><section>'+
