@@ -3028,7 +3028,7 @@ const HASSStudioPowerFlow=(()=>{
  const normalize=x=>{
    const d=defaults(),c={...d,...x};
    return {...c,flow_power_entity:typeof c.flow_power_entity==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(c.flow_power_entity)?c.flow_power_entity:'',
-    flow_power_mode:['off','ha','manual'].includes(c.flow_power_mode)?c.flow_power_mode:'off',
+    flow_power_mode:['off','ha','manual','balance'].includes(c.flow_power_mode)?c.flow_power_mode:'off',
     flow_power_kw:clamp(c.flow_power_kw,-10000,10000,0),flow_max_kw:clamp(c.flow_max_kw,.1,10000,10),
     flow_min_width:clamp(c.flow_min_width,.5,12,1.5),
     flow_max_width:clamp(c.flow_max_width,.5,16,6),
@@ -3042,8 +3042,9 @@ const HASSStudioPowerFlow=(()=>{
    const value=HASSStudioHA.reading(h,c.flow_power_entity);
    return value&&(value.unit==='W'||value.unit==='kW')?(value.unit==='W'?value.value/1000:value.value):null;
  };
- const visual=(pipe,hass)=>{
-   const c=normalize(pipe),kw=measure(c,hass);
+ const visual=(pipe,hass,derived=null)=>{
+   const c=normalize(pipe),byBalance=c.flow_power_mode==='balance';
+   const kw=byBalance?(derived?.available===true?derived.kw:null):measure(c,hass);
    if(c.flow_power_mode==='off')return null;
    const nonzero=kw!==null&&Math.abs(kw)>0.0001;
    const factor=nonzero?Math.min(1,Math.abs(kw)/c.flow_max_kw):0;
@@ -3052,8 +3053,13 @@ const HASSStudioPowerFlow=(()=>{
    const size=+(2+factor*7).toFixed(2);
    const interval=+(Math.max(size+6,18-factor*5)).toFixed(2);
    const reverse=c.flow_power_direction&&kw!==null&&kw<0;
-   const direction=reverse?(pipe.flow_direction==='reverse'?'forward':'reverse'):(pipe.flow_direction==='reverse'?'reverse':'forward');
-   return {known:kw!==null,active:nonzero,kw,width,size,interval,direction,pattern:c.flow_pattern};
+   const direction=byBalance?(kw!==null&&kw<0?'reverse':'forward'):
+     reverse?(pipe.flow_direction==='reverse'?'forward':'reverse'):
+     (pipe.flow_direction==='reverse'?'reverse':'forward');
+   return {known:kw!==null,active:nonzero,kw,width,size,interval,direction,
+     pattern:c.flow_pattern,source:byBalance?(derived?.source||'unavailable'):
+       c.flow_power_mode==='manual'?'simulation':'ha',
+     availability:kw===null?'unavailable':'known'};
  };
  // A seamless dash animation advances exactly one dash+gap period per loop.
  // Hydraulic flows deliberately keep the independent legacy 28-unit cycle.
@@ -3105,6 +3111,7 @@ const HASSStudioEnergyTopology=(()=>{
      const p=ports(n).find(x=>x.id===ref.port_id);
      if(!p){errors.push({connection:cid,side,reason:'missing_port'});return null;}
      const key=ref.node_id+':'+(p.bus||p.id);
+     if(junctions.has(key)&&junctions.get(key).medium!==p.medium){errors.push({connection:cid,side,reason:'bus_medium_mismatch'});return null;}
      if(!junctions.has(key))junctions.set(key,{node_id:ref.node_id,port_id:p.id,medium:p.medium});
      return {key,medium:p.medium};
    };
@@ -3118,7 +3125,63 @@ const HASSStudioEnergyTopology=(()=>{
    }
    return {edges,errors,junctions:[...junctions.keys()]};
  };
- return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,node,end,connection,graph});
+
+ // Attachments move only the referenced endpoint; manual bends stay untouched.
+ const geometry=n=>{
+   const renderer=({
+     power_grid:HASSStudioPowerGrid,inverter:HASSStudioInverter,
+     energy_storage:HASSStudioEnergyStorage,building:HASSStudioBuilding,
+     ev_charger:HASSStudioEVCharger,distribution_board:HASSStudioDistributionBoard
+   })[n.type];
+   return renderer?.geometry?.(n)||{x:4,y:3,width:112,height:113};
+ };
+ const anchor=(n,portId)=>{
+   const p=ports(n).find(x=>x.id===portId);if(!p)return null;
+   const g=geometry(n),scale=Number(n.scale)||1;
+   return {x:Math.round((n.x+(g.x+g.width*p.x/100)*scale)*100)/100,
+     y:Math.round((n.y+(g.y+g.height*p.y/100)*scale)*100)/100};
+ };
+ const locate=(layout,ref)=>{
+   const n=(layout.nodes||[]).find(x=>x.id===ref?.node_id);
+   return n?anchor(n,ref.port_id):null;
+ };
+ const moveAttached=(layout,nodeId)=>{
+   for(const c of layout.connections||[]){
+     if(c.type!=='electric'||c.points?.length<2)continue;
+     for(const side of ['start','end']){
+       const ref=c['energy_'+side];
+       if(ref?.node_id!==nodeId)continue;
+       const at=locate(layout,ref);
+       if(at)c.points[side==='start'?0:c.points.length-1]=at;
+     }
+   }
+ };
+ const attach=(layout,c,side,ref)=>{
+   if(c.type!=='electric'||!['start','end'].includes(side)||c.points?.length<2)return false;
+   if(!ref?.node_id&&!ref?.port_id){c['energy_'+side]={node_id:'',port_id:''};return true;}
+   const n=(layout.nodes||[]).find(x=>x.id===ref.node_id),a=ports(n).find(x=>x.id===ref.port_id);
+   if(!n||!a)return false;
+   const other=c['energy_'+(side==='start'?'end':'start')];
+   if(other?.node_id&&other?.port_id){
+     const peer=(layout.nodes||[]).find(x=>x.id===other.node_id);
+     const b=ports(peer).find(x=>x.id===other.port_id);
+     if(b&&b.medium!==a.medium)return false;
+   }
+   c['energy_'+side]={node_id:n.id,port_id:a.id};
+   c.points[side==='start'?0:c.points.length-1]=anchor(n,a.id);
+   return true;
+ };
+ const nearest=(layout,point,maxDistance=25,mediumFilter=null)=>{
+   let best=null,distance=maxDistance;
+   for(const n of layout.nodes||[])for(const p of ports(n)){
+     if(mediumFilter&&p.medium!==mediumFilter)continue;
+     const at=anchor(n,p.id),d=Math.hypot(at.x-point.x,at.y-point.y);
+     if(d<distance){distance=d;best={node_id:n.id,port_id:p.id};}
+   }
+   return best;
+ };
+ return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,node,end,connection,graph,
+   geometry,anchor,locate,moveAttached,attach,nearest});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyTopology;
 
@@ -3135,7 +3198,7 @@ const HASSStudioEnergyBalance=(()=>{
   const ident=HASSStudioEnergyTopology.ident;
   const roles=['source','load','grid','storage'];
   const modes=['device','ha','manual','calculate','off'];
-  const defaults=()=>({enabled:false,tolerance_kw:.05,participants:[]});
+  const defaults=()=>({enabled:false,scenario:'hybrid',tolerance_kw:.05,participants:[]});
   const participant=p=>({
     node_id:ident(p?.node_id),
     port_id:ident(p?.port_id),
@@ -3147,7 +3210,8 @@ const HASSStudioEnergyBalance=(()=>{
   });
   const normalize=raw=>{
     const c=raw||{},seen=new Set();
-    return {enabled:c.enabled===true,tolerance_kw:finite(c.tolerance_kw,.001,100,.05),
+    return {enabled:c.enabled===true,scenario:['live','hybrid','simulation'].includes(c.scenario)?c.scenario:'hybrid',
+      tolerance_kw:finite(c.tolerance_kw,.001,100,.05),
       participants:(Array.isArray(c.participants)?c.participants:[]).slice(0,MAX_ASSIGNMENTS)
         .map(participant).filter(p=>{
           if(!p.node_id||seen.has(p.node_id))return false;
@@ -3201,9 +3265,13 @@ const HASSStudioEnergyBalance=(()=>{
   // except for loads where positive means consumption.
   const injection=(kw,role)=>role==='load'?-kw:kw;
   const validDirection=(kw,role)=>role==='source'?kw>=-EPS:role==='load'?kw<=EPS:true;
-  const measure=(n,role,p,h)=>{
+  const measure=(n,role,p,h,scenario='hybrid')=>{
     if(p.mode==='off')return {mode:p.mode,source:'excluded',injection_kw:null};
     if(p.mode==='calculate')return {mode:p.mode,source:'pending',injection_kw:null};
+    // Never present a manual or native simulated value as a live measurement.
+    if((scenario==='live'&&p.mode==='manual')||
+      (scenario==='simulation'&&p.mode!=='manual'))
+      return {mode:p.mode,source:'missing',injection_kw:null,reason:'scenario_requires_other_source'};
     let kw=null,source='missing';
     if(p.mode==='manual'){kw=injection(p.manual_kw,role);source='simulated';}
     else if(p.mode==='ha'){
@@ -3212,6 +3280,7 @@ const HASSStudioEnergyBalance=(()=>{
     }else{
       const r=deviceReading(n,h,p);
       kw=r.kw;source=kw===null?'missing':r.source;
+      if(scenario==='live'&&source==='simulated'){kw=null;source='missing';}
     }
     if(kw!==null&&p.reverse_sign)kw=-kw;
     if(kw!==null&&(!Number.isFinite(kw)||Math.abs(kw)>10000))
@@ -3303,7 +3372,7 @@ const HASSStudioEnergyBalance=(()=>{
       if(!unique.size){warnings.push({reason:'unconnected_device',node_id:n.id});continue;}
       if(unique.size!==1){warnings.push({reason:'ambiguous_device_network',node_id:n.id});continue;}
       const [group,port]=[...unique][0];
-      const reading=measure(n,role,p,hass);
+      const reading=measure(n,role,p,hass,config.scenario);
       const measurement=n.type==='building'?HASSStudioBuilding.normalize(n).measurement:null;
       group.devices.push({node_id:n.id,node_type:n.type,port_id:port.id,role,measurement,
         mode:reading.mode,source:reading.source,injection_kw:reading.injection_kw,
@@ -3321,6 +3390,60 @@ const HASSStudioEnergyBalance=(()=>{
   return Object.freeze({MAX_ASSIGNMENTS,defaults,normalize,participant,haPower,injection,deviceReading,measure,totals,solve,resolve});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyBalance;
+
+
+/* Conservative read-only MR4 branch-flow solver. Never infer from line crossing. */
+const HASSStudioEnergyFlow=(()=>{
+ const round=n=>Math.round(n*1e6)/1e6;
+ const unavailable=(reason,network=null)=>({
+   available:false,kw:null,direction:'none',source:'unavailable',sources:[],reason,network
+ });
+ const resolve=(layout,hass)=>{
+   const balance=HASSStudioEnergyBalance.resolve(layout,hass),byConnection={};
+   if(!balance.enabled||!balance.topology)return {balance,byConnection};
+   for(const network of balance.networks){
+     const edges=balance.topology.edges.filter(e=>network.connection_ids.includes(e.id));
+     const adj=new Map();
+     for(const e of edges){
+       if(!adj.has(e.from))adj.set(e.from,[]);
+       if(!adj.has(e.to))adj.set(e.to,[]);
+       adj.get(e.from).push({to:e.to,id:e.id});
+       adj.get(e.to).push({to:e.from,id:e.id});
+     }
+     for(const edge of edges){
+       if(network.state!=='balanced'){
+         byConnection[edge.id]=unavailable(network.state,network.id);continue;
+       }
+       // Only a bridge has a uniquely determined signed flow.
+       const seen=new Set([edge.from]),queue=[edge.from];
+       for(let i=0;i<queue.length;i++)for(const next of adj.get(queue[i])||[]){
+         if(next.id===edge.id||seen.has(next.to))continue;
+         seen.add(next.to);queue.push(next.to);
+       }
+       if(seen.has(edge.to)){
+         byConnection[edge.id]=unavailable('ambiguous_cycle',network.id);continue;
+       }
+       const participants=network.devices.filter(d=>{
+         const n=(layout.nodes||[]).find(n=>n.id===d.node_id);
+         const port=n?.energy_ports?.find(p=>p.id===d.port_id);
+         return seen.has(d.node_id+':'+(port?.bus||d.port_id));
+       });
+       const kw=round(participants.reduce((sum,d)=>sum+d.injection_kw,0));
+       const sources=[...new Set(network.devices.map(d=>d.source))].sort();
+       const source=sources.length===1?(sources[0]==='measured'?'ha':
+         sources[0]==='simulated'?'simulation':sources[0]):'mixed';
+       byConnection[edge.id]={available:true,kw,
+         direction:Math.abs(kw)<1e-6?'none':kw>0?'forward':'reverse',
+         source,sources,reason:null,network:network.id};
+     }
+   }
+   for(const e of balance.topology.errors)if(e.connection)
+     byConnection[e.connection]=unavailable(e.reason);
+   return {balance,byConnection};
+ };
+ return Object.freeze({resolve,unavailable});
+})();
+if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyFlow;
 
 
 /* Home Assistant Systems Studio — central device registry.
@@ -4025,6 +4148,7 @@ const HASSStudioCanvas = (() => {
   };
   const canvasSvg=(config,hass,editable=false,selected=null)=>{
     const data=normalized(config),language=pickLang(config,hass),L=words[language];
+    const energyFlow=HASSStudioEnergyFlow.resolve(data,hass);
     const w=data.width,h=data.height;
     const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !['radiator','manifold','power_grid','energy_storage','inverter','distribution_board','ev_charger','building'].includes(node.type) && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(node.variant)))
       .map(node=>HASSStudioGraphics.defs(node,hass)).join('');
@@ -4032,7 +4156,7 @@ const HASSStudioCanvas = (() => {
       const d=connectionPath(connection.points),s=connection.style,a=connection.animation;
       const electric=connection.type==='electric';
       const settings={...s,...a};
-      const powerVisual=electric?HASSStudioPowerFlow.visual(settings,hass):null;
+      const powerVisual=electric?HASSStudioPowerFlow.visual(settings,hass,energyFlow.byConnection[connection.id]):null;
       const enabled=electric?(powerVisual?.active===true):HASSStudioAnimation.flowActive(a.flow_mode,hass,a.flow_entity);
       const motionArrows=()=>{
         if(!electric||!powerVisual||!enabled||powerVisual.pattern!=='arrows')return '';
@@ -4053,7 +4177,8 @@ const HASSStudioCanvas = (() => {
           '<rect x="-6" y="-7" width="12" height="14" rx="2" fill="#7c8793" stroke="#b6c1cc"/></g>';
       };
       const color=electric?'#e3bc63':colors[s.color];
-      return '<g class="ss-connection ss-connection-'+connection.type+'" data-id="'+esc(connection.id)+'">'+
+      return '<g class="ss-connection ss-connection-'+connection.type+'" data-id="'+esc(connection.id)+'"'+
+         (electric&&settings.flow_power_mode==='balance'?' data-flow-source="'+esc(powerVisual?.source||'unavailable')+'" data-flow-availability="'+esc(powerVisual?.availability||'unavailable')+'"':'')+'>'+
         '<path class="ss-connection-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="'+(electric?'#27313a':'#142332')+'" stroke-width="'+(s.width+3)+'" fill="none"/>'+
         '<path class="ss-line" d="'+d+'" stroke="'+color+'" stroke-width="'+s.width+'" fill="none"/>'+
@@ -4067,6 +4192,12 @@ const HASSStudioCanvas = (() => {
     const handles=editable&&selected?.type==='connection'?data.connections.filter(c=>c.id===selected.id).map(c=>c.points.map((pt,index)=>
       '<circle class="ss-handle" data-id="'+esc(c.id)+'" data-point="'+index+'" cx="'+pt.x+'" cy="'+pt.y+
       '" r="8" fill="#fff" stroke="#2196f3" stroke-width="2"/>').join('')).join(''):'';
+    const ports=editable?data.nodes.map(node=>HASSStudioEnergyTopology.ports(node).map(port=>{
+      const at=HASSStudioEnergyTopology.anchor(node,port.id);
+      return '<circle class="ss-energy-port" data-node="'+esc(node.id)+'" data-port="'+esc(port.id)+
+        '" data-medium="'+port.medium+'" cx="'+at.x+'" cy="'+at.y+'" r="5" fill="'+
+        (port.medium==='ac'?'#e3bc63':'#62c8f3')+'" stroke="#18222c" stroke-width="1.5"/>';
+    }).join('')).join(''):'';
     const nodes=data.nodes.map(node=>{
       const active=selected?.type==='node'&&selected.id===node.id;
       const reading=valueOf(hass,node.entity);
@@ -4116,7 +4247,7 @@ const HASSStudioCanvas = (() => {
       HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
       '<rect class="ss-project-boundary" width="'+w+'" height="'+h+'" rx="4" fill="var(--secondary-background-color,#17222d)" stroke="'+
       (editable?'#52bfff':'none')+'" stroke-width="2" stroke-dasharray="'+(editable?'12 7':'none')+'"/>'+
-      '<g class="ss-devices">'+nodes+'</g><g class="ss-connection-layer" stroke-linecap="round" stroke-linejoin="round">'+connections+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-connection-handles">'+handles+'</g></svg>';
+      '<g class="ss-devices">'+nodes+'</g><g class="ss-connection-layer" stroke-linecap="round" stroke-linejoin="round">'+connections+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-port-layer">'+ports+'</g><g class="ss-connection-handles">'+handles+'</g></svg>';
   };
 
     return Object.freeze({canvasSvg,connectionPath,onConnection,variantShape,translateConnectionPoints});
@@ -4175,6 +4306,21 @@ const HASSStudioEditorInspector = (() => {
         sectionIcon('mdi:tune-variant')+'<span>'+esc(obj.type==='tank'?(L.tankSettings||'Ustawienia zbiornika'):(L.properties||'Właściwości'))+'</span>'+
         sectionIcon('mdi:chevron-down')+'</summary><section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
+        if(['power_grid','inverter','building','energy_storage','ev_charger','distribution_board'].includes(obj.type)){
+          markup+=field('Rola elektryczna','energy_role',obj.energy_role,'text',
+            [['source','Źródło'],['load','Odbiornik'],['grid','Sieć'],['storage','Magazyn'],['junction','Węzeł / rozdzielnica'],['neutral','Neutralna']]);
+          markup+='<h4>Porty elektryczne (AC/DC)</h4>';
+          markup+=(obj.energy_ports||[]).map((p,i)=>'<div class="ss-energy-port-edit">'+
+            '<strong>'+esc(p.id)+'</strong>'+
+            field('Etykieta','energy_port_label',p.label,'text',null,'data-index="'+i+'"')+
+            field('Typ','energy_port_medium',p.medium,'text',[['ac','AC'],['dc','DC']],'data-index="'+i+'"')+
+            field('Szyna','energy_port_bus',p.bus,'text',null,'data-index="'+i+'"')+
+            field('X (%)','energy_port_x',p.x,'number',null,'min="0" max="100" step="1" data-index="'+i+'"')+
+            field('Y (%)','energy_port_y',p.y,'number',null,'min="0" max="100" step="1" data-index="'+i+'"')+
+            '<button type="button" data-remove-energy-port="'+i+'">Usuń port</button></div>').join('');
+          markup+='<button type="button" data-add-energy-port>+ Dodaj port AC/DC</button>'+
+            '<p class="ss-note">Wspólna nazwa szyny łączy porty logicznie. Przecięcie przewodów ich nie łączy.</p>';
+        }
         markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
         const isGrid=obj.type==='power_grid';
@@ -4542,8 +4688,24 @@ const HASSStudioEditorInspector = (() => {
             [['off',L.flowOff||'Off'],['auto',L.flowAuto||'Controlled by entity'],['on',L.flowOn||'On (preview)']]);
           markup+=field(L.flowEntity||'Animation state entity','anim_flow_entity',a.flow_entity,'search',null,'list="ss-entity-list"');
         }else{
+          const attachOptions=[['','Nieprzypięty']].concat(model.nodes.flatMap(n=>
+            HASSStudioEnergyTopology.ports(n).map(p=>[n.id+':'+p.id,
+              (n.label||n.id)+' / '+(p.label||p.id)+' ('+p.medium.toUpperCase()+')'])));
+          markup+=field('Początek → port','energy_attach_start',
+            obj.energy_start?.node_id?obj.energy_start.node_id+':'+obj.energy_start.port_id:'',
+            'text',attachOptions);
+          markup+=field('Koniec → port','energy_attach_end',
+            obj.energy_end?.node_id?obj.energy_end.node_id+':'+obj.energy_end.port_id:'',
+            'text',attachOptions);
           markup+=field('Animacja mocy','anim_flow_power_mode',a.flow_power_mode||'off','text',
-            [['off','Wyłączona'],['ha','Pomiar mocy z HA'],['manual','Symulacja ręczna']]);
+            [['off','Wyłączona'],['ha','Pomiar mocy z HA'],['manual','Symulacja ręczna'],
+             ['balance','Automatycznie z bilansu']]);
+          if(a.flow_power_mode==='balance'){
+            const flow=HASSStudioEnergyFlow.resolve(model,editor._hass).byConnection[obj.id];
+            markup+='<p class="ss-note">Bilans: '+(flow?.available?
+              esc(flow.kw.toFixed(3)+' kW · '+flow.source+' · '+flow.direction):
+              esc(flow?.reason||'brak danych lub portów'))+'</p>';
+          }
           if(a.flow_power_mode==='ha')
             markup+=field('Encja mocy (W/kW)','anim_flow_power_entity',a.flow_power_entity,'search',null,'list="ss-entity-list"');
           if(a.flow_power_mode==='manual')
@@ -4971,7 +5133,7 @@ const HASSStudioEditorLibrary=(()=>{
       HASSStudioEditorLibrary.render({registry,language:pickLang(this._config,this._hass),esc})+
       '</div></aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
       '</main>'+
-      '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
+      '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3><div id="ss-energy-controls"></div></aside></div></dialog>';
     const modal=root.getElementById('ss-modal'),stage=root.getElementById('ss-stage'),properties=root.getElementById('ss-props');
     const splitterGrid=root.getElementById('ss-grid');
     for(const grip of root.querySelectorAll('.ss-splitter')){
@@ -5015,6 +5177,36 @@ const HASSStudioEditorLibrary=(()=>{
       return selection.type==='node'?model.nodes.find(x=>x.id===selection.id):
         model.connections.find(x=>x.id===selection.id);
     };
+    const renderBalance=()=>{
+      const e=get().energy_balance,host=root.getElementById('ss-energy-controls');if(!host)return;
+      const modes=[['device','Urządzenie'],['ha','HA'],['manual','Test'],['calculate','Oblicz'],['off','Wyłącz']];
+      const select=(list,value)=>list.map(([id,name])=>'<option value="'+id+'"'+(id===value?' selected':'')+'>'+name+'</option>').join('');
+      host.innerHTML='<h4>Bilans energii</h4><label><input type="checkbox" data-balance-enable'+(e.enabled?' checked':'')+'> Włącz</label>'+
+        '<label>Tryb<select data-balance-scenario>'+select([['live','HA'],['hybrid','Hybrydowy'],['simulation','Symulacja']],e.scenario)+'</select></label>'+
+        get().nodes.filter(n=>['inverter','building','power_grid','energy_storage','ev_charger'].includes(n.type)).map(n=>{
+          const o=e.participants.find(x=>x.node_id===n.id)||{mode:'device',manual_kw:0,entity:''};
+          return '<div data-participant="'+esc(n.id)+'"><strong>'+esc(n.label||n.id)+'</strong>'+
+          '<label>Źródło<select data-balance-mode>'+select(modes,o.mode)+'</select></label>'+
+          (o.mode==='manual'?'<label>kW<input type="number" step="0.01" data-balance-kw value="'+o.manual_kw+'"></label>':'')+
+          (o.mode==='ha'?'<label>Encja<input type="search" data-balance-entity value="'+esc(o.entity)+'"></label>':'')+'</div>';
+        }).join('')+
+        (e.enabled?'<p>'+HASSStudioEnergyFlow.resolve(get(),this._hass).balance.networks.map(n=>n.state+' '+(n.residual_kw??'—')+' kW').join(' / ')+'</p>':'')+
+        '<p class="ss-note">Test i obliczenia nie są pomiarami HA.</p>';
+    };
+    root.getElementById('ss-energy-controls')?.addEventListener('change',event=>{
+      const el=event.target,model=get(),e=model.energy_balance;
+      if(el.matches('[data-balance-enable]'))e.enabled=el.checked;
+      else if(el.matches('[data-balance-scenario]'))e.scenario=el.value;
+      else {
+        const id=el.closest('[data-participant]')?.dataset.participant;if(!id)return;
+        let o=e.participants.find(p=>p.node_id===id);
+        if(!o){o=HASSStudioEnergyBalance.participant({node_id:id});e.participants.push(o);}
+        if(el.matches('[data-balance-mode]'))o.mode=el.value;
+        if(el.matches('[data-balance-kw]'))o.manual_kw=clamp(el.value,-10000,10000,0);
+        if(el.matches('[data-balance-entity]'))o.entity=validEntity(el.value)?el.value:'';
+      }
+      commit(model);render();
+    });
     const renderProps=HASSStudioEditorInspector.create({
       editor:this,L,properties,esc,opts,registry,pickLang,get,selectedObject,
       getSelection:()=>selection,getSelectedPartId:()=>selectedPartId,getExpandedPartId:()=>expandedPartId,variantShape
@@ -5042,6 +5234,7 @@ const HASSStudioEditorLibrary=(()=>{
     const render=()=>{
       ({width:sceneW,height:sceneH}=dimensions());
       stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
+      renderBalance();
       applyCamera();renderProps();
     };
     if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>applyCamera()).observe(stage);
@@ -5254,6 +5447,20 @@ const HASSStudioEditorLibrary=(()=>{
         if(attr==='width')s.width=clamp(val,2,14,s.width);
         else if(attr==='color'&&obj.type==='hydraulic')s.color=colors[val]?val:s.color;
         else if(['cap_start','cap_end'].includes(attr)&&obj.type==='hydraulic')s[attr]=val==='true';
+       }else if(selection.type==='connection'&&key.startsWith('energy_attach_')){
+        const side=key.slice('energy_attach_'.length),parts=val.split(':');
+        if(['start','end'].includes(side))HASSStudioEnergyTopology.attach(model,obj,side,
+          val?{node_id:parts[0],port_id:parts[1]}:null);
+      }else if(selection.type==='node'&&key==='energy_role'){
+        obj.energy_role=HASSStudioEnergyTopology.role(val);
+      }else if(selection.type==='node'&&key.startsWith('energy_port_')){
+        const port=obj.energy_ports?.[index];if(!port)return;
+        const prop=key.slice('energy_port_'.length);
+        if(prop==='label')port.label=val.slice(0,40);
+        if(prop==='bus')port.bus=HASSStudioEnergyTopology.ident(val);
+        if(prop==='medium')port.medium=HASSStudioEnergyTopology.medium(val);
+        if(['x','y'].includes(prop))port[prop]=clamp(val,0,100,50);
+        HASSStudioEnergyTopology.moveAttached(model,obj.id);
       }else if(selection.type==='connection'&&key.startsWith('anim_')){
         const attr=key.slice(5),a=obj.animation;
         if(attr==='flow_mode'&&obj.type==='hydraulic')a.flow_mode=['on','off','auto'].includes(val)?val:'auto';
@@ -5261,7 +5468,7 @@ const HASSStudioEditorLibrary=(()=>{
         else if(attr==='flow_direction')a.flow_direction=val==='reverse'?'reverse':'forward';
         else if(attr==='flow_speed')a.flow_speed=clamp(val,.35,5,a.flow_speed);
         else if(obj.type==='electric'){
-          if(attr==='flow_power_mode')a.flow_power_mode=['off','ha','manual'].includes(val)?val:'off';
+          if(attr==='flow_power_mode')a.flow_power_mode=['off','ha','manual','balance'].includes(val)?val:'off';
           else if(attr==='flow_power_entity')a.flow_power_entity=validEntity(val)?val:'';
           else if(attr==='flow_pattern')a.flow_pattern=['dots','dashes','arrows'].includes(val)?val:'dots';
           else if(attr==='flow_power_direction')a.flow_power_direction=val==='true';
@@ -5545,6 +5752,22 @@ const HASSStudioEditorLibrary=(()=>{
         }
         commit(model);render();return;
       }
+      if(selection.type==='node'&&button.hasAttribute('data-add-energy-port')){
+        if(obj.energy_ports.length>=HASSStudioEnergyTopology.MAX_PORTS)return;
+        let i=1;while(obj.energy_ports.some(p=>p.id==='port'+i))i++;
+        obj.energy_ports.push({id:'port'+i,label:'',medium:'ac',bus:'main',x:50,y:50});
+        commit(model);render();return;
+      }
+      if(selection.type==='node'&&button.hasAttribute('data-remove-energy-port')){
+        const index=Number(button.dataset.removeEnergyPort);
+        if(!Number.isInteger(index)||index<0||index>=obj.energy_ports.length)return;
+        const removed=obj.energy_ports.splice(index,1)[0];
+        for(const c of model.connections)for(const side of ['start','end']){
+          if(c['energy_'+side]?.node_id===obj.id&&c['energy_'+side]?.port_id===removed.id)
+            c['energy_'+side]={node_id:'',port_id:''};
+        }
+        commit(model);render();return;
+      }
       const index=Number(button.dataset.deletePart||button.dataset.deleteAccessory||button.dataset.deleteEntity);
       if(button.hasAttribute('data-layer-up')&&obj.parts){
         const i=Number(button.dataset.layerUp);
@@ -5649,7 +5872,7 @@ const HASSStudioEditorLibrary=(()=>{
         const x=clamp(Math.round((p.x-drag.offsetX)/5)*5,-5000,10000,n.x);
         const y=clamp(Math.round((p.y-drag.offsetY)/5)*5,-5000,10000,n.y);
         if(x===n.x&&y===n.y)return;
-        n.x=x;n.y=y;drag.moved=x!==drag.initialX||y!==drag.initialY;
+        n.x=x;n.y=y;HASSStudioEnergyTopology.moveAttached(model,n.id);drag.moved=x!==drag.initialX||y!==drag.initialY;
       }else if(drag.type==='connection'){
         const connection=model.connections.find(item=>item.id===drag.id);
         if(!connection)return;
@@ -5657,6 +5880,10 @@ const HASSStudioEditorLibrary=(()=>{
         if(!translated.some((pt,index)=>pt.x!==connection.points[index]?.x||pt.y!==connection.points[index]?.y))return;
         if(!drag.captured){stage.setPointerCapture(event.pointerId);drag.captured=true;}
         connection.points=translated;
+        if(connection.type==='electric')for(const side of ['start','end']){
+          const at=HASSStudioEnergyTopology.locate(model,connection['energy_'+side]);
+          if(at)connection.points[side==='start'?0:connection.points.length-1]=at;
+        }
         drag.moved=translated.some((pt,index)=>pt.x!==drag.points[index].x||pt.y!==drag.points[index].y);
       }else{
         const connection=model.connections.find(item=>item.id===drag.id);
@@ -5664,7 +5891,16 @@ const HASSStudioEditorLibrary=(()=>{
         const x=clamp(Math.round(p.x/5)*5,-5000,10000,0);
         const y=clamp(Math.round(p.y/5)*5,-5000,10000,0);
         if(x===connection.points[drag.index].x&&y===connection.points[drag.index].y)return;
-        connection.points[drag.index]={x,y};drag.moved=x!==drag.initialX||y!==drag.initialY;
+        connection.points[drag.index]={x,y};
+        if(connection.type==='electric'&&[0,connection.points.length-1].includes(drag.index)){
+          const side=drag.index===0?'start':'end';
+          const other=connection['energy_'+(side==='start'?'end':'start')];
+          const peer=model.nodes.find(n=>n.id===other?.node_id);
+          const peerPort=HASSStudioEnergyTopology.ports(peer).find(p=>p.id===other?.port_id);
+          HASSStudioEnergyTopology.attach(model,connection,side,
+            HASSStudioEnergyTopology.nearest(model,{x,y},25,peerPort?.medium||null));
+        }
+        drag.moved=x!==drag.initialX||y!==drag.initialY;
       }
       this._config={...this._config,studio_layout:model};repaint(model);
     });
