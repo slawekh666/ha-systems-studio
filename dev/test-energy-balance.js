@@ -103,11 +103,14 @@ const aggregate=balance.resolve(layout.normalized(cfg([
 ])),readings);
 assert.equal(aggregate.networks[0].state,'balanced');
 const aggregateConflict=balance.resolve(layout.normalized(cfg([
-  ...nodes,node('garage','building',{building:{mode:'manual',power_kw:1,measurement:'individual'}})
+  ...nodes.map(n=>n.id==='home'?{...n,building:{mode:'manual',power_kw:3,measurement:'aggregate'}}:n),
+  node('garage','building',{building:{mode:'manual',power_kw:1,measurement:'individual'}})
 ], [...connections,connect('garage-link','garage','ac','panel','d')],[
   {node_id:'grid',mode:'calculate'}
 ])),readings);
-assert.equal(aggregateConflict.networks[0].state,'unbalanced');
+assert.equal(aggregateConflict.networks[0].state,'invalid');
+assert(aggregateConflict.networks[0].reasons.includes('aggregate_overlap'));
+
 // No phantom connections through coordinates that happen to overlap.
 const isolated=balance.resolve(layout.normalized(cfg([
  ...nodes,node('pv2','inverter',{inverter:{mode:'manual',manual:{ac_power:2,temperature:30}}}),
