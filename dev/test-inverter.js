@@ -41,7 +41,7 @@ assert.equal(threshold.state,'standby');
 const diagnostic=node({count:6,show_extra:true,extra_position:'left',extra_scale:.8,mode:'manual'});
 const diagSvg=api.render(diagnostic,{states:{}});
 assert.match(diagSvg,/Parametry falownika/);
-assert.match(diagSvg,/PV6/);
+assert(!diagSvg.includes('inv-row'), 'PV inputs are not duplicated in extra panel');
 assert.match(diagSvg,/viewBox="-/);
 assert.equal(api.normalize(diagnostic).count,6);
 const rows=[
