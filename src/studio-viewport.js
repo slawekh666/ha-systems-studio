@@ -5,7 +5,7 @@ const HASSStudioViewport=(()=>{
   const dimensions=config=>{
     const layout=config?.studio_layout||{};
     // Existing saved layouts used 1200x720. Only newly created empty layouts use 1200x700.
-    const existing=Array.isArray(layout.nodes)||Array.isArray(layout.pipes)||Array.isArray(layout.edges);
+    const existing=Array.isArray(layout.nodes)||Array.isArray(layout.connections);
     return {width:dimension(layout.width,1200),height:dimension(layout.height,existing?720:700)};
   };
   const fresh=(w,h)=>({cx:w/2,cy:h/2,zoom:1,autoFit:true});

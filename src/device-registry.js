@@ -9,7 +9,7 @@ const HASSStudioDeviceRegistry = (() => {
     solar: {pl:'Solary',en:'Solar thermal'},
     hydraulics: {pl:'Pompy, zawory i osprzęt',en:'Pumps, valves and accessories'},
     measurements: {pl:'Czujniki i pomiary',en:'Sensors and measurements'},
-    connections: {pl:'Rury i połączenia',en:'Pipes and connections'},
+    connections: {pl:'Połączenia',en:'Connections'},
     electricity: {pl:'Sieć elektryczna',en:'Electrical grid'}
   });
   // MDI identifiers refer to native Home Assistant icons, not custom SVG assets.
@@ -18,7 +18,7 @@ const HASSStudioDeviceRegistry = (() => {
   const familyIcons=Object.freeze({solid_fuel_boiler:'mdi:fire',pellet_boiler:'mdi:fire',gas_boiler:'mdi:fire',
     electric_boiler:'mdi:flash',oil_boiler:'mdi:fire',heat_pump:'mdi:heat-pump',fireplace:'mdi:fireplace',
     tank:'mdi:water-boiler',solar_collector:'mdi:white-balance-sunny',pump:'mdi:pump',valve:'mdi:valve',
-    sensor:'mdi:thermometer',pipe:'mdi:pipe',building:'mdi:home-city',energy_storage:'mdi:battery-high',inverter:'mdi:solar-power',distribution_board:'mdi:electrical-services',ev_charger:'mdi:ev-station',power_grid:'mdi:transmission-tower',radiator:'mdi:radiator',manifold:'mdi:pipe-manifold'});
+    sensor:'mdi:thermometer',connection_hydraulic:'mdi:pipe',connection_electric:'mdi:power-plug',building:'mdi:home-city',energy_storage:'mdi:battery-high',inverter:'mdi:solar-power',distribution_board:'mdi:electrical-services',ev_charger:'mdi:ev-station',power_grid:'mdi:transmission-tower',radiator:'mdi:radiator',manifold:'mdi:pipe-manifold'});
   // Common logical identity, independent from the selected drawing.
   const families = Object.freeze({
     solid_fuel_boiler:{category:'heat_sources',pl:'Kocioł na drewno / węgiel',en:'Wood / coal boiler',fuels:['wood','coal'],entities:['entity','burner_entity'],animations:['combustion']},
@@ -41,7 +41,8 @@ const HASSStudioDeviceRegistry = (() => {
     inverter:{category:'electricity',pl:'Falownik fotowoltaiczny',en:'PV inverter',entities:['ac_power','inputs'],animations:[]},
     energy_storage:{category:'electricity',pl:'Magazyn energii',en:'Energy storage',entities:['soc','power','soh','voltage','current','temperature','bms_alarm'],animations:['charge']},
     power_grid:{category:'electricity',pl:'Sieć energetyczna',en:'Power Grid',entities:['L1_V','L1_A','L2_V','L2_A','L3_V','L3_A'],animations:[]},
-    pipe:{category:'connections',pl:'Rura',en:'Pipe',entities:['flow_entity'],animations:['flow']}
+    connection_hydraulic:{category:'connections',pl:'Rura',en:'Pipe',entities:['flow_entity'],animations:['flow']},
+    connection_electric:{category:'connections',pl:'Przewód elektryczny',en:'Electrical cable',entities:['flow_power_entity'],animations:['power_flow']}
   });
 
   // Do not change order, names or ids: these are stored in existing HA layouts.
@@ -85,7 +86,7 @@ const HASSStudioDeviceRegistry = (() => {
     inverter:{icon:'▣',variants:[['modern','inverter','Falownik PV','PV inverter','inverter','inverter.svg']]},
     energy_storage:{icon:'▤',variants:[['modern','energy_storage','Magazyn energii','Energy storage','energyStorage','energy-storage.svg']]},
     power_grid:{icon:'⚡',variants:[['classic','power_grid','Classic','Classic','powerGrid','power-grid-classic.svg'],['modern','power_grid','Modern','Modern','powerGrid','power-grid-modern-light.svg']]},
-    pipe:{icon:'〰',variants:[]}
+    connection:{icon:'〰',variants:[]}
   });
   const types = Object.freeze(Object.keys(legacy));
   const variantMap = new Map();
@@ -113,7 +114,7 @@ const HASSStudioDeviceRegistry = (() => {
     return graphic ? Object.freeze({...graphic,type,category:families[graphic.family].category,device:families[graphic.family]}):null;
   };
   // Curated choices for the left library. Each entry creates a supported
-  // legacy node/pipe variant; no new device data format is introduced.
+  // Device variants and new connection types have separate configuration schemas.
   // A family appears once when its alternatives are only graphic styles.
   const libraryPresets = Object.freeze([
     ['boiler','solid_fuel','solid_fuels'],
@@ -141,7 +142,8 @@ const HASSStudioDeviceRegistry = (() => {
     ['inverter','modern','inverter_group'],
     ['energy_storage','modern','storage_group'],
     ['power_grid','classic','electricity_group'],
-    ['pipe',null,'pipe_group']
+    ['connection','hydraulic','hydraulic_connections'],
+    ['connection','electric','electric_connections']
   ]);
   const subgroups = Object.freeze({
     solid_fuels: Object.freeze({pl:'Kotły na paliwo stałe',en:'Solid-fuel boilers',icon:'mdi:fire'}),
@@ -159,9 +161,12 @@ const HASSStudioDeviceRegistry = (() => {
     inverter_group: Object.freeze({pl:'Falowniki PV',en:'PV inverters',icon:'mdi:solar-power'}),
     storage_group: Object.freeze({pl:'Magazyny energii',en:'Energy storage',icon:'mdi:battery-high'}),
     electricity_group: Object.freeze({pl:'Sieć elektryczna',en:'Electrical grid',icon:'mdi:transmission-tower'}),
-    pipe_group: Object.freeze({pl:'Rury',en:'Pipes',icon:'mdi:pipe'})
+    hydraulic_connections: Object.freeze({pl:'Rury hydrauliczne',en:'Hydraulic pipes',icon:'mdi:pipe'}),
+    electric_connections: Object.freeze({pl:'Przewody elektryczne',en:'Electrical cables',icon:'mdi:power-plug'})
   });
   const presetNames = Object.freeze({
+    'connection:hydraulic':{pl:'Rura',en:'Pipe'},
+    'connection:electric':{pl:'Przewód elektryczny',en:'Electrical cable'},
     'pump:circulation':{pl:'Pompa obiegowa',en:'Circulation pump'},
     'pump:inline':{pl:'Pompa przelotowa',en:'Inline pump'},
     'valve:two_way':{pl:'Zawór dwudrogowy',en:'Two-way valve'},
@@ -170,15 +175,16 @@ const HASSStudioDeviceRegistry = (() => {
     'sensor:pressure':{pl:'Czujnik ciśnienia',en:'Pressure sensor'}
   });
   const libraryEntries = (lang='pl') => libraryPresets.map(([type,variant,subgroup]) => {
-    const choice=variant===null
-      ? {type,family:'pipe',category:'connections',device:families.pipe}
+    const family=type==='connection'?'connection_'+variant:null;
+    const choice=family
+      ? {type,family,category:'connections',device:families[family]}
       : resolve(type,variant);
     if(!choice) throw new Error('Missing library device: '+type+':'+variant);
     const language=lang==='en'?'en':'pl';
     const label=presetNames[type+':'+variant]?.[language] || families[choice.family]?.[language]
       || choice.device[language];
     return Object.freeze({
-      type,variant,category:choice.category,family:choice.family||'pipe',
+      type,variant,category:choice.category,family:choice.family,
       subgroup:subgroup||null,label,icon:familyIcons[choice.family]||'mdi:cube-outline'
     });
   });

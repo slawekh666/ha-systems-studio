@@ -1,6 +1,6 @@
-/* Schema normalization for existing custom layouts. Keeps saved IDs and fields. */
+/* Custom layout normalization; connections[] v2 intentionally drops legacy pipes[]. */
 const HASSStudioLayout = (() => {
-  const W=1200,H=720,MAX_NODES=60,MAX_PIPES=80;
+  const W=1200,H=720,MAX_NODES=60,MAX_CONNECTIONS=80;
   const registry=HASSStudioDeviceRegistry;
   const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
   const clamp=(n,lo,hi,fallback)=>Number.isFinite(Number(n))?Math.max(lo,Math.min(hi,Number(n))):fallback;
@@ -77,36 +77,27 @@ const HASSStudioLayout = (() => {
       power_grid:v.type==='power_grid'?HASSStudioPowerGrid.normalize(v):undefined,
       parts:(Array.isArray(v.parts)?v.parts:[]).slice(0,40).map(normalizeItem)
     }));
-    const pipes=(Array.isArray(source.pipes)?source.pipes:[]).slice(0,MAX_PIPES).map(v=>({
-      id:String(v.id||freshId('p')).slice(0,32),
-      label:String(v.label||'').slice(0,64),
-      color:colors[v.color]?v.color:'hot',width:clamp(v.width,3,14,7),
-      flow_mode:['auto','on','off'].includes(v.flow_mode)?v.flow_mode:'auto',
-      flow_entity:validEntity(v.flow_entity)?v.flow_entity:'',
-      flow_direction:v.flow_direction==='reverse'?'reverse':'forward',
-      flow_speed:clamp(v.flow_speed,.35,5,1),...HASSStudioPowerFlow.normalize(v),cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
-      cap_start:v.cap_start!==false,cap_end:v.cap_end!==false,
-      points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
-        x:clamp(q.x,-5000,10000,100),y:clamp(q.y,-5000,10000,100)})),
-      accessories:(Array.isArray(v.accessories)?v.accessories:[]).slice(0,20).map(normalizeAccessory)
-    })).filter(v=>v.points.length>=2);
-    // Preserve pipes created in the previous prototype when opening their layout.
-    if(!Array.isArray(source.pipes) && Array.isArray(source.edges)){
-      const byId=new Map(nodes.map(n=>[n.id,n]));
-      const ports={left:[0,42],right:[112,42],top:[56,0],bottom:[56,84]};
-      source.edges.slice(0,MAX_PIPES).forEach((edge,index)=>{
-        const from=byId.get(edge?.from?.node),to=byId.get(edge?.to?.node);
-        const a=ports[edge?.from?.port],b=ports[edge?.to?.port];
-        if(!from||!to||!a||!b)return;
-        const ax=from.x+a[0]*from.scale,ay=from.y+a[1]*from.scale;
-        const bx=to.x+b[0]*to.scale,by=to.y+b[1]*to.scale;
-        const mx=(ax+bx)/2;
-        pipes.push({id:'migrated-'+index,label:'',color:colors[edge.color]?edge.color:'hot',
-          width:7,flow_mode:'auto',flow_entity:'',flow_direction:'forward',flow_speed:1,cap_start:true,cap_end:true,
-          points:[{x:ax,y:ay},{x:mx,y:ay},{x:mx,y:by},{x:bx,y:by}],accessories:[]});
-      });
-    }
-    return {width,height,name:String(source.name||'').trim().slice(0,64),nodes,pipes};
+    // New connections schema is intentionally not migrated from legacy pipes[].
+    const connections=(Array.isArray(source.connections)?source.connections:[]).slice(0,MAX_CONNECTIONS).filter(v=>v&&typeof v.id==='string'&&['hydraulic','electric'].includes(v.type)).map(v=>{
+      const style=v.style||{},a=v.animation||{},hydraulic=v.type==='hydraulic';
+      return {
+        id:v.id.slice(0,32),type:v.type,label:String(v.label||'').slice(0,64),
+        points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
+          x:clamp(q.x,-5000,10000,100),y:clamp(q.y,-5000,10000,100)})),
+        style:{color:hydraulic&&colors[style.color]?style.color:hydraulic?'hot':'electric',
+          width:clamp(style.width,2,14,hydraulic?7:5),
+          cap_start:hydraulic&&style.cap_start!==false,cap_end:hydraulic&&style.cap_end!==false},
+        animation:{
+          flow_mode:['auto','on','off'].includes(a.flow_mode)?a.flow_mode:hydraulic?'auto':'off',
+          flow_entity:hydraulic&&validEntity(a.flow_entity)?a.flow_entity:'',
+          flow_direction:a.flow_direction==='reverse'?'reverse':'forward',
+          flow_speed:clamp(a.flow_speed,.35,5,1),
+          ...HASSStudioPowerFlow.normalize(hydraulic?{flow_power_mode:'off'}:a)
+        },
+        accessories:hydraulic?(Array.isArray(v.accessories)?v.accessories:[]).slice(0,20).map(normalizeAccessory):[]
+      };
+    }).filter(v=>v.points.length>=2);
+    return {width,height,name:String(source.name||'').trim().slice(0,64),nodes,connections};
   };
 
   return Object.freeze({normalized,normalizeItem,normalizeAccessory});

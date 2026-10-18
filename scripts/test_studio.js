@@ -10,7 +10,7 @@ const legacy={
   tank:'modular stratified buffer coil dual_coil hygiene combi',
   solar:'flat tube',pump:'circulation inline',valve:'two_way three_way',sensor:'temperature pressure'
 };
-assert.equal(Array.from(registry.listTypes()).join(' '),'boiler tank solar pump valve sensor radiator manifold building distribution_board ev_charger inverter energy_storage power_grid pipe');
+assert.equal(Array.from(registry.listTypes()).join(' '),'boiler tank solar pump valve sensor radiator manifold building distribution_board ev_charger inverter energy_storage power_grid connection');
 for(const [type,variants] of Object.entries(legacy)){
   assert.equal(registry.variantsFor(type).map(item=>item.id).join(' '),variants);
   for(const variant of variants.split(' ')){
@@ -18,7 +18,7 @@ for(const [type,variants] of Object.entries(legacy)){
     assert(registry.resolve(type,variant)?.category);
   }
 }
-assert.equal(registry.isNodeType('pipe'),false);
+assert.equal(registry.isNodeType('connection'),false);
 assert.equal(registry.resolve('boiler','solid_fuel').family,'solid_fuel_boiler');
 assert.equal(registry.resolve('boiler','pellet_modern').family,'pellet_boiler');
 assert.equal(registry.resolve('boiler','heatpump_modern').family,'heat_pump');
@@ -38,7 +38,8 @@ assert(libHtml.includes('data-add="tank" data-variant="modular"'));
 assert(libHtml.includes('data-add="pump" data-variant="inline"'));
 assert(libHtml.includes('data-add="valve" data-variant="three_way"'));
 assert(libHtml.includes('data-add="sensor" data-variant="pressure"'));
-assert(libHtml.includes('data-add="pipe"'));
+assert(libHtml.includes('data-add="connection" data-variant="hydraulic"'));
+assert(libHtml.includes('data-add="connection" data-variant="electric"'));
 const libEn=library.render({registry,language:'en',esc:String});
 assert(libEn.includes('Solid-fuel boilers') && libEn.includes('Heat sources'));
 assert(!libEn.includes('Kocioł na drewno'));
@@ -72,7 +73,7 @@ const drawInspector=inspector.create({editor:{_config:{},_hass:{states:{}}},
   L:fakeLabels,properties:mockProperties,esc:String,
   opts:(rows,selected)=>rows.map(row=>'<option value="'+row[0]+'"'+
     (row[0]===selected?' selected':'')+'>'+row[1]+'</option>').join(''),
-  registry,pickLang:()=> 'pl',get:()=>({nodes:[sampleTank],pipes:[]}),
+  registry,pickLang:()=> 'pl',get:()=>({nodes:[sampleTank],connections:[]}),
   selectedObject:()=>sampleTank,getSelection:()=>({type:'node'}),
   getSelectedPartId:()=>selectedPart,getExpandedPartId:()=>selectedPart,variantShape:()=>''});
 drawInspector();
@@ -126,8 +127,8 @@ const partRender=api.render({
 assert.match(partRender,/<g class="ss-temperature-badge" transform="[^"]+" data-more="sensor.tank_top">/);
 assert.match(partRender,/<g class="ss-heater" data-more="switch.heater">/);
 assert.match(partRender,/<g class="ss-coil" data-more="binary_sensor.coil">/);
-assert(src.includes('class="ss-accessory" data-pipe=') && src.includes("item.entity?' data-more="), 'accessory history binding missing');
-assert.match(src,/\.ss-svg:not\(\.ss-svg-editor\) \.ss-pipe\{pointer-events:none\}/);
+assert(src.includes('class="ss-accessory" data-connection=') && src.includes("item.entity?' data-more="), 'accessory history binding missing');
+assert.match(src,/\.ss-svg:not\(\.ss-svg-editor\) \.ss-connection\{pointer-events:none\}/);
 assert.match(src,/\(editable\?' ss-svg-editor':''\)/);
 assert.match(src,/const ent=node.entity\?' data-more="/);
 console.log('OK: history click targets for individual sensors, heaters, coils and pipe accessories.');
@@ -148,7 +149,7 @@ assert(bareTank.includes('>T1</text>'));
 assert(src.includes('data-field=') && src.includes("key"),'missing dynamic field template');
 assert(src.includes("'partDisplayScale'")&&src.includes("'partLabel'"),'sensor editor fields missing');
 assert(src.includes("'accessoryLabel'"),'accessory label editor missing');
-assert(src.includes('symbolOnPipe(item,pipe,hass,language)'), 'pipe caption renderer missing');
+assert(src.includes('symbolOnConnection(item,connection,hass,language)'), 'pipe caption renderer missing');
 const tallBoiler=api.render(wood,state({'sensor.boiler':65}));
 assert.match(tallBoiler,/y="-104" width="18" height="150"/);
 assert.match(tallBoiler,/y="30" width="91" height="169"/);
@@ -472,7 +473,7 @@ console.log('OK: standalone icon preview dependencies, registry-backed variants 
 // Viewport geometry and backwards-compatible canvas size.
 const viewport=vm.runInNewContext(fs.readFileSync('src/studio-viewport.js','utf8')+'\nHASSStudioViewport;');
 assert.equal(viewport.dimensions({}).height,700);
-assert.equal(viewport.dimensions({studio_layout:{nodes:[],pipes:[]}}).height,720);
+assert.equal(viewport.dimensions({studio_layout:{nodes:[],connections:[]}}).height,720);
 assert.equal(viewport.dimensions({studio_layout:{width:1800,height:950,nodes:[]}}).width,1800);
 const cam=viewport.fresh(1200,700);
 const frame=viewport.box(cam,600,350,1200,700);
@@ -608,19 +609,19 @@ assert(toolbarSrc.indexOf('class="ss-card-header"')<toolbarSrc.indexOf('canvasSv
 console.log('OK: viewer zoom tools live in the card header, outside drawing.');
 
 // Scheme labels and complete pipe translation regression checks.
-const pipeLib=vm.runInNewContext(fs.readFileSync('src/studio-canvas.js','utf8')+'\nHASSStudioCanvas;');
-const pipeShift=pipeLib.create({W:1200,H:720,colors:{},normalized:()=>({nodes:[],pipes:[]}),pickLang:()=> 'pl',words:{pl:{}},clamp:(n,lo,hi,fb)=>Number.isFinite(Number(n))?Math.min(hi,Math.max(lo,Number(n))):fb,validEntity:()=>false,esc:String}).translatePipePoints;
+const connectionLib=vm.runInNewContext(fs.readFileSync('src/studio-canvas.js','utf8')+'\nHASSStudioCanvas;');
+const connectionShift=connectionLib.create({W:1200,H:720,colors:{},normalized:()=>({nodes:[],connections:[]}),pickLang:()=> 'pl',words:{pl:{}},clamp:(n,lo,hi,fb)=>Number.isFinite(Number(n))?Math.min(hi,Math.max(lo,Number(n))):fb,validEntity:()=>false,esc:String}).translateConnectionPoints;
 const points=[{x:40,y:50},{x:90,y:50},{x:90,y:150}];
-const shifted=pipeShift(points,23,-12);
+const shifted=connectionShift(points,23,-12);
 assert.equal(JSON.stringify(shifted),JSON.stringify([{x:65,y:40},{x:115,y:40},{x:115,y:140}]));
 assert.equal(points[0].x,40); // original vertices remain unchanged
-const boundary=pipeShift([{x:9998,y:70},{x:9999,y:70}],20,10);
+const boundary=connectionShift([{x:9998,y:70},{x:9999,y:70}],20,10);
 assert.equal(boundary[1].x,10000);
 const studio=fs.readFileSync('src/studio-custom.js','utf8');
 assert(studio.includes('id="ss-scheme-name"')&&studio.includes("const label=esc('Home Assistant System Studio')"));
-assert(studio.includes("drag={type:'pipe'")&&studio.includes("drag.type==='pipe'"));
+assert(studio.includes("drag={type:'connection'")&&studio.includes("drag.type==='connection'"));
 assert(studio.includes("drag.type!=='pan'&&drag.moved"));
-assert(studio.includes("lastPipePointer={id:obj.id")&&studio.includes("const pipeId=el?.dataset.id||fallback"));
+assert(studio.includes("lastConnectionPointer={id:obj.id")&&studio.includes("const connectionId=el?.dataset.id||fallback"));
 assert(studio.includes("renderProps();return; // Keep selection"));
 assert(studio.includes("stage.classList.add('ss-dragging')")&&studio.includes("stage.classList.remove('ss-dragging')"));
 assert(studio.includes("cursor:default")&&studio.includes("cursor:grabbing!important"));
