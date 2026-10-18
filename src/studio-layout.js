@@ -84,6 +84,9 @@ const HASSStudioLayout = (() => {
       visual:v.visual==='studio'?'studio':'warmwasser',
       variant:registry.normalizeVariant(v.type,v.variant),
       label:String(v.label||'').slice(0,64),
+      energy_role:HASSStudioEnergyTopology.node(v).role,
+      energy_ports:HASSStudioEnergyTopology.node(v).ports,
+      energy_buses:HASSStudioEnergyTopology.node(v).buses,
       entity:validEntity(v.entity)?v.entity:'',
       entities:(Array.isArray(v.entities)?v.entities:[]).slice(0,20).map(e=>({
         entity:validEntity(e.entity)?e.entity:'',label:String(e.label||'').slice(0,64)})),
@@ -102,6 +105,8 @@ const HASSStudioLayout = (() => {
       const style=v.style||{},a=v.animation||{},hydraulic=v.type==='hydraulic';
       return {
         id:v.id.slice(0,32),type:v.type,label:String(v.label||'').slice(0,64),
+        energy_start:HASSStudioEnergyTopology.connection(v).start,
+        energy_end:HASSStudioEnergyTopology.connection(v).end,
         points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
           x:clamp(q.x,-5000,10000,100),y:clamp(q.y,-5000,10000,100)})),
         style:{color:hydraulic&&colors[style.color]?style.color:hydraulic?'hot':'electric',
