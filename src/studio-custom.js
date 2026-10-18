@@ -240,6 +240,10 @@
       '.ss-props .ss-row{display:flex;align-items:center;gap:6px}.ss-props .ss-row>*{flex:1;min-width:0}'+
       '.ss-props .ss-row button{flex:0 0 auto}.ss-props input[type=range]{padding:0}'+
       '.ss-props label,.ss-props .ss-row{min-width:0}.ss-props .ss-row strong{overflow-wrap:anywhere}'+
+      '.ss-props .ss-metric-group{display:grid;gap:8px;border-top:1px solid var(--divider-color,#53677c);padding:11px 0}'+
+      '.ss-props .ss-metric-group>strong{font-size:12px}'+
+      '.ss-props .ss-metric-test{border:1px solid #aa8543;background:rgba(196,139,38,.10);border-radius:7px;padding:9px}'+
+      '.ss-props .ss-metric-test label{font-weight:600;color:var(--primary-text-color,#e4eaf0)}'+
       '.ss-props .ss-add-parts{display:flex;flex-wrap:wrap;gap:6px;min-width:0;width:100%}'+
       '.ss-props .ss-add-parts button{flex:0 1 auto;max-width:100%;white-space:normal;overflow-wrap:anywhere}'+
       '.ss-part-list{display:flex;flex-direction:column;gap:4px;max-height:210px;overflow-y:auto}'+

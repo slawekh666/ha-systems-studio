@@ -57,7 +57,9 @@ const HASSStudioEditorInspector = (() => {
             obj.type==='ev_charger'?HASSStudioEVCharger.normalize(obj):
             obj.type==='power_grid'?HASSStudioPowerGrid.normalize(obj):null;
           const mode=obj.energy_mode||
-            ((c?.mode==='manual'||obj.hp_test_mode===true)?'test':'ha');
+            (obj.energy_fallback_enabled===true?'auto':
+              obj.energy_fallback_enabled===false?'ha':
+              (c?.mode==='manual'||obj.hp_test_mode===true)?'test':'ha');
           const test=mode==='test'||mode==='auto'&&obj.energy_fallback_enabled===true;
           markup+=field('Źródło danych','energy_mode',mode,'text',
             [['auto','Automatycznie: HA → TEST'],['ha','Tylko Home Assistant'],['test','Symulacja ręczna']]);

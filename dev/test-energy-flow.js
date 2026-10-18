@@ -90,7 +90,7 @@ let old=layout.normalized({studio_layout:{nodes:[],connections:[
  {id:'old',type:'electric',points:[{x:12,y:13},{x:21,y:26}],animation:{flow_power_mode:'manual',flow_power_kw:2}}]}});
 assert.equal(old.connections[0].animation.flow_power_mode,'manual');
 assert.equal(old.connections[0].energy_start.node_id,'');
-assert.equal(flow.resolve(old,{states:{}}).balance.enabled,false);
+assert.equal(flow.resolve(old,{states:{}}).balance.enabled,true); // Existing electric cables now activate the balance.
 const moved=cfg([pv,home,grid,panel],cs,[{node_id:'grid',mode:'calculate'}]);
 const manualBends=JSON.stringify(moved.connections[0].points.slice(1));
 topology.moveAttached(moved,'pv');
