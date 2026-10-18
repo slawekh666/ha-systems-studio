@@ -194,6 +194,8 @@
       '.ss-launch button,.ss-bar button,.ss-library button,.ss-props button{color:var(--primary-text-color);background:var(--card-background-color,#29323c);border:1px solid var(--divider-color,#555);border-radius:8px;padding:9px;cursor:pointer;font:inherit}'+
       '.ss-launch button{background:var(--primary-color,#168bce);color:var(--text-primary-color,#fff)}'+
       '.ss-modal{position:fixed;inset:0;z-index:100000;background:var(--primary-background-color,#11191f);display:flex;flex-direction:column;padding:0;color:var(--primary-text-color)}'+
+      '.ss-energy-popover{position:absolute;z-index:12;right:12px;top:64px;width:min(410px,calc(100% - 24px));max-height:calc(100% - 86px);overflow:auto;padding:12px;background:var(--card-background-color,#17222c);border:1px solid var(--divider-color,#607083);border-radius:8px;box-shadow:0 6px 25px #0008}'+
+      '.ss-energy-popover[hidden]{display:none}'+
       '.ss-modal:not([open]){display:none}.ss-modal.ss-fullscreen{position:fixed;inset:0;width:100vw;height:100vh;max-width:none;max-height:none;border:0;margin:0;padding:0;box-sizing:border-box}'+
       '.ss-modal.ss-fullscreen::backdrop{background:#071018dd}.ss-modal.ss-fullscreen[open]{display:flex} .ss-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--divider-color,#555);flex-wrap:wrap}'+
       '.ss-bar strong{margin-right:auto}.ss-bar button{white-space:nowrap}'+
@@ -285,12 +287,12 @@
        '<button id="ss-all" type="button" title="'+esc(L.all)+'">▣</button>'+
        '<button id="ss-undo" type="button" title="'+esc(L.undo)+'">↶</button>'+
        '<button id="ss-redo" type="button" title="'+esc(L.redo)+'">↷</button>'+
-       '<button id="ss-size" type="button" title="'+esc(L.canvasSettings)+'">⚙</button>'+
+       '<button id="ss-balance-toggle" type="button" aria-expanded="false">⚡ Bilans</button>'+'<button id="ss-size" type="button" title="'+esc(L.canvasSettings)+'">⚙</button>'+
        '<button id="ss-shortcuts" type="button" title="'+esc(L.help)+'" aria-expanded="false" aria-controls="ss-help">?</button></div>'+
       '<button id="ss-duplicate" type="button">⧉ '+(pickLang(this._config,this._hass)==='en'?'Duplicate':'Duplikuj')+'</button>'+ 
        '<button id="ss-delete" type="button">'+esc(L.remove)+'</button>'+
       '<button id="ss-close" type="button">'+esc(L.close)+'</button></div>'+
-      '<div class="ss-settings" id="ss-settings" hidden><strong>'+esc(L.canvasSettings)+'</strong>'+
+      '<div class="ss-energy-popover" id="ss-energy-popover" hidden></div>'+'<div class="ss-settings" id="ss-settings" hidden><strong>'+esc(L.canvasSettings)+'</strong>'+
        '<label>'+esc(L.schemeName)+'<input type="text" maxlength="64" id="ss-scheme-name" placeholder="Kotłownia"></label>'+
        '<label>'+esc(L.canvasWidth)+' (300–5000)<input type="number" min="300" max="5000" step="1" id="ss-width"></label>'+
        '<label>'+esc(L.canvasHeight)+' (300–5000)<input type="number" min="300" max="5000" step="1" id="ss-height"></label>'+
@@ -311,7 +313,7 @@
       HASSStudioEditorLibrary.render({registry,language:pickLang(this._config,this._hass),esc})+
       '</div></aside><div class="ss-splitter" data-split="left" role="separator" aria-label="Resize left panel"></div><main class="ss-canvas"><div id="ss-stage" class="ss-stage"></div>'+
       '</main>'+
-      '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3><div id="ss-energy-controls"></div></aside></div></dialog>';
+      '<div class="ss-splitter" data-split="right" role="separator" aria-label="Resize right panel"></div><aside class="ss-props" id="ss-props"><h3>'+esc(L.properties)+'</h3></aside></div></dialog>';
     const modal=root.getElementById('ss-modal'),stage=root.getElementById('ss-stage'),properties=root.getElementById('ss-props');
     const splitterGrid=root.getElementById('ss-grid');
     for(const grip of root.querySelectorAll('.ss-splitter')){
@@ -356,17 +358,26 @@
         model.connections.find(x=>x.id===selection.id);
     };
     const renderBalance=()=>{
-      const e=get().energy_balance,host=root.getElementById('ss-energy-controls');if(!host)return;
-      const modes=[['device','Urządzenie'],['ha','HA'],['manual','Test'],['calculate','Oblicz'],['off','Wyłącz']];
-      const select=(list,value)=>list.map(([id,name])=>'<option value="'+id+'"'+(id===value?' selected':'')+'>'+name+'</option>').join('');
-      host.innerHTML='<h4>Bilans energii</h4><p class="ss-note">Automatyczny bilans chwilowej mocy podłączonych urządzeń.</p>'+
-        '<p>'+HASSStudioEnergyFlow.resolve(get(),this._hass).balance.networks.map(n=>n.state+' '+(n.residual_kw??'—')+' kW').join(' / ')+'</p>'+
-        '<h4>Diagnostyka</h4><label><input type="checkbox" data-diagnostics-enable'+(get().energy_diagnostics.enabled?' checked':'')+'> Pokaż panel w schemacie</label>'+
-        '<label><input type="checkbox" data-diagnostics-devices'+(get().energy_diagnostics.show_devices?' checked':'')+'> Lista urządzeń</label>'+
-        '<label><input type="checkbox" data-diagnostics-cables'+(get().energy_diagnostics.show_cables?' checked':'')+'> Przepływy przewodów</label>'+
-        '<label><input type="checkbox" data-diagnostics-warnings'+(get().energy_diagnostics.show_warnings?' checked':'')+'> Ostrzeżenia</label>'+
-        HASSStudioEnergyDiagnostics.render(get(),this._hass,pickLang(this._config,this._hass),'editor');
+      const host=root.getElementById('ss-energy-popover');if(!host)return;
+      const balance=HASSStudioEnergyFlow.resolve(get(),this._hass).balance;
+      const toggle=root.getElementById('ss-balance-toggle');
+      if(toggle){const count=balance.warnings.length+balance.networks.filter(n=>n.state!=='balanced').length;
+        toggle.textContent=count?'⚠ Bilans · '+count:balance.networks.length?'⚡ Bilans OK':'⚡ Bilans';}
+      host.innerHTML='<h4>Bilans energii</h4>'+
+        '<p class="ss-note">Bilans chwilowej mocy. Słup jest punktem wymiany, nie źródłem odczytu mocy.</p>'+
+        balance.networks.map(n=>'<p><strong>'+n.state+'</strong> · '+
+          (n.residual_kw===null?'—':n.residual_kw.toFixed(3)+' kW')+'</p>').join('')+
+        HASSStudioEnergyDiagnostics.render({...get(),
+          energy_diagnostics:{...get().energy_diagnostics,enabled:true,
+            show_devices:true,show_cables:true,show_warnings:true}},
+          this._hass,pickLang(this._config,this._hass),'editor');
     };
+    const balanceToggle=root.getElementById('ss-balance-toggle');
+    const balancePopover=root.getElementById('ss-energy-popover');
+    balanceToggle.addEventListener('click',()=>{
+      balancePopover.hidden=!balancePopover.hidden;
+      balanceToggle.setAttribute('aria-expanded',String(!balancePopover.hidden));
+    });
     properties.addEventListener('change',event=>{
       if(!event.target.matches('[data-diagnostics-enable],[data-diagnostics-devices],[data-diagnostics-cables],[data-diagnostics-warnings]'))return;
       const el=event.target,model=get(),e=model.energy_balance;
@@ -718,6 +729,8 @@
           const f=k.slice(7);c.manual=c.manual||{};
           if(f==='ac_power'){c.manual[f]=clamp(val,-500,500,0);obj.energy_test_configured=true;}
           if(f==='temperature')c.manual[f]=clamp(val,-40,150,25);
+           if(f==='status')c.manual[f]=['auto','generating','standby','off','fault'].includes(val)?val:'auto';
+           if(f==='alarm')c.manual[f]=val==='true';
         }else if(k.startsWith('pv_')){
           const match=/^pv_(\d+)_(name|visible|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
           if(match&&Number(match[1])<12){
@@ -743,7 +756,7 @@
               else if(field==='label')row.label=val.slice(0,42);
               else if(field==='entity')row.entity=validEntity(val)?val:'';
               else if(field==='unit')row.unit=['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].includes(val)?val:'auto';
-              else if(field==='input')row.input=clamp(val,0,11,0);
+              else if(field==='input')row.input=clamp(val,1,12,1)-1;
               else if(field==='decimals')row.decimals=clamp(val,0,3,1);
               else if(field==='manual_value')row.manual_value=val.slice(0,60);
             }

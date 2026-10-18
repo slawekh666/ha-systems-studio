@@ -42,6 +42,135 @@ const HASSStudioEditorInspector = (() => {
       const lang=pickLang(editor._config,editor._hass);
       const deviceName=selection.type==='connection'?(obj.type==='electric'?'Przewód elektryczny':'Rura'):
         (registry.resolve(obj.type,obj.variant)?.device?.[lang]||L[obj.type]||obj.type);
+      // One dedicated, nonduplicating inspector for the inverter. Other devices
+      // retain their existing inspector until their own migration is reviewed.
+      if(selection.type==='node'&&obj.type==='inverter'){
+        const c=HASSStudioInverter.normalize(obj);
+        const mode=obj.energy_mode||
+          (obj.energy_fallback_enabled===true?'auto':c.mode==='manual'?'test':'ha');
+        const test=mode==='test'||mode==='auto'&&obj.energy_fallback_enabled===true;
+        const sect=(id,label,icon,body,initial=false)=>
+          '<details class="ss-section-details" data-section="'+id+'"'+
+          (openSections.has(id)?(openSections.get(id)?' open':''):(initial?' open':''))+
+          '><summary>'+sectionIcon(icon)+'<span>'+label+'</span>'+
+          sectionIcon('mdi:chevron-down')+'</summary><section>'+body+'</section></details>';
+        const numeric=(title,entityKey,entityId,testKey,manual,step='0.1')=>
+          '<div class="ss-metric-group"><strong>'+esc(title)+'</strong>'+
+          field('Czujnik Home Assistant',entityKey,entityId||'','search',null,'list="ss-entity-list"')+
+          (test?'<div class="ss-metric-test">'+
+            field(title+' — TEST',testKey,manual??'','number',null,'step="'+step+'"')+'</div>':'')+
+          '</div>';
+        const selectMetric=(title,entityKey,entityId,testKey,val,choices)=>
+          '<div class="ss-metric-group"><strong>'+esc(title)+'</strong>'+
+          field('Encja Home Assistant',entityKey,entityId||'','search',null,'list="ss-entity-list"')+
+          (test?'<div class="ss-metric-test">'+field(title+' — TEST',testKey,val,'text',choices)+'</div>':'')+
+          '</div>';
+        markup+='<div class="ss-inspector-heading">'+sectionIcon('mdi:solar-power')+
+          '<span>'+esc(obj.label||deviceName)+'</span></div>';
+        let basics=field('Nazwa falownika','label',obj.label)+
+          field('Źródło danych','energy_mode',mode,'text',[
+            ['auto','Automatycznie: HA → TEST'],['ha','Tylko Home Assistant'],['test','Symulacja ręczna']]);
+        if(mode==='auto')basics+=field('Używaj wartości TEST, gdy brakuje odczytu HA',
+          'energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',
+          [['true','Tak'],['false','Nie']]);
+        basics+=field('Rodzaj grafiki','variant',obj.variant,'text',variantOptions(obj))+
+          field('Styl grafiki','visual',obj.visual,'text',styleOptions)+
+          '<div class="ss-preview"><svg viewBox="0 0 150 180" width="120" height="120">'+
+          HASSStudioInverter.render(obj,editor._hass)+'</svg></div>'+
+          field('Skala urządzenia','scale',obj.scale,'range',null,'min="0.5" max="2.4" step="0.1"')+
+          '<div class="ss-row">'+field('X','x',obj.x,'number')+field('Y','y',obj.y,'number')+'</div>'+
+          field('Skala ekranu falownika (%)','inv_display_scale',Math.round(c.display_scale*100),
+            'range',null,'min="40" max="150" step="5"')+
+          field('Liczba wejść PV / MPPT','inv_count',c.count,'number',null,'min="1" max="12" step="1"')+
+          field('Moc znamionowa falownika (kW)','inv_rated_kw',c.rated_kw,'number',null,
+            'min="0.1" max="500" step="0.1"')+
+          field('Pokaż panel parametrów','inv_show_extra',c.show_extra?'true':'false','text',
+            [['true','Tak'],['false','Nie']]);
+        if(c.show_extra)basics+=field('Nagłówek panelu','inv_panel_title',c.panel_title)+
+          field('Położenie panelu','inv_extra_position',c.extra_position,'text',
+            [['left','Lewa'],['right','Prawa']])+
+          field('Skala panelu (%)','inv_extra_scale',Math.round(c.extra_scale*100),
+            'range',null,'min="40" max="150" step="5"');
+        markup+=sect('inverter-basics','1. Podstawowe ustawienia i wygląd','mdi:tune-variant',basics,true);
+
+        let readings=numeric('Moc chwilowa falownika AC (kW)','inv_entity_ac_power',
+          c.entities.ac_power,'inv_manual_ac_power',c.manual.ac_power)+
+          numeric('Temperatura falownika (°C)','inv_entity_temperature',
+            c.entities.temperature,'inv_manual_temperature',c.manual.temperature)+
+          selectMetric('Stan pracy falownika','inv_entity_status',c.entities.status,
+            'inv_manual_status',c.manual.status,[
+              ['auto','Automatycznie z mocy AC'],['generating','Produkcja'],['standby','Czuwanie'],['off','Wyłączony'],
+              ['fault','Awaria']])+
+          selectMetric('Alarm falownika','inv_entity_alarm',c.entities.alarm,
+            'inv_manual_alarm',c.manual.alarm?'true':'false',[
+              ['false','Brak alarmu'],['true','Alarm']]);
+        readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
+        c.inputs.forEach((input,i)=>{
+          let fields=field('Nazwa wejścia','inv_pv_'+i+'_name',input.name)+
+            field('Pokaż na ekranie falownika','inv_pv_'+i+'_visible',
+              input.visible?'true':'false','text',[['true','Tak'],['false','Nie']])+
+            numeric('Napięcie '+input.name+' (V)','inv_pv_'+i+'_entity_voltage',
+              input.entities.voltage,'inv_pv_'+i+'_manual_voltage',input.manual.voltage)+
+            numeric('Prąd '+input.name+' (A)','inv_pv_'+i+'_entity_current',
+              input.entities.current,'inv_pv_'+i+'_manual_current',input.manual.current)+
+            numeric('Moc '+input.name+' (W)','inv_pv_'+i+'_entity_power',
+              input.entities.power,'inv_pv_'+i+'_manual_power',input.manual.power);
+          readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1),
+            'mdi:solar-panel',fields,false);
+        });
+        readings+='<p class="ss-note">Bilans używa tylko mocy AC. Odczyty PV są informacyjne i nie są dodawane drugi raz.</p>';
+        markup+=sect('inverter-data','2. Dane urządzenia','mdi:chart-line',readings,false);
+
+        let ports='<p class="ss-note">Końcówki przewodów można dopasować do portów. Port AC i wejścia DC nie mogą dzielić jednej szyny.</p>';
+        const labels=HASSStudioEnergyTopology.ports(obj);
+        ports+=labels.map((port,i)=>
+          '<div class="ss-energy-port-edit"><strong>'+esc(port.label||port.id)+'</strong>'+
+          field('Nazwa portu','energy_port_label',port.label,'text',null,'data-index="'+i+'"')+
+          field('Typ portu','energy_port_medium',port.medium,'text',
+            [['ac','AC'],['dc','DC']],'data-index="'+i+'"')+
+          field('Położenie X (%)','energy_port_x',port.x,'number',null,
+            'min="0" max="100" data-index="'+i+'"')+
+          field('Położenie Y (%)','energy_port_y',port.y,'number',null,
+            'min="0" max="100" data-index="'+i+'"')+
+          '<details><summary>Ustawienia techniczne portu</summary>'+
+          field('Szyna logiczna','energy_port_bus',port.bus,'text',null,
+            'data-index="'+i+'"')+'</details>'+
+          '<button type="button" data-remove-energy-port="'+i+'">Usuń port</button></div>'
+        ).join('');
+        ports+='<button type="button" data-add-energy-port>+ Dodaj port</button>';
+        markup+=sect('inverter-ports','3. Porty i połączenia','mdi:connection',ports,false);
+
+        let extra='<p class="ss-note">Parametry panelu korzystają z odczytów urządzenia. Własną encję przypisujesz tylko dla wiersza „Dowolna encja”.</p>';
+        const types=HASSStudioInverter.DEFAULT_KEYS.map(key=>[key,({
+          ac_power:'Moc AC',temperature:'Temperatura falownika',status:'Stan falownika',
+          alarm:'Alarm',pv_summary:'Podsumowanie wejścia PV',pv_voltage:'Napięcie PV',
+          pv_current:'Prąd PV',pv_power:'Moc PV',custom:'Dowolna encja HA'
+        })[key]]);
+        c.panel_rows.forEach((row,i)=>{
+          let fields=field('Wyświetlany parametr','inv_row_'+i+'_key',row.key,'text',types)+
+            field('Etykieta w panelu','inv_row_'+i+'_label',row.label);
+          if(row.key.startsWith('pv_'))
+            fields+=field('Wejście PV (1, 2, …)','inv_row_'+i+'_input',row.input+1,
+              'number',null,'min="1" max="'+c.count+'"');
+          if(row.key==='custom')
+            fields+=field('Encja Home Assistant','inv_row_'+i+'_entity',row.entity,
+              'search',null,'list="ss-entity-list"')+
+              (test?'<div class="ss-metric-test">'+
+                field('Wartość TEST','inv_row_'+i+'_manual_value',row.manual_value)+'</div>':'');
+          fields+=field('Jednostka','inv_row_'+i+'_unit',row.unit,'text',
+            ['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].map(k=>[k,k]))+
+            field('Miejsca po przecinku','inv_row_'+i+'_decimals',row.decimals,
+              'number',null,'min="0" max="3"')+
+            '<div class="ss-actions"><button type="button" data-inv-row-up="'+i+'">↑</button>'+
+            '<button type="button" data-inv-row-down="'+i+'">↓</button>'+
+            '<button type="button" data-inv-row-delete="'+i+'">Usuń</button></div>';
+          extra+=sect('inverter-row-'+i,esc(HASSStudioInverter.labelFor(row,c)),
+            'mdi:table-row',fields,false);
+        });
+        extra+='<button type="button" data-inv-row-add="true">+ Dodaj parametr panelu</button>';
+        markup+=sect('inverter-extra','4. Dodatkowe encje i parametry panelu',
+          'mdi:chart-timeline-variant',extra,false);
+      }else{
       markup+='<div class="ss-inspector-heading">'+sectionIcon(selection.type==='connection'?(obj.type==='electric'?'mdi:power-plug':'mdi:pipe'):(registry.categoryIcons[registry.resolve(obj.type,obj.variant)?.category]||'mdi:cube-outline'))+
         '<span>'+esc(obj.label||deviceName)+'</span></div>'+
         '<details class="ss-section-details" data-section="device"'+sectionAttr('device')+'><summary>'+
@@ -531,6 +660,7 @@ const HASSStudioEditorInspector = (() => {
             '<div class="ss-add-parts"><button type="button" data-add-accessory="pump">+ '+esc(L.pump)+'</button>'+
             '<button type="button" data-add-accessory="valve">+ '+esc(L.valve)+'</button></div></section>';
         }
+      }
       }
       const scroll=properties.scrollTop;
       properties.innerHTML=markup+'<datalist id="ss-entity-list">'+entityList()+'</datalist>';
