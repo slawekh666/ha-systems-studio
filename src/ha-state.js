@@ -38,7 +38,9 @@ const HASSStudioHA = (() => {
   // network balance. Explicit manual mode wins even over a valid HA zero.
   const powerInput=(node,h,id,test,legacy='live',signed=false)=>{
     const mode=['auto','ha','test'].includes(node?.energy_mode)?node.energy_mode:
-      node?.energy_fallback_enabled===true?'auto':legacy==='manual'?'test':'ha';
+      node?.energy_fallback_enabled===true?'auto':
+      node?.energy_fallback_enabled===false?'ha':
+      legacy==='manual'?'test':'ha';
     const r=reading(h,id);
     const measured=r&&['W','kW'].includes(r.unit)&&Number.isFinite(r.value)&&
       (signed||r.value>=0)?r.value/(r.unit==='W'?1000:1):null;
