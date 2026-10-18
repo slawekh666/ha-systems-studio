@@ -78,16 +78,16 @@ assert.equal(net.state,'invalid');
 assert(net.reasons.includes('invalid_direction_or_power'));
 assert(solve([grid,zero,boiler,pump]).balance.warnings.some(x=>x.reason==='building_child_exceeds_total'));
 
-// Grid HA import/export readings win against the calculated value, even when inconsistent.
+// Pylon is informational; grid exchange stays a residual even if legacy meter readings exist.
 const liveGrid={...grid,power_grid:{mode:'live',entities:{import_kw:'sensor.import',export_kw:'sensor.export'}}};
 hass={states:{
   'sensor.import':{state:'3.5',attributes:{unit_of_measurement:'kW'}},
   'sensor.export':{state:'0',attributes:{unit_of_measurement:'kW'}}
 }};
 net=solve([liveGrid,hn,boiler,pump],standard,hass).balance.networks[0];
-assert.equal(net.state,'balanced');assert.equal(entry(net,'grid').source,'measured');
+assert.equal(net.state,'balanced');assert.equal(entry(net,'grid').source,'calculated');
 hass.states['sensor.import'].state='2';
 net=solve([liveGrid,hn,boiler,pump],standard,hass).balance.networks[0];
-assert.equal(net.state,'unbalanced');
+assert.equal(net.state,'balanced');assert.equal(entry(net,'grid').source,'calculated');
 
-console.log('Unified energy: building subtree, nested loads, HA priority, missing/zero sensors, grid import and flow PASS');
+console.log('Unified energy: building subtree, nested loads, HA priority, missing/zero sensors, calculated grid and flow PASS');

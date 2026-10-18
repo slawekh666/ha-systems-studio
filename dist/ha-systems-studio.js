@@ -1016,7 +1016,24 @@ const HASSStudioHA = (() => {
     const value = String(entity(h, id)?.state ?? '').trim().toLowerCase();
     return ['on', 'open', 'active', 'running', 'heating', ...extraStates].includes(value);
   };
-  return Object.freeze({ entity, reading, temperature, powerKw, percentage, active });
+  // A single effective active-power reading is shared by device SVGs and the
+  // network balance. Explicit manual mode wins even over a valid HA zero.
+  const powerInput=(node,h,id,test,legacy='live',signed=false)=>{
+    const mode=['auto','ha','test'].includes(node?.energy_mode)?node.energy_mode:
+      node?.energy_fallback_enabled===true?'auto':
+      node?.energy_fallback_enabled===false?'ha':
+      legacy==='manual'?'test':'ha';
+    const r=reading(h,id);
+    const measured=r&&['W','kW'].includes(r.unit)&&Number.isFinite(r.value)&&
+      (signed||r.value>=0)?r.value/(r.unit==='W'?1000:1):null;
+    const manual=typeof test==='number'&&Number.isFinite(test)&&(signed||test>=0)?test:null;
+    if(mode==='test')return {kw:manual,source:manual===null?'missing':'simulated'};
+    if(measured!==null)return {kw:measured,source:'measured'};
+    const fallback=(mode==='auto'||node?.energy_mode==null)&&
+      node?.energy_fallback_enabled===true;
+    return {kw:fallback?manual:null,source:fallback&&manual!==null?'simulated':'missing'};
+  };
+  return Object.freeze({ entity, reading, temperature, powerKw, percentage, active, powerInput });
 })();
 
 
@@ -1909,8 +1926,9 @@ const HASSStudioHeatPump = (()=>{
       labelY:cy+((hasTestBadge?109.5:base.labelY)-cy)*sy,centerX:cx,centerY:cy,sx,sy};
   };
   const render=(node,hass)=>{
-    const manual=node.hp_test_mode===true;
-    const kw=manual?clamp(node.hp_manual_kw,0,500,0):power(hass,node.hp_power_entity);
+    const manual=node.energy_mode==='test'||(node.energy_mode==null&&node.hp_test_mode===true);
+    const kw=HASSStudioHA.powerInput(node,hass,node.hp_power_entity,node.hp_manual_kw,
+      node.hp_test_mode?'manual':'live').kw;
     const fanPct=manual?clamp(node.hp_manual_fan,0,100,0):null;
     const speed=manual?{percent:fanPct,label:Math.round(fanPct)+'%',unit:'%'}:fan(hass,node.hp_fan_entity,node.hp_max_rpm);
     const pct=speed?.percent??0, powered=pct>0;
@@ -2032,7 +2050,8 @@ const HASSStudioElectricBoiler=(()=>{
       const r=read(h,node.electric_load_entity);
       return r&&['','%','percent'].includes(r.unit)&&r.value>=0&&r.value<=100?r.value:null;
     }
-    const kw=power(h,node.electric_power_entity);
+    const kw=HASSStudioHA.powerInput(node,h,node.electric_power_entity,
+      node.energy_manual_kw,'live').kw;
     const rated=clamp(node.electric_max_kw,.1,100,8);
     return kw===null?null:clamp(kw/rated*100,0,100,0);
   };
@@ -2085,7 +2104,8 @@ const HASSStudioElectricBoiler=(()=>{
   const render=(node,h)=>{
     const kw=power(h,node.electric_power_entity);
     const t=temperature(h,node.entity);
-    const percent=load(h,node);
+    const percent=node.energy_mode==='test'&&kw!==null?
+      clamp(kw/clamp(node.electric_max_kw,.1,100,8)*100,0,100,0):load(h,node);
     const glow=clamp(node.electric_glow,0,100,60)/100;
     const active=percent!==null&&percent>0;
     const scale=geometry(node),knob=-130+260*(percent??0)/100;
@@ -2231,25 +2251,25 @@ const HASSStudioPowerGrid=(()=>{
    mode:raw.mode==='manual'?'manual':'live',
    entities:Object.fromEntries([...FIELDS,'grid_status','voltage_alarm','phase_loss'].map(k=>[k,typeof entities[k]==='string'?entities[k]:''])),
    manual:Object.fromEntries([...FIELDS,'grid_status','voltage_alarm','phase_loss'].map(k=>[k,num(manual[k],-10000,10000,d.manual[k])])),
-   show_extras:EXTRAS.filter(k=>Array.isArray(raw.show_extras)&&raw.show_extras.includes(k))};
+   show_extras:['frequency'].filter(k=>Array.isArray(raw.show_extras)&&raw.show_extras.includes(k))};
  };
  const reading=(key,conf,hass)=>{
-  if(conf.mode==='manual')return conf.manual[key];
+  if(conf.energy_mode==='test'||conf.energy_mode==null&&conf.mode==='manual')return conf.manual[key];
   const id=conf.entities[key];
-  if(!id||!/^[-\w]+\.[-\w]+$/.test(id))return null;
+  if(!id||!/^[-\w]+\.[-\w]+$/.test(id))return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
   const state=hass?.states?.[id];
-  if(!state||['unknown','unavailable','none',''].includes(String(state.state).toLowerCase()))return null;
+  if(!state||['unknown','unavailable','none',''].includes(String(state.state).toLowerCase()))return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
   const n=Number(state.state);
-  if(!Number.isFinite(n))return null;
+  if(!Number.isFinite(n))return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
   const unit=String(state.attributes?.unit_of_measurement||'').trim();
   if(key==='total_kw'||key==='import_kw'||key==='export_kw'){
    if(unit==='W')return n/1000;
    if(unit===''||unit==='kW')return n;
    return null;
   }
-  if(key.endsWith('_v')&&unit!==''&&unit!=='V')return null;
-  if(key.endsWith('_a')&&unit!==''&&unit!=='A')return null;
-  if(key==='frequency'&&unit!==''&&unit!=='Hz')return null;
+  if(key.endsWith('_v')&&unit!==''&&unit!=='V')return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
+  if(key.endsWith('_a')&&unit!==''&&unit!=='A')return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
+  if(key==='frequency'&&unit!==''&&unit!=='Hz')return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
   if(key==='power_factor'&&unit!==''&&unit!=='%'&&unit!=='1')return null;
   return n;
  };
@@ -2263,7 +2283,7 @@ const HASSStudioPowerGrid=(()=>{
   return null;
  };
  const resolve=(node,hass)=>{
-  const c=normalize(node);const phase={};let alarm=false;
+  const c={...normalize(node),energy_mode:node?.energy_mode||null,fallback:node?.energy_fallback_enabled===true};const phase={};let alarm=false;
   for(const n of [1,2,3]){
    const v=reading('l'+n+'_v',c,hass),a=reading('l'+n+'_a',c,hass);
    const voltageAlert=v!==null&&(v<c.min_voltage||v>c.max_voltage);
@@ -2588,13 +2608,10 @@ const HASSStudioEnergyStorage=(()=>{
     return null;
   };
   const data=(node,h)=>{
-    const c=normalize(node),e=c.entities;
-    let soc=c.mode==='manual'?c.manual.soc:reading(h,e.soc,['%','percent',''],0,100);
-    let power=c.mode==='manual'?c.manual.power:null;
-    if(c.mode==='live'){
-      const r=HASSStudioHA.reading(h,e.power);
-      if(r&&['W','kW'].includes(r.unit))power=r.value/(r.unit==='W'?1000:1);
-    }
+    const c=normalize(node),e=c.entities,
+      manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
+    let soc=manual?c.manual.soc:reading(h,e.soc,['%','percent',''],0,100);
+    let power=HASSStudioHA.powerInput(node,h,e.power,c.manual.power,c.mode,true).kw;
     const optional={};
     if(c.mode==='live'){
       const defs={
@@ -2723,11 +2740,8 @@ const HASSStudioInverter=(()=>{
      ['off','normal','ok','clear'].includes(value)?'ok':null;
  };
  const data=(node,h)=>{
-   const c=normalize(node),manual=c.mode==='manual';
-   const power=manual?c.manual.ac_power:(()=>{
-     const r=HASSStudioHA.reading(h,c.entities.ac_power);
-     return r&&['W','kW'].includes(r.unit)&&Number.isFinite(r.value)?r.value/(r.unit==='W'?1000:1):null;
-   })();
+   const c=normalize(node),manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
+   const power=HASSStudioHA.powerInput(node,h,c.entities.ac_power,c.manual.ac_power,c.mode,true).kw;
    const temperature=manual?c.manual.temperature:read(h,c.entities.temperature,['°C','C',''], -40,150);
    const fault=manual?false:status(h,c.entities.alarm)==='alarm'||status(h,c.entities.status)==='alarm';
    const generating=power===null?null:((c.positive_power?power:-power)*1000>c.production_threshold_w);
@@ -2916,9 +2930,10 @@ const HASSStudioEVCharger=(()=>{
   return ['on','true','1','alarm','fault','error','critical'].includes(s);
  };
  const data=(node,h)=>{
-  const c=normalize(node),manual=c.mode==='manual';
+  const c=normalize(node),manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
   const get=(key,kind)=>manual?(key==='power'?c.manual.power:key==='session_energy'?c.manual.session_energy:null):reading(h,c.entities[key],null,kind);
-  const power=get('power','power'),session=get('session_energy','energy');
+  const power=HASSStudioHA.powerInput(node,h,c.entities.power,c.manual.power,c.mode,true).kw,
+    session=get('session_energy','energy');
   const diagnostics={};
   for(const k of numeric.filter(k=>!['power','session_energy'].includes(k))){
     const kind=k.endsWith('_energy')?'energy':k==='temperature'?'temp':k==='vehicle_soc'?'soc':k.startsWith('voltage')?'v':'a';
@@ -2994,7 +3009,8 @@ const HASSStudioBuilding=(()=>{
  };
  const data=(node,h)=>{
   const c=normalize(node);
-  const power=c.mode==='manual'?c.power_kw:numeric(h,c.power_entity,'power');
+  const power=HASSStudioHA.powerInput(node,h,c.power_entity,
+    c.measurement==='individual'&&c.remaining_enabled?c.remaining_kw:c.power_kw,c.mode).kw;
   const daily=c.mode==='manual'?c.daily_kwh:numeric(h,c.daily_entity,'energy');
   return {c,power,daily,measurement:c.measurement};
  };
@@ -3244,60 +3260,59 @@ const HASSStudioEnergyBalance=(()=>{
   const preferred=(live,manual,enabled)=>live!==null?{kw:live,source:'measured'}:
     enabled&&manual!==null?{kw:manual,source:'simulated'}:{kw:null,source:'missing'};
   const deviceReading=(n,h,p)=>{
-    const type=n.type;
-    if(type==='inverter'){
-      const d=HASSStudioInverter.data(n,h);
-      const v=preferred(powerEntity(h,d.c.entities.ac_power),d.c.manual.ac_power,
-        fallbackAllowed(n,d.c.mode));
-      return {kw:v.kw===null?null:(d.c.positive_power?v.kw:-v.kw),source:v.source};
+    const read=(id,test,legacy='live',signed=false)=>
+      HASSStudioHA.powerInput(n,h,id,test,legacy,signed);
+    let v;
+    if(n.type==='inverter'){
+      const c=HASSStudioInverter.normalize(n);
+      v=read(c.entities.ac_power,c.manual.ac_power,c.mode,true);
+      return {kw:v.kw===null?null:(c.positive_power?v.kw:-v.kw),source:v.source};
     }
-    if(type==='building'){
-      const d=HASSStudioBuilding.data(n,h);
-      const backup=d.c.measurement==='individual'&&d.c.remaining_enabled===true?
-        d.c.remaining_kw:d.c.power_kw;
-      const v=preferred(powerEntity(h,d.c.power_entity),backup,
-        fallbackAllowed(n,d.c.mode));
+    if(n.type==='building'){
+      const c=HASSStudioBuilding.normalize(n);
+      const backup=c.measurement==='individual'&&c.remaining_enabled?c.remaining_kw:c.power_kw;
+      v=read(c.power_entity,backup,c.mode);
       return {kw:v.kw===null?null:-v.kw,source:v.source};
     }
-    if(type==='ev_charger'){
-      const d=HASSStudioEVCharger.data(n,h);
-      const v=preferred(powerEntity(h,d.c.entities.power),d.c.manual.power,
-        fallbackAllowed(n,d.c.mode));
-      return {kw:v.kw===null?null:(d.c.charging_positive?-v.kw:v.kw),source:v.source};
+    if(n.type==='ev_charger'){
+      const c=HASSStudioEVCharger.normalize(n);
+      v=read(c.entities.power,c.manual.power,c.mode,true);
+      return {kw:v.kw===null?null:(c.charging_positive?-v.kw:v.kw),source:v.source};
     }
-    if(type==='energy_storage'){
-      const d=HASSStudioEnergyStorage.data(n,h);
-      const v=preferred(powerEntity(h,d.c.entities.power),d.c.manual.power,
-        fallbackAllowed(n,d.c.mode));
-      return {kw:v.kw===null?null:(d.c.charge_positive?-v.kw:v.kw),source:v.source};
+    if(n.type==='energy_storage'){
+      const c=HASSStudioEnergyStorage.normalize(n);
+      v=read(c.entities.power,c.manual.power,c.mode,true);
+      return {kw:v.kw===null?null:(c.charge_positive?-v.kw:v.kw),source:v.source};
     }
-    if(type==='power_grid'){
-      const c=HASSStudioPowerGrid.normalize(n);
-      let kw=null;
-      if(p.grid_strategy==='signed_total'){
-        kw=HASSStudioPowerGrid.reading('total_kw',c,h);
-      }else{
-        const incoming=HASSStudioPowerGrid.reading('import_kw',c,h);
-        const outgoing=HASSStudioPowerGrid.reading('export_kw',c,h);
-        if(incoming!==null&&outgoing!==null&&incoming>=0&&outgoing>=0)
-          kw=incoming-outgoing;
+    if(n.type==='power_grid'){
+      // The pylon is a visual boundary, never an independent power source.
+      // Legacy explicit grid-meter setups remain readable until edited.
+      if(n.energy_grid_auto===true){
+        return {kw:null,source:'missing'};
       }
-      const measured=p.grid_strategy==='signed_total'?powerEntity(h,c.entities.total_kw):
-        (()=>{const i=powerEntity(h,c.entities.import_kw),e=powerEntity(h,c.entities.export_kw);return i!==null&&e!==null?i-e:null;})();
-      const backup=p.grid_strategy==='signed_total'?c.manual.total_kw:c.manual.import_kw-c.manual.export_kw;
-      return preferred(measured,backup,fallbackAllowed(n,c.mode));
+      const c=HASSStudioPowerGrid.normalize(n);
+      const i=powerEntity(h,c.entities.import_kw),e=powerEntity(h,c.entities.export_kw);
+      const total=powerEntity(h,c.entities.total_kw);
+      const measured=p.grid_strategy==='signed_total'?total:
+        i!==null&&e!==null?i-e:null;
+      const manual=p.grid_strategy==='signed_total'?c.manual.total_kw:
+        c.manual.import_kw-c.manual.export_kw;
+      return HASSStudioHA.powerInput(n,h,
+        p.grid_strategy==='signed_total'?c.entities.total_kw:'',
+        manual,c.mode,true).source==='simulated'?
+        {kw:manual,source:'simulated'}:{kw:measured,source:measured===null?'missing':'measured'};
     }
     if(n.type==='pump'){
-      const v=preferred(powerEntity(h,n.energy_power_entity),n.energy_manual_kw,n.energy_fallback_enabled===true);
+      v=read(n.energy_power_entity,n.energy_manual_kw,'live');
       return {kw:v.kw===null?null:-v.kw,source:v.source};
     }
     if(n.type==='boiler'){
       if(['electric','electric_modern'].includes(n.variant)){
-        const v=preferred(powerEntity(h,n.electric_power_entity),n.energy_manual_kw,n.energy_fallback_enabled===true);
+        v=read(n.electric_power_entity,n.energy_manual_kw,'live');
         return {kw:v.kw===null?null:-v.kw,source:v.source};
       }
       if(['heatpump','heatpump_modern'].includes(n.variant)){
-        const v=preferred(powerEntity(h,n.hp_power_entity),n.hp_manual_kw,fallbackAllowed(n,n.hp_test_mode===true?'manual':'live'));
+        v=read(n.hp_power_entity,n.hp_manual_kw,n.hp_test_mode?'manual':'live');
         return {kw:v.kw===null?null:-v.kw,source:v.source};
       }
     }
@@ -3327,9 +3342,9 @@ const HASSStudioEnergyBalance=(()=>{
     }else{
       const r=deviceReading(n,h,p);
       kw=r.kw;source=kw===null?'missing':r.source;
-      if(n.type==='power_grid'&&n.energy_grid_auto===true&&p.mode==='device'&&source!=='measured')
+      if(n.type==='power_grid'&&n.energy_grid_auto===true&&p.mode==='device')
         return {mode:'calculate',source:'pending',injection_kw:null};
-      if(scenario==='live'&&source==='simulated'&&n.energy_fallback_enabled!==true){
+      if(scenario==='live'&&source==='simulated'&&n.energy_mode==null&&n.energy_fallback_enabled!==true){
         kw=null;source='missing';
       }
     }
@@ -3511,7 +3526,10 @@ const HASSStudioEnergyBalance=(()=>{
     for(const n of allNodes){
       const role=HASSStudioEnergyTopology.node(n).role;
       if(!roles.includes(role))continue;
-      const p=overrides.get(n.id)||participant({node_id:n.id});
+      const p=n.type==='power_grid'&&n.energy_grid_auto===true?
+        participant({node_id:n.id,mode:'calculate'}):
+        n.energy_mode!=null?participant({node_id:n.id}):
+        overrides.get(n.id)||participant({node_id:n.id});
       if(p.mode==='off')continue;
       const ports=HASSStudioEnergyTopology.ports(n);
       let matches=ports.filter(port=>keyGroup.has(n.id+':'+(port.bus||port.id)));
@@ -4314,6 +4332,8 @@ const HASSStudioLayout = (() => {
       variant:registry.normalizeVariant(v.type,v.variant),
       label:String(v.label||'').slice(0,64),
       energy_fallback_enabled:typeof v.energy_fallback_enabled==='boolean'?v.energy_fallback_enabled:null,
+      energy_mode:['auto','ha','test'].includes(v.energy_mode)?v.energy_mode:null,
+      energy_test_configured:v.energy_test_configured===true,
        energy_grid_auto:v.energy_grid_auto===true,
        energy_power_entity:validEntity(v.energy_power_entity)?v.energy_power_entity:'',
        energy_manual_kw:v.energy_manual_kw==null?null:clamp(v.energy_manual_kw,0,10000,0),
@@ -4356,7 +4376,8 @@ const HASSStudioLayout = (() => {
       };
     }).filter(v=>v.points.length>=2);
     return {width,height,name:String(source.name||'').trim().slice(0,64),
-      energy_balance:HASSStudioEnergyBalance.normalize(source.energy_balance),
+      energy_balance:{...HASSStudioEnergyBalance.normalize(source.energy_balance),
+        enabled:connections.some(c=>c.type==='electric')},
       energy_diagnostics:HASSStudioEnergyDiagnostics.normalize(source.energy_diagnostics),
       nodes,connections};
   };
@@ -4652,30 +4673,81 @@ const HASSStudioEditorInspector = (() => {
         sectionIcon('mdi:tune-variant')+'<span>'+esc(obj.type==='tank'?(L.tankSettings||'Ustawienia zbiornika'):(L.properties||'Właściwości'))+'</span>'+
         sectionIcon('mdi:chevron-down')+'</summary><section>'+field(L.name,'label',obj.label);
       if(selection.type==='node'){
-        if((typeof HASSStudioEnergyTopology!=='undefined'&&HASSStudioEnergyTopology.electricalType(obj))){
-          markup+=field('Rola elektryczna','energy_role',obj.energy_role,'text',
-            [['source','Źródło'],['load','Odbiornik'],['grid','Sieć'],['storage','Magazyn'],['junction','Węzeł / rozdzielnica'],['neutral','Neutralna']]);
-          markup+='<h4>Porty elektryczne (AC/DC)</h4>';
-          markup+=(obj.energy_ports||[]).map((p,i)=>'<div class="ss-energy-port-edit">'+
-            '<strong>'+esc(p.id)+'</strong>'+
-            field('Etykieta','energy_port_label',p.label,'text',null,'data-index="'+i+'"')+
-            field('Typ','energy_port_medium',p.medium,'text',[['ac','AC'],['dc','DC']],'data-index="'+i+'"')+
-            field('Szyna','energy_port_bus',p.bus,'text',null,'data-index="'+i+'"')+
-            field('X (%)','energy_port_x',p.x,'number',null,'min="0" max="100" step="1" data-index="'+i+'"')+
-            field('Y (%)','energy_port_y',p.y,'number',null,'min="0" max="100" step="1" data-index="'+i+'"')+
-            '<button type="button" data-remove-energy-port="'+i+'">Usuń port</button></div>').join('');
-          markup+='<button type="button" data-add-energy-port>+ Dodaj port AC/DC</button>'+
-            '<p class="ss-note">Porty można przesuwać ręcznie. Port child budynku zasila jego odbiorniki. Szyna logicznie łączy porty.</p>';
+
+        const electrical=typeof HASSStudioEnergyTopology!=='undefined'&&HASSStudioEnergyTopology.electricalType(obj);
+        if(electrical&&obj.type!=='distribution_board'){
+          const c=obj.type==='inverter'?HASSStudioInverter.normalize(obj):
+            obj.type==='building'?HASSStudioBuilding.normalize(obj):
+            obj.type==='energy_storage'?HASSStudioEnergyStorage.normalize(obj):
+            obj.type==='ev_charger'?HASSStudioEVCharger.normalize(obj):
+            obj.type==='power_grid'?HASSStudioPowerGrid.normalize(obj):null;
+          const mode=obj.energy_mode||
+            (obj.energy_fallback_enabled===true?'auto':
+              obj.energy_fallback_enabled===false?'ha':
+              (c?.mode==='manual'||obj.hp_test_mode===true)?'test':'ha');
+          const test=mode==='test'||mode==='auto'&&obj.energy_fallback_enabled===true;
+          markup+=field('Źródło danych','energy_mode',mode,'text',
+            [['auto','Automatycznie: HA → TEST'],['ha','Tylko Home Assistant'],['test','Symulacja ręczna']]);
+          if(mode==='auto')markup+=field('Wartość testowa, gdy czujnik HA nie działa',
+            'energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',
+            [['true','Włączona'],['false','Wyłączona']]);
+          const metric=(title,entityKey,entity,testKey,testValue,unit='kW')=>{
+            markup+='<div class="ss-metric-group"><strong>'+esc(title)+'</strong>'+
+              field('Czujnik Home Assistant',entityKey,entity||'','search',null,'list="ss-entity-list"');
+            if(test)markup+='<div class="ss-metric-test">'+
+              field(title+' — TEST',testKey,testValue??'','number',null,'step="0.01"')+'</div>';
+            markup+='</div>';
+          };
+          if(obj.type==='power_grid'){
+            const grid=HASSStudioPowerGrid.normalize(obj);
+            for(const phase of [1,2,3]){
+              metric('Napięcie fazy L'+phase+' (V)','grid_entity_l'+phase+'_v',grid.entities['l'+phase+'_v'],
+                'grid_manual_l'+phase+'_v',grid.manual['l'+phase+'_v'],'V');
+              metric('Prąd fazy L'+phase+' (A)','grid_entity_l'+phase+'_a',grid.entities['l'+phase+'_a'],
+                'grid_manual_l'+phase+'_a',grid.manual['l'+phase+'_a'],'A');
+            }
+            metric('Częstotliwość sieci (Hz)','grid_entity_frequency',grid.entities.frequency,
+              'grid_manual_frequency',grid.manual.frequency,'Hz');
+            markup+='<p class="ss-note">Słup wyświetla tylko parametry sieci. Bilans automatycznie oblicza import i eksport z mocy falownika, magazynu i odbiorników.</p>';
+          }else if(obj.type==='inverter')
+            metric('Moc chwilowa falownika (kW)','inv_entity_ac_power',c.entities.ac_power,
+              'inv_manual_ac_power',c.manual.ac_power);
+          else if(obj.type==='building')
+            metric('Moc chwilowa budynku (kW)','building_power_entity',c.power_entity,
+              'building_power_kw',c.power_kw);
+          else if(obj.type==='energy_storage')
+            metric('Moc magazynu (kW): dodatnia — ładowanie','storage_entity_power',c.entities.power,
+              'storage_manual_power',c.manual.power);
+          else if(obj.type==='ev_charger')
+            metric('Moc pobierana przez ładowarkę (kW)','ev_entity_power',c.entities.power,
+              'ev_manual_power',c.manual.power);
+          else if(obj.type==='pump')
+            metric('Moc pobierana przez pompę (W)','energy_power_entity',obj.energy_power_entity,
+              'energy_manual_w',obj.energy_manual_kw===null?'':+(obj.energy_manual_kw*1000).toFixed(2),'W');
+          else if(obj.type==='boiler'&&['electric','electric_modern'].includes(obj.variant))
+            metric('Moc pobierana przez kocioł (kW)','electric_power_entity',obj.electric_power_entity,
+              'energy_manual_kw',obj.energy_manual_kw);
+          else if(obj.type==='boiler'&&['heatpump','heatpump_modern'].includes(obj.variant))
+            metric('Moc elektryczna pompy ciepła (kW)','hp_power_entity',obj.hp_power_entity,
+              'hp_manual_kw',obj.hp_manual_kw);
         }
-        if((typeof HASSStudioEnergyTopology!=='undefined'&&HASSStudioEnergyTopology.electricalType(obj))&&obj.type!=='distribution_board'){
-           markup+='<h4>Bilans elektryczny</h4>'+
-             field('Test przy braku danych HA','energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',[['true','Włączony'],['false','Wyłączony']]);
-           if(obj.type==='power_grid')markup+=field('Automatycznie obliczaj moc sieci','energy_grid_auto',obj.energy_grid_auto?'true':'false','text',[['true','Tak'],['false','Nie']]);
-           if(obj.type==='pump'||obj.type==='boiler'&&['electric','electric_modern'].includes(obj.variant)){
-             if(obj.type==='pump')markup+=field('Czujnik mocy (W/kW)','energy_power_entity',obj.energy_power_entity,'search',null,'list="ss-entity-list"');
-             markup+=field('Test mocy (kW)','energy_manual_kw',obj.energy_manual_kw??'','number',null,'min="0" step="0.01"');
-           }
-         }
+        if(electrical)markup+='<details class="ss-section-details" data-section="electrical-advanced"'+
+          (openSections.get('electrical-advanced')===true?' open':'')+
+          '><summary>'+sectionIcon('mdi:tune')+'<span>Dodatkowe parametry i wygląd</span></summary><section>';
+        if(electrical){
+          markup+='<details data-section="energy-ports"'+
+            (openSections.get('energy-ports')===true?' open':'')+
+            '><summary>Porty — ustawienia zaawansowane</summary>';
+          markup+=(obj.energy_ports||[]).map((port,i)=>'<div class="ss-energy-port-edit">'+
+            '<strong>'+esc(port.label||port.id)+'</strong>'+
+            field('Nazwa','energy_port_label',port.label,'text',null,'data-index="'+i+'"')+
+            field('AC / DC','energy_port_medium',port.medium,'text',[['ac','AC'],['dc','DC']],'data-index="'+i+'"')+
+            field('Szyna','energy_port_bus',port.bus,'text',null,'data-index="'+i+'"')+
+            field('Położenie X (%)','energy_port_x',port.x,'number',null,'data-index="'+i+'"')+
+            field('Położenie Y (%)','energy_port_y',port.y,'number',null,'data-index="'+i+'"')+
+            '<button type="button" data-remove-energy-port="'+i+'">Usuń port</button></div>').join('');
+          markup+='<button type="button" data-add-energy-port>+ Dodaj port AC/DC</button></details>';
+        }
          markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
         const isGrid=obj.type==='power_grid';
@@ -4730,8 +4802,8 @@ const HASSStudioEditorInspector = (() => {
 
         if(isBuilding){
           const c=HASSStudioBuilding.normalize(obj);
-          markup+=field('Źródło danych','building_mode',c.mode,'text',[['live','Home Assistant'],['manual','Symulacja']]);
-          markup+=field('Moc odbiornika (W/kW)','building_power_entity',c.power_entity,'search',null,'list="ss-entity-list"');
+          
+          
           markup+=field('Zużycie dzienne (Wh/kWh/MWh)','building_daily_entity',c.daily_entity,'search',null,'list="ss-entity-list"');
           markup+=field('Typ pomiaru','building_measurement',c.measurement,'text',
             [['individual','Pozostały pobór (bez głównego licznika)'],['aggregate','Łączny pobór domu wraz z odbiornikami za nim']]);
@@ -4741,14 +4813,14 @@ const HASSStudioEditorInspector = (() => {
           markup+=field('Pokaż odczyt','building_show_readout',c.show_readout?'true':'false','text',[['true','Tak'],['false','Nie']]);
           markup+=field('Skala odczytu (%)','building_readout_scale',Math.round(c.readout_scale*100),'range',null,'min="40" max="150" step="5"');
           markup+=field('Podświetlaj okna przy poborze','building_window_glow',c.window_glow?'true':'false','text',[['true','Tak'],['false','Nie']]);
-          if(c.mode==='manual')markup+=field('Test mocy (kW)','building_power_kw',c.power_kw,'number',null,'min="0" step="0.1"')+
+          if(c.mode==='manual')markup+=
              field('Test zużycia dziennego (kWh)','building_daily_kwh',c.daily_kwh,'number',null,'min="0" step="0.1"');
           markup+='<p class="ss-note">Udział energii PV i sieci to osobny bilans. Pomiar zbiorczy nie jest dodawany do jego odbiorników.</p>';
         }
         if(isEV){
           const d=HASSStudioEVCharger.normalize(obj);
           const yes=(k,label)=>field(label,'ev_'+k,d[k]?'true':'false','text',[['true','Tak'],['false','Nie']]);
-          markup+=field('Źródło danych','ev_mode',d.mode,'text',[['live','Home Assistant'],['manual','Symulacja']]);
+          
           markup+=field('Liczba faz','ev_phases',d.phases,'text',[['1','Jedna'],['3','Trzy']]);
           markup+=field('Próg ładowania (W)','ev_power_threshold_w',d.power_threshold_w,'number',null,'min="0" max="1000" step="1"');
           markup+=field('Skala ekranu (%)','ev_display_scale',Math.round(d.display_scale*100),'range',null,'min="40" max="150" step="5"');
@@ -4759,11 +4831,12 @@ const HASSStudioEditorInspector = (() => {
           markup+='<h4>Encje ładowarki i liczniki energii</h4>';
           const labels={power:'Aktualna moc (W/kW)',session_energy:'Energia sesji (Wh/kWh)',daily_energy:'Energia dzienna',monthly_energy:'Energia miesięczna',total_energy:'Energia całkowita',status:'Status ładowarki',alarm:'Alarm',temperature:'Temperatura',vehicle_soc:'SOC samochodu',voltage_l1:'Napięcie L1',voltage_l2:'Napięcie L2',voltage_l3:'Napięcie L3',current_l1:'Prąd L1',current_l2:'Prąd L2',current_l3:'Prąd L3'};
           for(const key of HASSStudioEVCharger.keys){
+            if(key==='power')continue;
             if(d.phases===1&&/_(?:l2|l3)$/.test(key))continue;
             markup+=field(labels[key]||key,'ev_entity_'+key,d.entities[key]||'','search',null,'list="ss-entity-list"');
           }
           if(d.mode==='manual'){
-            markup+=field('Test mocy (kW)','ev_manual_power',d.manual.power,'number',null,'step="0.1"');
+            
             markup+=field('Test energii sesji (kWh)','ev_manual_session_energy',d.manual.session_energy,'number',null,'min="0" step="0.1"');
             markup+=field('Test statusu','ev_manual_status',d.manual.status,'text',[['charging','Ładowanie'],['ready','Gotowość'],['disconnected','Niepodłączona'],['fault','Awaria']]);
             markup+=field('Test alarmu','ev_manual_alarm',d.manual.alarm?'true':'false','text',[['false','Brak'],['true','Alarm']]);
@@ -4773,7 +4846,7 @@ const HASSStudioEditorInspector = (() => {
         if(isInverter){
           const c=HASSStudioInverter.normalize(obj);
           const bool=(k,label)=>field(label,'inv_'+k,c[k]?'true':'false','text',[['true','Tak'],['false','Nie']]);
-          markup+=field('Źródło danych','inv_mode',c.mode,'text',[['live','Home Assistant'],['manual','Test ręczny']])+
+          markup+=
             field('Skala ekranu (%)','inv_display_scale',Math.round(c.display_scale*100),'range',null,'min="40" max="150" step="5"')+
             field('Liczba wejść PV / MPPT','inv_count',c.count,'number',null,'min="1" max="12" step="1"')+
             field('Moc znamionowa (kW)','inv_rated_kw',c.rated_kw,'number',null,'min="0.1" max="500" step="0.1"')+
@@ -4782,10 +4855,9 @@ const HASSStudioEditorInspector = (() => {
             bool('show_extra','Pokaż panel parametrów')+
             field('Pozycja panelu','inv_extra_position',c.extra_position,'text',[['right','Prawo'],['left','Lewo']])+
             field('Skala dodatkowego panelu (%)','inv_extra_scale',Math.round(c.extra_scale*100),'range',null,'min="40" max="150" step="5"');
-          for(const [k,title] of [['ac_power','Moc wyjściowa AC'],['temperature','Temperatura falownika'],['status','Status falownika'],['alarm','Alarm falownika']])
+          for(const [k,title] of [['temperature','Temperatura falownika'],['status','Status falownika'],['alarm','Alarm falownika']])
             markup+=field(title,'inv_entity_'+k,c.entities[k]||'','search',null,'list="ss-entity-list"');
-          if(c.mode==='manual')markup+=field('Test mocy AC (kW)','inv_manual_ac_power',c.manual.ac_power,'number',null,'step="0.1"')+
-            field('Test temperatury (°C)','inv_manual_temperature',c.manual.temperature,'number',null,'step="0.1"');
+          if(c.mode==='manual')markup+=field('Test temperatury (°C)','inv_manual_temperature',c.manual.temperature,'number',null,'step="0.1"');
           markup+='<h4>Wejścia fotowoltaiczne</h4>';
           c.inputs.forEach((q,i)=>{
             markup+='<details><summary>PV / MPPT '+(i+1)+'</summary>';
@@ -4815,7 +4887,7 @@ const HASSStudioEditorInspector = (() => {
         if(isStorage){
           const c=HASSStudioEnergyStorage.normalize(obj);
           const bool=(key,title)=>field(title,'storage_'+key,c[key]?'true':'false','text',[['true','Tak'],['false','Nie']]);
-          markup+=field('Źródło danych','storage_mode',c.mode,'text',[['live','Home Assistant'],['manual','Test ręczny']]);
+          
           markup+=field('Skala ekranu (%)','storage_display_scale',Math.round(c.display_scale*100),'range',null,'min="40" max="150" step="5"');
           markup+=bool('show_screen','Pokaż ekran')+bool('animate_charge','Animacja podczas ładowania');
           markup+=bool('charge_positive','Dodatnia moc oznacza ładowanie');
@@ -4838,14 +4910,13 @@ const HASSStudioEditorInspector = (() => {
           markup+=bool('offline_alarm','Alarm braku komunikacji SOC');
           markup+='<h4>Encje magazynu i BMS</h4>';
           for(const [key,label] of [
-            ['soc','SOC (%)'],['power','Moc (W/kW)'],['soh','SOH (%)'],
+            ['soc','SOC (%)'],['soh','SOH (%)'],
             ['voltage','Napięcie baterii (V)'],['current','Prąd (A)'],
             ['temperature','Temperatura (°C)'],['cell_min','Minimalne napięcie celi (V)'],
             ['cell_max','Maksymalne napięcie celi (V)'],['cell_delta','Różnica ogniw (mV)'],
             ['cycles','Liczba cykli'],['bms_alarm','Alarm BMS (binary sensor/status)']
           ])markup+=field(label,'storage_entity_'+key,c.entities[key]||'','search',null,'list="ss-entity-list"');
-          if(c.mode==='manual')markup+=field('Test SOC (%)','storage_manual_soc',c.manual.soc,'number',null,'min="0" max="100"')+
-            field('Test mocy (kW)','storage_manual_power',c.manual.power,'number',null,'min="-500" max="500" step="0.1"');
+          if(c.mode==='manual')markup+=field('Test SOC (%)','storage_manual_soc',c.manual.soc,'number',null,'min="0" max="100"');
           markup+='<p class="ss-note">Progi i alarmy służą wyłącznie do prezentacji. Nie zmieniają ustawień falownika ani BMS.</p>';
         }
         if(isRadiator){
@@ -4879,33 +4950,17 @@ const HASSStudioEditorInspector = (() => {
           }
         }
         if(isGrid){
-          const g=obj.power_grid||HASSStudioPowerGrid.defaults();
-          const togg=(key,name)=>field(name,'grid_'+key,g[key]===false?'false':'true','text',[['true','Tak'],['false','Nie']]);
-          markup+=field('Skala panelu (%)','grid_panel_scale',Math.round((g.panel_scale??.7)*100),'range',null,'min="40" max="150" step="5"');
-          markup+=field('Motyw kontrastu','grid_theme',g.theme||'auto','text',[['auto','Automatyczny'],['light','Jasne tło'],['dark','Ciemne tło']]);
-          markup+=field('Panel danych','grid_panel_position',g.panel_position||'right','text',
-            [['right','Prawo'],['left','Lewo'],['bottom','Pod słupem']]);
-          markup+='<div class="ss-row">'+field('Przesunięcie X','grid_panel_x',g.panel_x||0,'number')+
-            field('Przesunięcie Y','grid_panel_y',g.panel_y||0,'number')+'</div>';
-          markup+=field('Źródło danych','grid_mode',g.mode||'live','text',
-            [['live','Home Assistant'],['manual','Symulacja ręczna']]);
-          markup+=togg('show_panel','Pokaż panel')+togg('show_v','Pokaż V')+togg('show_a','Pokaż A');
-          for(const n of [1,2,3])markup+=togg('show_l'+n,'Pokaż L'+n);
-          const extras=[['total_kw','Moc całkowita'],['import_kw','Pobór z sieci'],['export_kw','Oddawanie do sieci'],
-            ['frequency','Częstotliwość'],['power_factor','cos φ'],['grid_status','Dostępność sieci'],
-            ['voltage_alarm','Alarm napięcia'],['phase_loss','Brak fazy']];
-          markup+='<h4>Dodatkowe dane — opcjonalne</h4>';
-          for(const [key,name] of extras)markup+=field(name,'grid_extra_'+key,
-            (g.show_extras||[]).includes(key)?'true':'false','text',[['false','Ukryj'],['true','Pokaż']]);
-          markup+=field('Napięcie alarmowe min (V)','grid_min_voltage',g.min_voltage,'number')+
-                  field('Napięcie alarmowe max (V)','grid_max_voltage',g.max_voltage,'number');
-          markup+='<h4>Encje / wartości testowe</h4>';
-          for(const key of [...HASSStudioPowerGrid.FIELDS,'grid_status','voltage_alarm','phase_loss']){
-            markup+=field('Encja '+key,'grid_entity_'+key,g.entities?.[key]||'','search',null,'list="ss-entity-list"');
-            if(g.mode==='manual')markup+=field('Test '+key,'grid_manual_'+key,g.manual?.[key]??0,'number',null,'step="0.01"');
-          }
-          markup+='<p class="ss-note">Brak encji: —. Symulacja nie wysyła komend do HA.</p>';
-        }else markup+=field(L.entity,'entity',obj.entity,'search',null,'list="ss-entity-list"');
+          const g=HASSStudioPowerGrid.normalize(obj);
+          markup+='<h4>Wygląd panelu słupa</h4>'+
+            field('Pokaż częstotliwość (Hz)','grid_extra_frequency',
+              g.show_extras.includes('frequency')?'true':'false','text',[['true','Tak'],['false','Nie']])+
+            field('Skala panelu (%)','grid_panel_scale',Math.round(g.panel_scale*100),'range',null,'min="40" max="150" step="5"')+
+            field('Pozycja panelu','grid_panel_position',g.panel_position,'text',[['right','Prawo'],['left','Lewo'],['bottom','Pod słupem']])+
+            field('Pokaż panel','grid_show_panel',g.show_panel?'true':'false','text',[['true','Tak'],['false','Nie']]);
+                }else if(!electrical||obj.type==='pump'||obj.type==='boiler')
+          markup+=field(obj.type==='pump'?'Stan pompy — czujnik HA':
+            obj.type==='boiler'?'Temperatura kotła — czujnik HA':L.entity,
+            'entity',obj.entity,'search',null,'list="ss-entity-list"');
         if(['pump','valve'].includes(obj.type)){
           markup+=field('Źródło stanu','eq_mode',obj.equipment_mode||'live','text',
             [['live','Home Assistant'],['manual','Test ręczny']]);
@@ -4920,8 +4975,7 @@ const HASSStudioEditorInspector = (() => {
         }
         if(obj.type==='boiler'){
           if(obj.variant==='fireplace_modern')markup+='<p class="ss-note">'+esc(L.fireplaceHelp)+'</p>';
-          if(obj.variant==='electric_modern')markup+=field(L.electricPower,'electric_power_entity',obj.electric_power_entity,'search',null,'list="ss-entity-list"')+
-            field(L.electricLoad,'electric_load_entity',obj.electric_load_entity,'search',null,'list="ss-entity-list"')+
+          if(obj.variant==='electric_modern')markup+=field(L.electricLoad,'electric_load_entity',obj.electric_load_entity,'search',null,'list="ss-entity-list"')+
             field(L.electricMax,'electric_max_kw',obj.electric_max_kw,'number',null,'min="0.1" max="100" step="0.1"')+
             field(L.electricGlow,'electric_glow',obj.electric_glow,'range',null,'min="0" max="100" step="5"')+
             '<p class="ss-note">'+esc(L.electricHelp)+'</p>';
@@ -4951,9 +5005,9 @@ const HASSStudioEditorInspector = (() => {
              }
              markup+=field(L.pelletAlarm,'pellet_alarm_pct',obj.pellet_alarm_pct??20,'number',null,'min="0" max="100" step="1"');
            }
-          if(obj.variant==='heatpump_modern')markup+=field('Tryb testowy pompy','hp_test_mode',obj.hp_test_mode?'true':'false','text',[['false','Home Assistant'],['true','Symulacja ręczna']])+
-             (obj.hp_test_mode?field('Test mocy (kW)','hp_manual_kw',obj.hp_manual_kw??0,'number',null,'min="0" max="500" step="0.1"')+field('Test wentylatora (%)','hp_manual_fan',obj.hp_manual_fan??0,'number',null,'min="0" max="100" step="1"'):'')+
-             field(L.hpPower,'hp_power_entity',obj.hp_power_entity,'search',null,'list="ss-entity-list"')+
+          if(obj.variant==='heatpump_modern')markup+=
+             (obj.hp_test_mode?field('Test wentylatora (%)','hp_manual_fan',obj.hp_manual_fan??0,'number',null,'min="0" max="100" step="1"'):'')+
+             
             field(L.hpFan,'hp_fan_entity',obj.hp_fan_entity,'search',null,'list="ss-entity-list"')+
             field(L.hpMaxRpm,'hp_max_rpm',obj.hp_max_rpm,'number',null,'min="100" max="20000" step="100"')+
             field(L.hpGlow,'hp_glow',obj.hp_glow,'range',null,'min="0" max="100" step="5"');
@@ -4981,6 +5035,7 @@ const HASSStudioEditorInspector = (() => {
           markup+=field(L.solarOnDelta,'solar_on_delta',obj.solar_on_delta,'number',null,'min="1" max="40" step="0.5"');
           markup+=field(L.solarOffDelta,'solar_off_delta',obj.solar_off_delta,'number',null,'min="0" max="39" step="0.5"');
         }
+        if(electrical)markup+='</section></details>';
         markup+='</section></details><details class="ss-section-details" data-section="entities"'+sectionAttr('entities')+'><summary>'+
            sectionIcon('mdi:chart-timeline-variant')+'<span>'+esc(L.entities)+'</span>'+sectionIcon('mdi:chevron-down')+
            '</summary><section>'+
@@ -5426,6 +5481,10 @@ const HASSStudioEditorLibrary=(()=>{
       '.ss-props .ss-row{display:flex;align-items:center;gap:6px}.ss-props .ss-row>*{flex:1;min-width:0}'+
       '.ss-props .ss-row button{flex:0 0 auto}.ss-props input[type=range]{padding:0}'+
       '.ss-props label,.ss-props .ss-row{min-width:0}.ss-props .ss-row strong{overflow-wrap:anywhere}'+
+      '.ss-props .ss-metric-group{display:grid;gap:8px;border-top:1px solid var(--divider-color,#53677c);padding:11px 0}'+
+      '.ss-props .ss-metric-group>strong{font-size:12px}'+
+      '.ss-props .ss-metric-test{border:1px solid #aa8543;background:rgba(196,139,38,.10);border-radius:7px;padding:9px}'+
+      '.ss-props .ss-metric-test label{font-weight:600;color:var(--primary-text-color,#e4eaf0)}'+
       '.ss-props .ss-add-parts{display:flex;flex-wrap:wrap;gap:6px;min-width:0;width:100%}'+
       '.ss-props .ss-add-parts button{flex:0 1 auto;max-width:100%;white-space:normal;overflow-wrap:anywhere}'+
       '.ss-part-list{display:flex;flex-direction:column;gap:4px;max-height:210px;overflow-y:auto}'+
@@ -5541,17 +5600,8 @@ const HASSStudioEditorLibrary=(()=>{
       const e=get().energy_balance,host=root.getElementById('ss-energy-controls');if(!host)return;
       const modes=[['device','Urządzenie'],['ha','HA'],['manual','Test'],['calculate','Oblicz'],['off','Wyłącz']];
       const select=(list,value)=>list.map(([id,name])=>'<option value="'+id+'"'+(id===value?' selected':'')+'>'+name+'</option>').join('');
-      host.innerHTML='<h4>Bilans energii</h4><label><input type="checkbox" data-balance-enable'+(e.enabled?' checked':'')+'> Włącz</label>'+
-        '<label>Tryb<select data-balance-scenario>'+select([['live','HA'],['hybrid','Hybrydowy'],['simulation','Symulacja']],e.scenario)+'</select></label>'+
-        get().nodes.filter(n=>HASSStudioEnergyTopology.electricalType(n)&&HASSStudioEnergyTopology.node(n).role!=='junction').map(n=>{
-          const o=e.participants.find(x=>x.node_id===n.id)||{mode:'device',manual_kw:0,entity:''};
-          return '<div data-participant="'+esc(n.id)+'"><strong>'+esc(n.label||n.id)+'</strong>'+
-          '<label>Źródło<select data-balance-mode>'+select(modes,o.mode)+'</select></label>'+
-          (o.mode==='manual'?'<label>kW<input type="number" step="0.01" data-balance-kw value="'+o.manual_kw+'"></label>':'')+
-          (o.mode==='ha'?'<label>Encja<input type="search" data-balance-entity value="'+esc(o.entity)+'"></label>':'')+'</div>';
-        }).join('')+
-        (e.enabled?'<p>'+HASSStudioEnergyFlow.resolve(get(),this._hass).balance.networks.map(n=>n.state+' '+(n.residual_kw??'—')+' kW').join(' / ')+'</p>':'')+
-        '<p class="ss-note">Test i obliczenia nie są pomiarami HA.</p>'+
+      host.innerHTML='<h4>Bilans energii</h4><p class="ss-note">Automatyczny bilans chwilowej mocy podłączonych urządzeń.</p>'+
+        '<p>'+HASSStudioEnergyFlow.resolve(get(),this._hass).balance.networks.map(n=>n.state+' '+(n.residual_kw??'—')+' kW').join(' / ')+'</p>'+
         '<h4>Diagnostyka</h4><label><input type="checkbox" data-diagnostics-enable'+(get().energy_diagnostics.enabled?' checked':'')+'> Pokaż panel w schemacie</label>'+
         '<label><input type="checkbox" data-diagnostics-devices'+(get().energy_diagnostics.show_devices?' checked':'')+'> Lista urządzeń</label>'+
         '<label><input type="checkbox" data-diagnostics-cables'+(get().energy_diagnostics.show_cables?' checked':'')+'> Przepływy przewodów</label>'+
@@ -5559,7 +5609,7 @@ const HASSStudioEditorLibrary=(()=>{
         HASSStudioEnergyDiagnostics.render(get(),this._hass,pickLang(this._config,this._hass),'editor');
     };
     properties.addEventListener('change',event=>{
-      if(!event.target.matches('[data-balance-enable],[data-balance-scenario],[data-balance-mode],[data-balance-kw],[data-balance-entity],[data-diagnostics-enable],[data-diagnostics-devices],[data-diagnostics-cables],[data-diagnostics-warnings]'))return;
+      if(!event.target.matches('[data-diagnostics-enable],[data-diagnostics-devices],[data-diagnostics-cables],[data-diagnostics-warnings]'))return;
       const el=event.target,model=get(),e=model.energy_balance;
       if(el.matches('[data-diagnostics-enable]'))model.energy_diagnostics.enabled=el.checked;
       else if(el.matches('[data-diagnostics-devices]'))model.energy_diagnostics.show_devices=el.checked;
@@ -5663,7 +5713,7 @@ const HASSStudioEditorLibrary=(()=>{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:position?position.x:80+(n%6)*170,y:position?position.y:100+Math.floor(n/6)*170,
-          energy_ports:HASSStudioEnergyTopology.defaultPorts({type:kind,variant:preset}),energy_fallback_enabled:false,energy_grid_auto:kind==='power_grid',energy_power_entity:'',energy_manual_kw:null,
+          energy_ports:HASSStudioEnergyTopology.defaultPorts({type:kind,variant:preset}),energy_mode:'auto',energy_fallback_enabled:false,energy_test_configured:false,energy_grid_auto:kind==='power_grid',energy_power_entity:'',energy_manual_kw:null,
            scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,pellet_test_mode:false,pellet_manual_state:'burning',pellet_manual_temperature:65,pellet_manual_power_unit:'%',pellet_manual_power:65,pellet_manual_feeder:false,pellet_manual_alarm:false,pellet_burner_power_entity:'',pellet_feeder_entity:'',pellet_alarm_entity:'',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,equipment_mode:'live',equipment_test_running:false,equipment_test_speed:1,equipment_test_position:0,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?{...HASSStudioBuilding.defaults(),measurement:'aggregate',remaining_kw:0}:undefined,entities:[],parts:[]};
         if(HASSStudioEnergyTopology.electricalType(node))model.energy_balance.enabled=true;
          model.nodes.push(node);selection={type:'node',id:node.id};
@@ -5825,14 +5875,22 @@ const HASSStudioEditorLibrary=(()=>{
         const side=key.slice('energy_attach_'.length),parts=val.split(':');
         if(['start','end'].includes(side))HASSStudioEnergyTopology.attach(model,obj,side,
           val?{node_id:parts[0],port_id:parts[1]}:null);
-      }else if(selection.type==='node'&&key==='energy_fallback_enabled'){
-         obj.energy_fallback_enabled=val==='true';
+      }else if(selection.type==='node'&&key==='energy_mode'){
+         obj.energy_mode=['auto','ha','test'].includes(val)?val:'ha';
+         model.energy_balance.participants=model.energy_balance.participants.filter(p=>p.node_id!==obj.id);
+         model.energy_balance.scenario='hybrid';
+         obj.energy_test_configured=true;
+       }else if(selection.type==='node'&&key==='energy_manual_w'){
+         obj.energy_manual_kw=val===''?null:clamp(val,0,10000000,0)/1000;
+         obj.energy_test_configured=true;
+       }else if(selection.type==='node'&&key==='energy_fallback_enabled'){
+         obj.energy_fallback_enabled=val==='true';obj.energy_test_configured=true;
        }else if(selection.type==='node'&&key==='energy_grid_auto'){
          obj.energy_grid_auto=val==='true';
        }else if(selection.type==='node'&&key==='energy_power_entity'){
          obj.energy_power_entity=validEntity(val)?val:'';
        }else if(selection.type==='node'&&key==='energy_manual_kw'){
-         obj.energy_manual_kw=val===''?null:clamp(val,0,10000,0);
+         obj.energy_manual_kw=val===''?null:clamp(val,0,10000,0);obj.energy_test_configured=true;
        }else if(selection.type==='node'&&key==='energy_role'){
         obj.energy_role=HASSStudioEnergyTopology.role(val);
       }else if(selection.type==='node'&&key.startsWith('energy_port_')){
@@ -5870,7 +5928,7 @@ const HASSStudioEditorLibrary=(()=>{
         else if(['power_entity','daily_entity'].includes(k))c[k]=validEntity(val)?val:'';
         else if(['show_readout','window_glow'].includes(k))c[k]=val==='true';
         else if(k==='readout_scale')c[k]=clamp(val,40,150,100)/100;
-        else if(k==='power_kw')c[k]=clamp(val,0,10000,0);
+        else if(k==='power_kw'){c[k]=clamp(val,0,10000,0);obj.energy_test_configured=true;}
         else if(k==='daily_kwh')c[k]=clamp(val,0,1000000,0);
       }else if(obj.type==='ev_charger'&&key.startsWith('ev_')){
         const e=obj.ev_charger=obj.ev_charger||HASSStudioEVCharger.defaults(),k=key.slice(3);
@@ -5882,7 +5940,7 @@ const HASSStudioEditorLibrary=(()=>{
           const name=k.slice(7);e.manual=e.manual||{};
           if(name==='status')e.manual.status=['charging','ready','disconnected','fault'].includes(val)?val:'ready';
           else if(name==='alarm')e.manual.alarm=val==='true';
-          else if(name==='power')e.manual.power=clamp(val,-500,500,0);
+          else if(name==='power'){e.manual.power=clamp(val,-500,500,0);obj.energy_test_configured=true;}
           else if(name==='session_energy')e.manual.session_energy=clamp(val,0,100000,0);
         }else if(k==='mode')e.mode=val==='manual'?'manual':'live';
         else if(k==='phases')e.phases=val==='1'?1:3;
@@ -5899,7 +5957,7 @@ const HASSStudioEditorLibrary=(()=>{
           }
         }else if(k.startsWith('manual_')){
           const f=k.slice(7);c.manual=c.manual||{};
-          if(f==='ac_power')c.manual[f]=clamp(val,-500,500,0);
+          if(f==='ac_power'){c.manual[f]=clamp(val,-500,500,0);obj.energy_test_configured=true;}
           if(f==='temperature')c.manual[f]=clamp(val,-40,150,25);
         }else if(k.startsWith('pv_')){
           const match=/^pv_(\d+)_(name|visible|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
@@ -6047,7 +6105,7 @@ const HASSStudioEditorLibrary=(()=>{
       }else if(['x','y','scale','width','solid_glow','gas_glow','electric_glow','electric_max_kw','hp_glow','hp_max_rpm','hp_manual_kw','hp_manual_fan','pellet_level_test','pellet_alarm_pct','pellet_manual_temperature','pellet_manual_power','flow_speed','burner_on_temp','burner_off_temp','solar_on_delta','solar_off_delta'].includes(key)){
         const min={scale:0.5,width_scale:0.5,height_scale:0.5,width:3,solid_glow:0,gas_glow:0,electric_glow:0,electric_max_kw:0.1,hp_glow:0,hp_max_rpm:100,hp_manual_kw:0,hp_manual_fan:0,pellet_level_test:0,pellet_alarm_pct:0,pellet_manual_temperature:-40,pellet_manual_power:0,flow_speed:0.35,burner_on_temp:20,burner_off_temp:10,solar_on_delta:1,solar_off_delta:0};
         const max={scale:2.4,width_scale:2.4,height_scale:2.4,width:14,solid_glow:100,gas_glow:100,electric_glow:100,electric_max_kw:100,hp_glow:100,hp_max_rpm:20000,hp_manual_kw:500,hp_manual_fan:100,pellet_level_test:100,pellet_alarm_pct:100,pellet_manual_temperature:150,pellet_manual_power:obj.pellet_manual_power_unit==='kW'?500:100,flow_speed:5,burner_on_temp:90,burner_off_temp:89,solar_on_delta:40,solar_off_delta:39,x:W,y:H};
-        obj[key]=clamp(val,min[key]??0,max[key],obj[key]);
+        obj[key]=clamp(val,min[key]??0,max[key],obj[key]);if(key==='hp_manual_kw')obj.energy_test_configured=true;
       }else if(['label','variant','color','entity','visual','flow_mode','flow_direction','flow_entity','pellet_level_entity','pellet_level_manual','pellet_test_mode','pellet_manual_state','pellet_manual_power_unit','pellet_manual_feeder','pellet_manual_alarm','pellet_burner_power_entity','pellet_feeder_entity','pellet_alarm_entity','burner_entity','gas_draw_entity','electric_power_entity','electric_load_entity','hp_power_entity','hp_fan_entity','hp_test_mode','burner_mode','solid_fuel','solid_state','pump_entity','tank_entity','cap_start','cap_end','flow_power_mode','flow_pattern','flow_power_direction','flow_power_entity'].includes(key)){
         if(['entity','flow_entity','pellet_level_entity','pellet_burner_power_entity','pellet_feeder_entity','pellet_alarm_entity','burner_entity','gas_draw_entity','electric_power_entity','electric_load_entity','hp_power_entity','hp_fan_entity','pump_entity','tank_entity'].includes(key))obj[key]=validEntity(val)?val:'';
         else if(key==='pellet_level_manual')obj.pellet_level_manual=val==='true';

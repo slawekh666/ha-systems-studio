@@ -85,6 +85,8 @@ const HASSStudioLayout = (() => {
       variant:registry.normalizeVariant(v.type,v.variant),
       label:String(v.label||'').slice(0,64),
       energy_fallback_enabled:typeof v.energy_fallback_enabled==='boolean'?v.energy_fallback_enabled:null,
+      energy_mode:['auto','ha','test'].includes(v.energy_mode)?v.energy_mode:null,
+      energy_test_configured:v.energy_test_configured===true,
        energy_grid_auto:v.energy_grid_auto===true,
        energy_power_entity:validEntity(v.energy_power_entity)?v.energy_power_entity:'',
        energy_manual_kw:v.energy_manual_kw==null?null:clamp(v.energy_manual_kw,0,10000,0),
@@ -127,7 +129,8 @@ const HASSStudioLayout = (() => {
       };
     }).filter(v=>v.points.length>=2);
     return {width,height,name:String(source.name||'').trim().slice(0,64),
-      energy_balance:HASSStudioEnergyBalance.normalize(source.energy_balance),
+      energy_balance:{...HASSStudioEnergyBalance.normalize(source.energy_balance),
+        enabled:connections.some(c=>c.type==='electric')},
       energy_diagnostics:HASSStudioEnergyDiagnostics.normalize(source.energy_diagnostics),
       nodes,connections};
   };

@@ -32,8 +32,9 @@ const HASSStudioHeatPump = (()=>{
       labelY:cy+((hasTestBadge?109.5:base.labelY)-cy)*sy,centerX:cx,centerY:cy,sx,sy};
   };
   const render=(node,hass)=>{
-    const manual=node.hp_test_mode===true;
-    const kw=manual?clamp(node.hp_manual_kw,0,500,0):power(hass,node.hp_power_entity);
+    const manual=node.energy_mode==='test'||(node.energy_mode==null&&node.hp_test_mode===true);
+    const kw=HASSStudioHA.powerInput(node,hass,node.hp_power_entity,node.hp_manual_kw,
+      node.hp_test_mode?'manual':'live').kw;
     const fanPct=manual?clamp(node.hp_manual_fan,0,100,0):null;
     const speed=manual?{percent:fanPct,label:Math.round(fanPct)+'%',unit:'%'}:fan(hass,node.hp_fan_entity,node.hp_max_rpm);
     const pct=speed?.percent??0, powered=pct>0;

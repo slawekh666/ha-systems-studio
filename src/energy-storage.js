@@ -37,13 +37,10 @@ const HASSStudioEnergyStorage=(()=>{
     return null;
   };
   const data=(node,h)=>{
-    const c=normalize(node),e=c.entities;
-    let soc=c.mode==='manual'?c.manual.soc:reading(h,e.soc,['%','percent',''],0,100);
-    let power=c.mode==='manual'?c.manual.power:null;
-    if(c.mode==='live'){
-      const r=HASSStudioHA.reading(h,e.power);
-      if(r&&['W','kW'].includes(r.unit))power=r.value/(r.unit==='W'?1000:1);
-    }
+    const c=normalize(node),e=c.entities,
+      manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
+    let soc=manual?c.manual.soc:reading(h,e.soc,['%','percent',''],0,100);
+    let power=HASSStudioHA.powerInput(node,h,e.power,c.manual.power,c.mode,true).kw;
     const optional={};
     if(c.mode==='live'){
       const defs={

@@ -34,5 +34,22 @@ const HASSStudioHA = (() => {
     const value = String(entity(h, id)?.state ?? '').trim().toLowerCase();
     return ['on', 'open', 'active', 'running', 'heating', ...extraStates].includes(value);
   };
-  return Object.freeze({ entity, reading, temperature, powerKw, percentage, active });
+  // A single effective active-power reading is shared by device SVGs and the
+  // network balance. Explicit manual mode wins even over a valid HA zero.
+  const powerInput=(node,h,id,test,legacy='live',signed=false)=>{
+    const mode=['auto','ha','test'].includes(node?.energy_mode)?node.energy_mode:
+      node?.energy_fallback_enabled===true?'auto':
+      node?.energy_fallback_enabled===false?'ha':
+      legacy==='manual'?'test':'ha';
+    const r=reading(h,id);
+    const measured=r&&['W','kW'].includes(r.unit)&&Number.isFinite(r.value)&&
+      (signed||r.value>=0)?r.value/(r.unit==='W'?1000:1):null;
+    const manual=typeof test==='number'&&Number.isFinite(test)&&(signed||test>=0)?test:null;
+    if(mode==='test')return {kw:manual,source:manual===null?'missing':'simulated'};
+    if(measured!==null)return {kw:measured,source:'measured'};
+    const fallback=(mode==='auto'||node?.energy_mode==null)&&
+      node?.energy_fallback_enabled===true;
+    return {kw:fallback?manual:null,source:fallback&&manual!==null?'simulated':'missing'};
+  };
+  return Object.freeze({ entity, reading, temperature, powerKw, percentage, active, powerInput });
 })();

@@ -13,7 +13,8 @@ const HASSStudioElectricBoiler=(()=>{
       const r=read(h,node.electric_load_entity);
       return r&&['','%','percent'].includes(r.unit)&&r.value>=0&&r.value<=100?r.value:null;
     }
-    const kw=power(h,node.electric_power_entity);
+    const kw=HASSStudioHA.powerInput(node,h,node.electric_power_entity,
+      node.energy_manual_kw,'live').kw;
     const rated=clamp(node.electric_max_kw,.1,100,8);
     return kw===null?null:clamp(kw/rated*100,0,100,0);
   };
@@ -66,7 +67,8 @@ const HASSStudioElectricBoiler=(()=>{
   const render=(node,h)=>{
     const kw=power(h,node.electric_power_entity);
     const t=temperature(h,node.entity);
-    const percent=load(h,node);
+    const percent=node.energy_mode==='test'&&kw!==null?
+      clamp(kw/clamp(node.electric_max_kw,.1,100,8)*100,0,100,0):load(h,node);
     const glow=clamp(node.electric_glow,0,100,60)/100;
     const active=percent!==null&&percent>0;
     const scale=geometry(node),knob=-130+260*(percent??0)/100;
