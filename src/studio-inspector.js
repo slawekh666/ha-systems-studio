@@ -61,7 +61,7 @@ const HASSStudioEditorInspector = (() => {
             field('Y (%)','energy_port_y',p.y,'number',null,'min="0" max="100" step="1" data-index="'+i+'"')+
             '<button type="button" data-remove-energy-port="'+i+'">Usuń port</button></div>').join('');
           markup+='<button type="button" data-add-energy-port>+ Dodaj port AC/DC</button>'+
-            '<p class="ss-note">Wspólna nazwa szyny łączy porty logicznie. Przecięcie przewodów ich nie łączy.</p>';
+            '<p class="ss-note">Porty można przesuwać ręcznie. Port child budynku zasila jego odbiorniki. Szyna logicznie łączy porty.</p>';
         }
         if((typeof HASSStudioEnergyTopology!=='undefined'&&HASSStudioEnergyTopology.electricalType(obj))&&obj.type!=='distribution_board'){
            markup+='<h4>Bilans elektryczny</h4>'+
@@ -130,7 +130,10 @@ const HASSStudioEditorInspector = (() => {
           markup+=field('Moc odbiornika (W/kW)','building_power_entity',c.power_entity,'search',null,'list="ss-entity-list"');
           markup+=field('Zużycie dzienne (Wh/kWh/MWh)','building_daily_entity',c.daily_entity,'search',null,'list="ss-entity-list"');
           markup+=field('Typ pomiaru','building_measurement',c.measurement,'text',
-            [['individual','Tylko ten budynek'],['aggregate','Pomiar zbiorczy, obejmuje inne odbiorniki']]);
+            [['individual','Pozostały pobór (bez głównego licznika)'],['aggregate','Łączny pobór domu wraz z odbiornikami za nim']]);
+          if(c.measurement==='individual')markup+=field('Ręczny pozostały pobór','building_remaining_enabled',c.remaining_enabled?'true':'false','text',[['true','Tak'],['false','Nie']])+
+            (c.remaining_enabled?field('Pozostały pobór testowy (kW)','building_remaining_kw',c.remaining_kw,'number',null,'min="0" step="0.01"'):'');
+          markup+='<p class="ss-note">Urządzenia podłączone do portu child automatycznie wydzielają swój pobór z całkowitego pomiaru budynku.</p>';
           markup+=field('Pokaż odczyt','building_show_readout',c.show_readout?'true':'false','text',[['true','Tak'],['false','Nie']]);
           markup+=field('Skala odczytu (%)','building_readout_scale',Math.round(c.readout_scale*100),'range',null,'min="40" max="150" step="5"');
           markup+=field('Podświetlaj okna przy poborze','building_window_glow',c.window_glow?'true':'false','text',[['true','Tak'],['false','Nie']]);

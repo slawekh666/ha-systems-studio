@@ -50,7 +50,9 @@ const HASSStudioEnergyBalance=(()=>{
     }
     if(type==='building'){
       const d=HASSStudioBuilding.data(n,h);
-      const v=preferred(powerEntity(h,d.c.power_entity),d.c.power_kw,
+      const backup=d.c.measurement==='individual'&&d.c.remaining_enabled===true?
+        d.c.remaining_kw:d.c.power_kw;
+      const v=preferred(powerEntity(h,d.c.power_entity),backup,
         fallbackAllowed(n,d.c.mode));
       return {kw:v.kw===null?null:-v.kw,source:v.source};
     }

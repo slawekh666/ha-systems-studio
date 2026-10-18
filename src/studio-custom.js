@@ -683,6 +683,8 @@
         const c=obj.building=obj.building||HASSStudioBuilding.defaults(),k=key.slice(9);
         if(k==='mode')c.mode=val==='manual'?'manual':'live';
         else if(k==='measurement')c.measurement=val==='aggregate'?'aggregate':'individual';
+        else if(k==='remaining_enabled')c.remaining_enabled=val==='true';
+        else if(k==='remaining_kw')c.remaining_kw=clamp(val,0,10000,0);
         else if(['power_entity','daily_entity'].includes(k))c[k]=validEntity(val)?val:'';
         else if(['show_readout','window_glow'].includes(k))c[k]=val==='true';
         else if(k==='readout_scale')c[k]=clamp(val,40,150,100)/100;
