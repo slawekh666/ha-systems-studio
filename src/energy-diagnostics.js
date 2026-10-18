@@ -17,6 +17,16 @@ const HASSStudioEnergyDiagnostics=(()=>{
     const src=layout?.studio_layout||layout||{},options=normalize(src.energy_diagnostics);
     const result=HASSStudioEnergyFlow.resolve(src,hass);
     const balance=result.balance,devices=new Map((src.nodes||[]).map(n=>[n.id,n]));
+    const deviceName=id=>{
+      const n=devices.get(id);
+      return n?(n.label||({
+        inverter:'Falownik',power_grid:'Sieć',distribution_board:'Rozdzielnia',
+        building:'Budynek',energy_storage:'Magazyn',ev_charger:'Ładowarka EV',
+        pump:'Pompa',boiler:'Kocioł'
+      })[n.type]||n.type):'Usunięte urządzenie';
+    };
+    const cableName=c=>c.label||(
+      deviceName(c.energy_start?.node_id)+' → '+deviceName(c.energy_end?.node_id));
     const networkOf=new Map();
     const networks=(balance.networks||[]).map((n,i)=>{
       for(const id of n.connection_ids)networkOf.set(id,i);
@@ -28,10 +38,11 @@ const HASSStudioEnergyDiagnostics=(()=>{
     });
     const cables=[];
     for(const c of src.connections||[]){
-      if(c.type!=='electric'||c.animation?.flow_power_mode!=='balance')continue;
+      if(c.type!=='electric')continue;
       const state=result.byConnection[c.id]||HASSStudioEnergyFlow.unavailable('unconnected_or_missing_endpoints');
-      const item={id:c.id,name:c.label||c.id,network:state.network,available:state.available,
-        kw:state.kw,direction:state.direction,source:state.source,
+      const mode=c.animation?.flow_power_mode||'off';
+      const item={id:c.id,name:cableName(c),network:state.network,available:state.available,
+        kw:state.kw,direction:state.direction,source:state.source,mode,
         sources:state.sources||[],reason:state.reason};
       cables.push(item);
       const idx=networkOf.get(c.id);
@@ -41,7 +52,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
       reason:w.reason,node_id:w.node_id||null,connection_id:w.connection_id||null,
       side:w.side||null
     }));
-    for(const c of cables)if(!c.available)
+    for(const c of cables)if(!c.available&&!warnings.some(w=>w.connection_id===c.id&&w.reason===c.reason))
       warnings.push({reason:c.reason||'unresolved_flow',connection_id:c.id,node_id:null,side:null});
     return {options,enabled:balance.enabled===true,scenario:balance.config.scenario,
       networks,cables,warnings,balanced:networks.filter(n=>n.state==='balanced').length,
@@ -74,7 +85,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
       live:'Odczyty HA',hybrid:'Tryb hybrydowy',simulation_mode:'Symulacja',
       unknownSource:'Nieznane źródło',notMeasured:'Symulacja i obliczenia nie są pomiarami HA.',
       activeNetworks:'sieci prawidłowych',issueNetworks:'sieci nierozstrzygniętych',
-      noCables:'Brak przewodów w trybie bilansu',noWarnings:'Brak ostrzeżeń',
+      animation_disabled:'Animacja wyłączona',noCables:'Brak przewodów elektrycznych',noWarnings:'Brak ostrzeżeń',
       noData:'Brak rozstrzygnięcia'
     },
     en:{
@@ -103,7 +114,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
       live:'HA readings',hybrid:'Hybrid',simulation_mode:'Simulation',
       unknownSource:'Unknown origin',notMeasured:'Simulation and calculated values are not HA measurements.',
       activeNetworks:'balanced networks',issueNetworks:'unresolved networks',
-      noCables:'No cables in balance mode',noWarnings:'No warnings',
+      animation_disabled:'Animation disabled',noCables:'No electrical cables',noWarnings:'No warnings',
       noData:'Unresolved'
     }
   };
@@ -149,7 +160,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
         ])):'';
       const cables=o.show_cables?'<h5>'+escape(label('cables'))+'</h5>'+
         table(n.cables.map(c=>[c.name,
-          c.available?fmt(c.kw)+' · '+label(c.direction==='none'?'zero':c.direction):
+          c.available?(c.mode==='off'?label('animation_disabled')+' · ':'')+
+            fmt(c.kw)+' · '+label(c.direction==='none'?'zero':c.direction):
             label(c.reason||'unresolved_flow')])):'';
       const reason=n.reasons.length?'<p class="ss-diag-caption">'+
         n.reasons.map(r=>escape(label(r))).join(' · ')+'</p>':'';
@@ -163,10 +175,16 @@ const HASSStudioEnergyDiagnostics=(()=>{
       table(loose.map(c=>[c.name,label(c.reason||'unresolved_flow')]))+'</article>':'';
     const warningList=o.show_warnings?'<article><h5>'+escape(label('warnings'))+
       ' ('+view.warnings.length+')</h5>'+
-      (view.warnings.length?'<ul>'+view.warnings.map(w=>
-        '<li>'+escape(label(w.reason))+
-        (w.node_id?' · '+escape(w.node_id):'')+
-        (w.connection_id?' · '+escape(w.connection_id):'')+'</li>').join('')+'</ul>':
+      (view.warnings.length?'<ul>'+view.warnings.map(w=>{
+        const cable=view.cables.find(c=>c.id===w.connection_id);
+        const name=cable?.name||view.networks.flatMap(n=>n.devices)
+          .find(d=>d.node_id===w.node_id)?.name||'';
+        const link=mode==='editor'&&(w.connection_id||w.node_id)?
+          '<button type="button" data-energy-jump="'+escape(w.connection_id||w.node_id)+
+          '" data-energy-jump-kind="'+(w.connection_id?'connection':'node')+'">'+
+          escape(name||'Pokaż na schemacie')+'</button>':escape(name);
+        return '<li>'+escape(label(w.reason))+(link?' · '+link:'')+'</li>';
+      }).join('')+'</ul>':
         '<p>'+escape(label('noWarnings'))+'</p>')+'</article>':'';
     const title=label('title')+' · '+view.balanced+'/'+view.networks.length;
     return '<details class="ss-energy-diagnostics ss-energy-diagnostics--'+

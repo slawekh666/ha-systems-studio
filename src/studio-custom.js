@@ -378,6 +378,16 @@
       balancePopover.hidden=!balancePopover.hidden;
       balanceToggle.setAttribute('aria-expanded',String(!balancePopover.hidden));
     });
+    balancePopover.addEventListener('click',event=>{
+      const jump=event.target.closest?.('[data-energy-jump]');
+      if(!jump)return;
+      const kind=jump.dataset.energyJumpKind,id=jump.dataset.energyJump;
+      const model=get();
+      if(kind==='node'&&model.nodes.some(n=>n.id===id)||
+         kind==='connection'&&model.connections.some(c=>c.id===id)){
+        setSelected(kind,id);
+      }
+    });
     properties.addEventListener('change',event=>{
       if(!event.target.matches('[data-diagnostics-enable],[data-diagnostics-devices],[data-diagnostics-cables],[data-diagnostics-warnings]'))return;
       const el=event.target,model=get(),e=model.energy_balance;
