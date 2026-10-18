@@ -62,11 +62,15 @@ const HASSStudioEnergyTopology=(()=>{
 
  // Attachments move only the referenced endpoint; manual bends stay untouched.
  const geometry=n=>{
-   const renderer=({
-     power_grid:HASSStudioPowerGrid,inverter:HASSStudioInverter,
-     energy_storage:HASSStudioEnergyStorage,building:HASSStudioBuilding,
-     ev_charger:HASSStudioEVCharger,distribution_board:HASSStudioDistributionBoard
-   })[n.type];
+   const renderers={
+     power_grid:typeof HASSStudioPowerGrid==='undefined'?null:HASSStudioPowerGrid,
+     inverter:typeof HASSStudioInverter==='undefined'?null:HASSStudioInverter,
+     energy_storage:typeof HASSStudioEnergyStorage==='undefined'?null:HASSStudioEnergyStorage,
+     building:typeof HASSStudioBuilding==='undefined'?null:HASSStudioBuilding,
+     ev_charger:typeof HASSStudioEVCharger==='undefined'?null:HASSStudioEVCharger,
+     distribution_board:typeof HASSStudioDistributionBoard==='undefined'?null:HASSStudioDistributionBoard
+   };
+   const renderer=renderers[n.type];
    return renderer?.geometry?.(n)||{x:4,y:3,width:112,height:113};
  };
  const anchor=(n,portId)=>{

@@ -84,7 +84,7 @@ const HASSStudioLayout = (() => {
       visual:v.visual==='studio'?'studio':'warmwasser',
       variant:registry.normalizeVariant(v.type,v.variant),
       label:String(v.label||'').slice(0,64),
-      energy_fallback_enabled:v.energy_fallback_enabled===true,
+      energy_fallback_enabled:typeof v.energy_fallback_enabled==='boolean'?v.energy_fallback_enabled:null,
        energy_grid_auto:v.energy_grid_auto===true,
        energy_power_entity:validEntity(v.energy_power_entity)?v.energy_power_entity:'',
        energy_manual_kw:v.energy_manual_kw==null?null:clamp(v.energy_manual_kw,0,10000,0),
