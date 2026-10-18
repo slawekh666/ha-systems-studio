@@ -1,6 +1,6 @@
 # Home Assistant Systems Studio — raport audytu ikon i UX (2026-10-17)
 
-Baza: `main` na commit `9707fec30d273c6de9fdda3e7cbfbdca55fe84a7`.
+Baza audytu (stan historyczny z 2026-10-17): `main` na commit `9707fec30d273c6de9fdda3e7cbfbdca55fe84a7`.
 Realizacja: osobna gałąź i MR dla każdego punktu; nie publikować Release/HACS przed testami w HA.
 
 | Nr | Zadanie / zakres | Przewidywana gałąź |
@@ -48,8 +48,10 @@ Realizacja: osobna gałąź i MR dla każdego punktu; nie publikować Release/HA
 | 3 | !38 | #2958938794 SUCCESS | Osobne wejścia Rura / Przewód elektryczny, parametr connection_type z zachowaniem starego type=pipe | Dodatki elektryczne zostają do kolejnej iteracji; konieczny test w UI |
 | 4 | !39 | #2958938668 SUCCESS | Shift+wheel nad kartą na desktopie, bez przejęcia zwykłego scrolla HA | Test zachowania przeglądarek w HA |
 | 5 | !40 | #2958941398 SUCCESS | 5 segmentów pelletu, encja %, próg alarmu 20%, ręczny poziom testowy; osobne testy progów 0–100% | Obowiązkowa próba na bieżących encjach HA |
-| 6 | !35 | #2958927250 SUCCESS | Oddzielne parametry pompy ciepła i działający test mocy + obrotów; ukryte palnikowe opcje w nowych pompach i kotłach elektrycznych | Pozostałe rodziny wymagają manualnej akceptacji w GUI |
+| 6 | !35 | #2959168610 SUCCESS (ostatni test przed merge) | Oddzielne parametry pompy ciepła i działający test mocy + obrotów; ukryte palnikowe opcje w nowych pompach i kotłach elektrycznych | Pozostałe rodziny wymagają manualnej akceptacji w GUI |
 
-**Stan scalenia:** MR-y otwarte, `main` niezmieniony. Zmiany w różnych MR mają wspólny `dist/ha-systems-studio.js`; scalać kolejno, po każdym rebase/regeneracja deterministycznego bundla i test CI.
+**Stan scalenia na 2026-10-17 (historyczny):** MR-y otwarte, `main` niezmieniony. Zmiany w różnych MR mają wspólny `dist/ha-systems-studio.js`; scalać kolejno, po każdym rebase/regeneracja deterministycznego bundla i test CI.
+
+**Aktualizacja 2026-10-18:** MR !35 (pompa ciepła) został scalony z GitLab `main`: commit `eb9ec650f4a9140374d0de95af08a619cf9b9878`; pipeline `main` #2959171941 SUCCESS. Przed scaleniem zapisano gałąź `backup/main-before-ux-06` na commit `9707fec30d273c6de9fdda3e7cbfbdca55fe84a7`. MR !34 i MR !36–!40 pozostają otwarte na chwilę aktualizacji; wyniki ich starszego CI nie potwierdzają jeszcze zgodności z nowym `main`. Interakcyjny test pompy ciepła w prawdziwym HA nie został potwierdzony; nie publikowano wydania GitHub/HACS.
 
 **Zakres audytu:** wykryto i poprawiono konkretną niezgodność nowoczesnej pompy ciepła. Systematyczne przejście formularzy wszystkich wariantów, w tym test przez interakcję w HA, pozostaje osobnym wymaganym krokiem akceptacyjnym. Nie deklarować kompletnej naprawy wszystkich urządzeń tylko na podstawie zielonego CI.
