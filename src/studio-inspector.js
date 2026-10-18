@@ -271,6 +271,10 @@ const HASSStudioEditorInspector = (() => {
           if(obj.variant==='gas_modern')markup+=field(L.gasDraw,'gas_draw_entity',obj.gas_draw_entity,'search',null,'list="ss-entity-list"')+
             field(L.gasGlow,'gas_glow',obj.gas_glow,'range',null,'min="0" max="100" step="5"')+
             '<p class="ss-note">'+esc(L.gasHelp)+'</p>';
+          if(obj.variant==='pellet_modern')markup+=field(L.pelletLevelEntity,'pellet_level_entity',obj.pellet_level_entity||'','search',null,'list="ss-entity-list"')+
+              field(L.pelletLevelMode,'pellet_level_manual',obj.pellet_level_manual?'true':'false','text',[['false',L.pelletLevelHA],['true',L.pelletLevelManual]])+
+              (obj.pellet_level_manual||!obj.pellet_level_entity?field(L.pelletLevelTest,'pellet_level_test',obj.pellet_level_test??80,'number',null,'min="0" max="100" step="1"'):'')+
+              field(L.pelletAlarm,'pellet_alarm_pct',obj.pellet_alarm_pct??20,'number',null,'min="0" max="100" step="1"');
           if(obj.variant==='heatpump_modern')markup+=field('Tryb testowy pompy','hp_test_mode',obj.hp_test_mode?'true':'false','text',[['false','Home Assistant'],['true','Symulacja ręczna']])+
              (obj.hp_test_mode?field('Test mocy (kW)','hp_manual_kw',obj.hp_manual_kw??0,'number',null,'min="0" max="500" step="0.1"')+field('Test wentylatora (%)','hp_manual_fan',obj.hp_manual_fan??0,'number',null,'min="0" max="100" step="1"'):'')+
              field(L.hpPower,'hp_power_entity',obj.hp_power_entity,'search',null,'list="ss-entity-list"')+
