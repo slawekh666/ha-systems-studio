@@ -2,7 +2,7 @@
  * Uses the production normalization, SVG renderer and inspector in a read-only VM.
  */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const ctx={isEnt:x=>typeof x==='string'&&/^[a-z_]+\\.[a-z0-9_]+$/.test(x),
+const ctx={isEnt:x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x),
   document:{createElement:()=>({hidden:true,appendChild(){},replaceChildren(){}})}};
 vm.createContext(ctx);
 for(const name of ['readout-scale.js','ha-state.js','power-flow.js','device-registry.js','studio-viewport.js',
