@@ -30,7 +30,7 @@ for(const name of ['Graphics','Tank','SolidFuel','Pellet','HeatPump','GasBoiler'
  ctx['HASSStudio'+name]={styles:'',on:()=>false};
 const canvas=ctx.canvas.create({W:1200,H:700,colors:{hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'},
  normalized:layout.normalized,pickLang:()=> 'pl',words:{pl:{}},clamp,validEntity:()=>true,esc:String});
-const svg=canvas.canvasSvg(config,{states:{}},true,{type:'connection',id:'two'});
+const svg=canvas.canvasSvg(input,{states:{}},true,{type:'connection',id:'two'});
 assert(svg.includes('stroke="#FACC15"'));
 assert(svg.includes('stroke:#38BDF8'));
 assert(svg.includes('stroke="#FF1234"'));
