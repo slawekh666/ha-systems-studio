@@ -29,6 +29,9 @@ assert(libraryMarkup.includes('data-add="connection" data-variant="electric"'));
 assert(libraryMarkup.includes('Rury hydrauliczne')&&libraryMarkup.includes('Przewody elektryczne'));
 
 const topology=vm.runInContext('HASSStudioEnergyTopology',ctx);
+for(const name of ['HASSStudioPowerGrid','HASSStudioDistributionBoard','HASSStudioInverter']){
+  ctx[name]={normalize:()=>({})};
+}
 const energyLayout={studio_layout:{nodes:[
  {id:'grid',type:'power_grid',energy_ports:[{id:'out',medium:'ac',x:100,y:50,bus:'main'}]},
  {id:'panel',type:'distribution_board',energy_ports:[{id:'in',medium:'ac',x:0,y:50,bus:'main'},{id:'out',medium:'ac',x:100,y:50,bus:'main'}]},
