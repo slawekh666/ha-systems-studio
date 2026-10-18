@@ -148,7 +148,7 @@ const HASSStudioEditorInspector = (() => {
             field('Moc znamionowa (kW)','inv_rated_kw',c.rated_kw,'number',null,'min="0.1" max="500" step="0.1"')+
             field('Próg produkcji (W)','inv_production_threshold_w',c.production_threshold_w,'number',null,'min="0" max="1000" step="1"')+
             bool('positive_power','Moc dodatnia = produkcja AC')+
-            bool('show_extra','Dodatkowy panel wszystkich stringów')+
+            bool('show_extra','Pokaż panel parametrów')+
             field('Pozycja panelu','inv_extra_position',c.extra_position,'text',[['right','Prawo'],['left','Lewo']])+
             field('Skala dodatkowego panelu (%)','inv_extra_scale',Math.round(c.extra_scale*100),'range',null,'min="40" max="150" step="5"');
           for(const [k,title] of [['ac_power','Moc wyjściowa AC'],['temperature','Temperatura falownika'],['status','Status falownika'],['alarm','Alarm falownika']])
@@ -166,7 +166,20 @@ const HASSStudioEditorInspector = (() => {
             }
             markup+='</details>';
           });
-          markup+='<p class="ss-note">Mały ekran wyświetla do trzech wybranych wejść. Pozostałe można pokazać w osobnym panelu. Brak danych to —; wykres jest ozdobny, nie przedstawia historii produkcji.</p>';
+          markup+='<h4>Panel parametrów</h4>'+field('Nagłówek','inv_panel_title',c.panel_title,'text');
+          const rowTypes=HASSStudioInverter.DEFAULT_KEYS.map(k=>[k,({ac_power:'Moc AC',temperature:'Temperatura',status:'Status',alarm:'Alarm',pv_summary:'PV — V/A/W',pv_voltage:'Napięcie PV',pv_current:'Prąd PV',pv_power:'Moc PV',custom:'Dowolna encja'})[k]]);
+          c.panel_rows.forEach((row,i)=>{
+            markup+='<details><summary>'+esc((i+1)+'. '+HASSStudioInverter.labelFor(row,c))+'</summary>';
+            markup+=field('Parametr','inv_row_'+i+'_key',row.key,'text',rowTypes)+field('Opis','inv_row_'+i+'_label',row.label,'text');
+            if(row.key.startsWith('pv_'))markup+=field('Numer wejścia (0=PV1)','inv_row_'+i+'_input',row.input,'number',null,'min="0" max="'+(c.count-1)+'"');
+            if(row.key==='custom')markup+=field('Encja','inv_row_'+i+'_entity',row.entity,'search',null,'list="ss-entity-list"')+
+              (c.mode==='manual'?field('Wartość testowa','inv_row_'+i+'_manual_value',row.manual_value,'text'):'');
+            markup+=field('Jednostka','inv_row_'+i+'_unit',row.unit,'text',['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].map(v=>[v,v]))+
+              field('Miejsca po przecinku','inv_row_'+i+'_decimals',row.decimals,'number',null,'min="0" max="3"')+
+              '<div class="ss-actions"><button type="button" data-inv-row-up="'+i+'">↑</button><button type="button" data-inv-row-down="'+i+'">↓</button><button type="button" data-inv-row-delete="'+i+'">Usuń</button></div></details>';
+          });
+          markup+='<button type="button" data-inv-row-add="true">+ Dodaj parametr</button>'+
+            '<p class="ss-note">Brak odczytu: —. Mały ekran pokazuje do trzech wejść PV. Wykres jest ozdobny.</p>';
         }
         if(isStorage){
           const c=HASSStudioEnergyStorage.normalize(obj);

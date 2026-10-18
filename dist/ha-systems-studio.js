@@ -4013,7 +4013,7 @@ const HASSStudioEditorInspector = (() => {
             field('Moc znamionowa (kW)','inv_rated_kw',c.rated_kw,'number',null,'min="0.1" max="500" step="0.1"')+
             field('Próg produkcji (W)','inv_production_threshold_w',c.production_threshold_w,'number',null,'min="0" max="1000" step="1"')+
             bool('positive_power','Moc dodatnia = produkcja AC')+
-            bool('show_extra','Dodatkowy panel wszystkich stringów')+
+            bool('show_extra','Pokaż panel parametrów')+
             field('Pozycja panelu','inv_extra_position',c.extra_position,'text',[['right','Prawo'],['left','Lewo']])+
             field('Skala dodatkowego panelu (%)','inv_extra_scale',Math.round(c.extra_scale*100),'range',null,'min="40" max="150" step="5"');
           for(const [k,title] of [['ac_power','Moc wyjściowa AC'],['temperature','Temperatura falownika'],['status','Status falownika'],['alarm','Alarm falownika']])
@@ -4031,7 +4031,20 @@ const HASSStudioEditorInspector = (() => {
             }
             markup+='</details>';
           });
-          markup+='<p class="ss-note">Mały ekran wyświetla do trzech wybranych wejść. Pozostałe można pokazać w osobnym panelu. Brak danych to —; wykres jest ozdobny, nie przedstawia historii produkcji.</p>';
+          markup+='<h4>Panel parametrów</h4>'+field('Nagłówek','inv_panel_title',c.panel_title,'text');
+          const rowTypes=HASSStudioInverter.DEFAULT_KEYS.map(k=>[k,({ac_power:'Moc AC',temperature:'Temperatura',status:'Status',alarm:'Alarm',pv_summary:'PV — V/A/W',pv_voltage:'Napięcie PV',pv_current:'Prąd PV',pv_power:'Moc PV',custom:'Dowolna encja'})[k]]);
+          c.panel_rows.forEach((row,i)=>{
+            markup+='<details><summary>'+esc((i+1)+'. '+HASSStudioInverter.labelFor(row,c))+'</summary>';
+            markup+=field('Parametr','inv_row_'+i+'_key',row.key,'text',rowTypes)+field('Opis','inv_row_'+i+'_label',row.label,'text');
+            if(row.key.startsWith('pv_'))markup+=field('Numer wejścia (0=PV1)','inv_row_'+i+'_input',row.input,'number',null,'min="0" max="'+(c.count-1)+'"');
+            if(row.key==='custom')markup+=field('Encja','inv_row_'+i+'_entity',row.entity,'search',null,'list="ss-entity-list"')+
+              (c.mode==='manual'?field('Wartość testowa','inv_row_'+i+'_manual_value',row.manual_value,'text'):'');
+            markup+=field('Jednostka','inv_row_'+i+'_unit',row.unit,'text',['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].map(v=>[v,v]))+
+              field('Miejsca po przecinku','inv_row_'+i+'_decimals',row.decimals,'number',null,'min="0" max="3"')+
+              '<div class="ss-actions"><button type="button" data-inv-row-up="'+i+'">↑</button><button type="button" data-inv-row-down="'+i+'">↓</button><button type="button" data-inv-row-delete="'+i+'">Usuń</button></div></details>';
+          });
+          markup+='<button type="button" data-inv-row-add="true">+ Dodaj parametr</button>'+
+            '<p class="ss-note">Brak odczytu: —. Mały ekran pokazuje do trzech wejść PV. Wykres jest ozdobny.</p>';
         }
         if(isStorage){
           const c=HASSStudioEnergyStorage.normalize(obj);
@@ -5050,7 +5063,23 @@ const HASSStudioEditorLibrary=(()=>{
               q.manual[fieldName.slice(7)]=val===''?null:clamp(val,0,50000,0);
             }
           }
-        }else if(k==='mode')c.mode=val==='manual'?'manual':'live';
+        }else if(k.startsWith('row_')){
+          const match=/^row_(\d+)_(key|label|input|entity|unit|decimals|manual_value)$/.exec(k);
+          if(match){
+            const i=Number(match[1]),field=match[2],rows=c.panel_rows=c.panel_rows||HASSStudioInverter.normalize(obj).panel_rows;
+            if(i>=0&&i<rows.length){
+              const row=rows[i];
+              if(field==='key')row.key=HASSStudioInverter.DEFAULT_KEYS.includes(val)?val:'custom';
+              else if(field==='label')row.label=val.slice(0,42);
+              else if(field==='entity')row.entity=validEntity(val)?val:'';
+              else if(field==='unit')row.unit=['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].includes(val)?val:'auto';
+              else if(field==='input')row.input=clamp(val,0,11,0);
+              else if(field==='decimals')row.decimals=clamp(val,0,3,1);
+              else if(field==='manual_value')row.manual_value=val.slice(0,60);
+            }
+          }
+        }else if(k==='panel_title')c.panel_title=val.slice(0,46);
+        else if(k==='mode')c.mode=val==='manual'?'manual':'live';
         else if(k==='count')c.count=clamp(val,1,12,2);
         else if(k==='display_scale'||k==='extra_scale')c[k]=clamp(val,40,150,100)/100;
         else if(k==='extra_position')c.extra_position=val==='left'?'left':'right';
@@ -5234,6 +5263,25 @@ const HASSStudioEditorLibrary=(()=>{
           expandedPartId=expandedPartId===selectedPartId?null:selectedPartId;renderProps();
         }
         return;
+      }
+      if(obj.type==='inverter'&&
+        (button.hasAttribute('data-inv-row-add')||button.hasAttribute('data-inv-row-delete')||
+         button.hasAttribute('data-inv-row-up')||button.hasAttribute('data-inv-row-down'))){
+        const c=obj.inverter=obj.inverter||HASSStudioInverter.defaults();
+        const rows=c.panel_rows=c.panel_rows||HASSStudioInverter.normalize(obj).panel_rows;
+        if(button.hasAttribute('data-inv-row-add')){
+          if(rows.length>=HASSStudioInverter.MAX_ROWS)return;
+          rows.push(HASSStudioInverter.defaultRow());
+        }else{
+          const key=button.hasAttribute('data-inv-row-delete')?'invRowDelete':
+            button.hasAttribute('data-inv-row-up')?'invRowUp':'invRowDown';
+          const i=Number(button.dataset[key]);
+          if(!Number.isInteger(i)||i<0||i>=rows.length)return;
+          if(key==='invRowDelete')rows.splice(i,1);
+          else{const j=i+(key==='invRowUp'?-1:1);if(j<0||j>=rows.length)return;
+            [rows[i],rows[j]]=[rows[j],rows[i]];}
+        }
+        commit(model);render();return;
       }
       const index=Number(button.dataset.deletePart||button.dataset.deleteAccessory||button.dataset.deleteEntity);
       if(button.hasAttribute('data-layer-up')&&obj.parts){
