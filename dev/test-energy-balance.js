@@ -123,6 +123,39 @@ const detached=balance.resolve(layout.normalized(cfg(nodes,[
 ],[{node_id:'grid',mode:'calculate'}])),readings);
 assert(detached.warnings.some(x=>x.reason==='missing_node'));
 assert.equal(detached.networks[0].state,'balanced');
+// Multiple PV sources connected to a single AC bus, with an explicitly solved grid.
+const pv2=node('pv2','inverter',{inverter:{mode:'manual',manual:{ac_power:1.1,temperature:29}}});
+const expandedPanel={...nodes.find(n=>n.id==='panel'),energy_ports:[
+  port('a'),port('b'),port('c'),port('d'),port('e')]};
+const extraResult=balance.resolve(layout.normalized(cfg([
+  ...nodes.filter(n=>n.id!=='panel'),expandedPanel,pv2],
+  [...connections,connect('extra-pv','pv2','ac','panel','e')],
+  [{node_id:'grid',mode:'calculate'}])),readings);
+assert.equal(extraResult.networks.length,1);
+assert.equal(extraResult.networks[0].state,'balanced');
+assert.equal(extraResult.networks[0].totals.generation_kw,3.6);
+assert.equal(extraResult.networks[0].totals.grid_export_kw,.6);
+// Distinguish direct signed grid import from import/export meter strategies.
+const gridNative=balance.resolve(layout.normalized(cfg(liveNodes,connections,[
+ {node_id:'grid',mode:'device',grid_strategy:'import_export'}])),{states:{
+ ...liveStates.states,
+ 'sensor.grid_import':{state:'800',attributes:{unit_of_measurement:'W'}},
+ 'sensor.grid_export':{state:'0',attributes:{unit_of_measurement:'W'}}
+}});
+assert.equal(gridNative.networks[0].state,'insufficient'); // no grid entities configured
+const acdc=balance.resolve(layout.normalized(cfg([
+ node('battery','energy_storage',{energy_ports:[port('dc','dc')]}),
+ node('grid','power_grid',{energy_ports:[port('ac','ac')]})
+],[connect('bad-media','battery','dc','grid','ac')],[],true)),readings);
+assert(acdc.warnings.some(w=>w.reason==='medium_mismatch'));
+assert.equal(acdc.networks.length,0);
+// A disconnected device must be reported, not silently added to a balance.
+const detachedMeter=balance.resolve(layout.normalized(cfg([
+  ...nodes,node('orphan','inverter',{inverter:{mode:'manual',manual:{ac_power:5,temperature:30}}})
+],connections,[{node_id:'grid',mode:'calculate'}])),readings);
+assert(detachedMeter.warnings.some(w=>w.reason==='unconnected_device'&&w.node_id==='orphan'));
+assert.equal(detachedMeter.networks[0].totals.generation_kw,2.5);
+
 const off=balance.resolve(layout.normalized(cfg(nodes,connections,[],false)),readings);
 assert.equal(off.enabled,false);
 assert.equal(off.networks.length,0);
