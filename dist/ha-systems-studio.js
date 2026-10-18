@@ -1744,7 +1744,7 @@ const HASSStudioPellet = (() => {
   // Source artwork: src/icons/pellet-stove.svg
   const clamp=(v,min,max,def)=>Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):def;
   const escapeHtml=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const baseBounds={x:13,y:-87,width:199,height:230,labelY:162,centerX:112,centerY:46};
+  const baseBounds={x:8,y:-87,width:211,height:230,labelY:161,centerX:113,centerY:46};
   const geometry=n=>{
     const sx=clamp(n?.width_scale,.5,2.4,1),sy=clamp(n?.height_scale,.5,2.4,1);
     return {x:97+(baseBounds.x-97)*sx,y:46+(baseBounds.y-46)*sy,

@@ -23,7 +23,8 @@ const missing=ctx.pellet.render({id:'p1',pellet_level_entity:'sensor.pellet'}, {
 assert.match(missing,/id="sspelletp1pellet-level-1"[^>]*fill="#65727c"/);
 assert.match(missing,/id="sspelletp1pellet-level-warning"[^>]*visibility="hidden"/);
 const fallback=ctx.pellet.render({id:'p1',pellet_level_test:10},null);
-assert.match(fallback,/id="sspelletp1pellet-level-warning"[^>]*visibility="visible"/);
+assert.match(fallback,/id="sspelletp1pellet-level-warning"[^>]*visibility="hidden"/);
+assert.match(fallback,/id="sspelletp1pellet-level-1"[^>]*fill="#4a86a8"/);
 const ha=ctx.pellet.render({id:'p1',pellet_level_entity:'sensor.pellet'}, {states:{'sensor.pellet':{state:'87',attributes:{unit_of_measurement:'%'}}}});
 assert.match(ha,/id="sspelletp1pellet-level-4"[^>]*fill="#42db8a"/);
 const editor=fs.readFileSync('src/studio-custom.js','utf8'),inspector=fs.readFileSync('src/studio-inspector.js','utf8');
