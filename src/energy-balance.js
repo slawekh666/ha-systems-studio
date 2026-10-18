@@ -307,7 +307,7 @@ const HASSStudioEnergyBalance=(()=>{
     for(const n of allNodes){
       const role=HASSStudioEnergyTopology.node(n).role;
       if(!roles.includes(role))continue;
-      const p=n.type==='power_grid'&&n.energy_grid_auto===true?
+      const p=n.type==='power_grid'?
         participant({node_id:n.id,mode:'calculate'}):
         n.energy_mode!=null?participant({node_id:n.id}):
         overrides.get(n.id)||participant({node_id:n.id});

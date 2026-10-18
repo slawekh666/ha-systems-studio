@@ -718,6 +718,8 @@
           const f=k.slice(7);c.manual=c.manual||{};
           if(f==='ac_power'){c.manual[f]=clamp(val,-500,500,0);obj.energy_test_configured=true;}
           if(f==='temperature')c.manual[f]=clamp(val,-40,150,25);
+           if(f==='status')c.manual[f]=['generating','standby','off','fault'].includes(val)?val:'standby';
+           if(f==='alarm')c.manual[f]=val==='true';
         }else if(k.startsWith('pv_')){
           const match=/^pv_(\d+)_(name|visible|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
           if(match&&Number(match[1])<12){
@@ -743,7 +745,7 @@
               else if(field==='label')row.label=val.slice(0,42);
               else if(field==='entity')row.entity=validEntity(val)?val:'';
               else if(field==='unit')row.unit=['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].includes(val)?val:'auto';
-              else if(field==='input')row.input=clamp(val,0,11,0);
+              else if(field==='input')row.input=clamp(val,1,12,1)-1;
               else if(field==='decimals')row.decimals=clamp(val,0,3,1);
               else if(field==='manual_value')row.manual_value=val.slice(0,60);
             }
