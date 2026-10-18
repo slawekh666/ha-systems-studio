@@ -332,7 +332,10 @@ const HASSStudioEditorInspector = (() => {
             field('Skala panelu (%)','grid_panel_scale',Math.round(g.panel_scale*100),'range',null,'min="40" max="150" step="5"')+
             field('Pozycja panelu','grid_panel_position',g.panel_position,'text',[['right','Prawo'],['left','Lewo'],['bottom','Pod słupem']])+
             field('Pokaż panel','grid_show_panel',g.show_panel?'true':'false','text',[['true','Tak'],['false','Nie']]);
-                }else markup+=field(L.entity,'entity',obj.entity,'search',null,'list="ss-entity-list"');
+                }else if(!electrical||obj.type==='pump'||obj.type==='boiler')
+          markup+=field(obj.type==='pump'?'Stan pompy — czujnik HA':
+            obj.type==='boiler'?'Temperatura kotła — czujnik HA':L.entity,
+            'entity',obj.entity,'search',null,'list="ss-entity-list"');
         if(['pump','valve'].includes(obj.type)){
           markup+=field('Źródło stanu','eq_mode',obj.equipment_mode||'live','text',
             [['live','Home Assistant'],['manual','Test ręczny']]);
