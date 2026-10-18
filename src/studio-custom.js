@@ -357,7 +357,7 @@
       const select=(list,value)=>list.map(([id,name])=>'<option value="'+id+'"'+(id===value?' selected':'')+'>'+name+'</option>').join('');
       host.innerHTML='<h4>Bilans energii</h4><label><input type="checkbox" data-balance-enable'+(e.enabled?' checked':'')+'> Włącz</label>'+
         '<label>Tryb<select data-balance-scenario>'+select([['live','HA'],['hybrid','Hybrydowy'],['simulation','Symulacja']],e.scenario)+'</select></label>'+
-        get().nodes.filter(n=>['inverter','building','power_grid','energy_storage','ev_charger'].includes(n.type)).map(n=>{
+        get().nodes.filter(n=>HASSStudioEnergyTopology.electricalType(n)&&HASSStudioEnergyTopology.node(n).role!=='junction').map(n=>{
           const o=e.participants.find(x=>x.node_id===n.id)||{mode:'device',manual_kw:0,entity:''};
           return '<div data-participant="'+esc(n.id)+'"><strong>'+esc(n.label||n.id)+'</strong>'+
           '<label>Źródło<select data-balance-mode>'+select(modes,o.mode)+'</select></label>'+
