@@ -29,7 +29,7 @@ const HASSStudioInverter=(()=>{
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
    rated_kw:10,production_threshold_w:10,positive_power:true,entities:{ac_power:'',temperature:'',status:'',alarm:''},
-   manual:{ac_power:6.4,temperature:32,status:'standby',alarm:false},inputs:[]});
+   manual:{ac_power:6.4,temperature:32,status:'auto',alarm:false},inputs:[]});
  const normalize=node=>{
    const raw=node?.inverter||node||{},d=defaults(),count=Math.round(clamp(raw.count,1,MAX_INPUTS,2));
    return {...d,...raw,mode:raw.mode==='manual'?'manual':'live',count,
@@ -43,7 +43,7 @@ const HASSStudioInverter=(()=>{
     entities:Object.fromEntries(['ac_power','temperature','status','alarm'].map(k=>[k,entity(raw.entities?.[k])])),
     manual:{ac_power:clamp(raw.manual?.ac_power,-500,500,6.4),
        temperature:clamp(raw.manual?.temperature,-40,150,32),
-       status:['generating','standby','off','fault'].includes(raw.manual?.status)?raw.manual.status:'standby',
+       status:['auto','generating','standby','off','fault'].includes(raw.manual?.status)?raw.manual.status:'auto',
        alarm:raw.manual?.alarm===true},
     inputs:Array.from({length:count},(_,i)=>{
       const original=raw.inputs?.[i]||{},d=defaultInput(i);
@@ -61,25 +61,32 @@ const HASSStudioInverter=(()=>{
    return ['on','alarm','fault','error','critical','warning'].includes(value)?'alarm':
      ['off','normal','ok','clear'].includes(value)?'ok':null;
  };
+ const effective=(node,live,backup)=>{
+   if(node?.energy_mode==='test')return backup;
+   if(node?.energy_mode==null&&node?.inverter?.mode==='manual')return backup;
+   if(live!==null&&live!==undefined)return live;
+   return node?.energy_mode==='auto'&&node?.energy_fallback_enabled===true?backup:null;
+ };
  const data=(node,h)=>{
    const c=normalize(node),manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
    const power=HASSStudioHA.powerInput(node,h,c.entities.ac_power,c.manual.ac_power,c.mode,true).kw;
-   const temperature=manual?c.manual.temperature:read(h,c.entities.temperature,['°C','C',''], -40,150);
-   const fault=manual?c.manual.alarm||c.manual.status==='fault':
-      status(h,c.entities.alarm)==='alarm'||status(h,c.entities.status)==='alarm';
+   const temperature=effective(node,read(h,c.entities.temperature,['°C','C',''], -40,150),c.manual.temperature);
+   const alarm=effective(node,status(h,c.entities.alarm),c.manual.alarm?'alarm':'ok');
+   const fault=alarm==='alarm'||(manual&&c.manual.status==='fault')||
+     (!manual&&status(h,c.entities.status)==='alarm');
    const generating=power===null?null:((c.positive_power?power:-power)*1000>c.production_threshold_w);
    const inputs=c.inputs.map(q=>{
-     const voltage=manual?q.manual.voltage:read(h,q.entities.voltage,['V',''],0,2000);
-     const current=manual?q.manual.current:read(h,q.entities.current,['A',''],0,200);
-     const direct=manual?q.manual.power:(()=>{
+     const voltage=effective(node,read(h,q.entities.voltage,['V',''],0,2000),q.manual.voltage);
+     const current=effective(node,read(h,q.entities.current,['A',''],0,200),q.manual.current);
+     const direct=effective(node,(()=>{
        const r=HASSStudioHA.reading(h,q.entities.power);
        return r&&['W','kW'].includes(r.unit)&&r.value>=0?r.value*(r.unit==='kW'?1000:1):null;
-     })();
+     })(),q.manual.power);
      const watts=direct!==null?direct:voltage!==null&&current!==null?voltage*current:null;
      return {...q,voltage,current,watts,calculated:direct===null&&watts!==null};
    });
    return {c,power,temperature,fault,generating,inputs,manual,
-      state:fault?'alarm':manual?c.manual.status:generating===null?'unknown':generating?'generating':'standby'};
+      state:fault?'alarm':manual&&c.manual.status!=='auto'?c.manual.status:generating===null?'unknown':generating?'generating':'standby'};
  };
  const esc=x=>String(x).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));
  const fmt=(v,d=0)=>v===null?'—':Number(v).toFixed(d);
