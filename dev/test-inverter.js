@@ -72,11 +72,12 @@ assert(!html.includes('NaN'));
 const missing=api.panelData(configured,{states:{}});
 assert.equal(missing[3].reading.text,'—');
 assert.equal(api.normalize(node({panel_rows:[]})).panel_rows.length,0);
-assert.equal(api.normalize(node({count:4})).panel_rows.length,4);
+assert.equal(api.normalize(node({count:4})).panel_rows.length,0); // PV readouts do not create duplicate extra fields.
 assert.equal(api.normalize(node({count:2,panel_rows:[{key:'custom',entity:'bad-entity'}]})).panel_rows[0].entity,'');
 const many=api.normalize(node({show_extra:true,panel_rows:Array.from({length:80},(_,i)=>({key:'custom',label:'Meter '+i}))}));
 assert.equal(many.panel_rows.length,40);
 assert(api.geometry({inverter:many}).height>api.geometry(diagnostic).height);
+assert.equal(api.normalize(node({count:2,panel_rows:[{key:'pv_summary',input:0},{key:'custom',label:'Extra',entity:'sensor.extra'}]})).panel_rows.length,1);
 const testManual=api.panelData(node({mode:'manual',panel_rows:[{key:'custom',label:'Manual',manual_value:'75',unit:'%',decimals:0}]}),{states:{}});
 assert.equal(testManual[0].reading.text,'75 %');
 const original=JSON.stringify(api.normalize(configured));

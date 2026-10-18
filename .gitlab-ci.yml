@@ -24,5 +24,6 @@ validate_card:
     - node dev/test-electric-ports.js
     - node dev/test-device-properties.js
     - node dev/test-connections.js
+    - node dev/test-wire-colors.js
     - node dev/test-pellet-level.js
     - git diff --exit-code -- dist/ha-systems-studio.js
