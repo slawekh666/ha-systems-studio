@@ -2690,21 +2690,21 @@ const HASSStudioInverter=(()=>{
  const defaultRow=(key='custom',input=0)=>({key:DEFAULT_KEYS.includes(key)?key:'custom',
    input,entity:'',label:'',unit:'auto',decimals:1,manual_value:''});
  const panelRows=(raw,node,count)=>{
-   // A stored empty array is meaningful. Only older layouts need migration.
-   if(Array.isArray(raw.panel_rows))return raw.panel_rows.slice(0,MAX_ROWS).map((row)=>{
-     const key=DEFAULT_KEYS.includes(row?.key)?row.key:'custom';
-     return {key,input:Math.round(clamp(row?.input,0,count-1,0)),
-       entity:entity(row?.entity),
-       label:String(row?.label??'').slice(0,42),
-       unit:['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].includes(row?.unit)?row.unit:'auto',
-       decimals:Math.round(clamp(row?.decimals,0,3,1)),
-       manual_value:String(row?.manual_value??'').slice(0,60)};
-   });
-   const legacy=Array.from({length:count},(_,i)=>defaultRow('pv_summary',i));
-   const extras=Array.isArray(node?.entities)?node.entities.slice(0,MAX_ROWS-count).map(item=>({
-     ...defaultRow('custom'),entity:entity(item?.entity),label:String(item?.label||'').slice(0,42)
-   })):[];
-   return legacy.concat(extras);
+   // Built-in inverter metrics (including PV1/PV2) are configured under
+   // "Device data", not duplicated as independently editable panel rows.
+   // Keep only user-defined HA entities, including those from legacy layouts.
+   const source=Array.isArray(raw.panel_rows)?raw.panel_rows:
+     Array.isArray(node?.entities)?node.entities.map(item=>({
+       key:'custom',entity:item?.entity,label:item?.label
+     })):[];
+   return source.filter(row=>row&&(row.key==null||row.key==='custom'))
+     .slice(0,MAX_ROWS).map(row=>({
+       key:'custom',input:0,entity:entity(row.entity),
+       label:String(row.label??'').slice(0,42),
+       unit:['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].includes(row.unit)?row.unit:'auto',
+       decimals:Math.round(clamp(row.decimals,0,3,1)),
+       manual_value:String(row.manual_value??'').slice(0,60)
+     }));
  };
  const panelHeight=c=>Math.max(52,40+c.panel_rows.length*ROW_HEIGHT);
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
@@ -3052,7 +3052,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioBuilding
 /* Data-driven electric flow. Numeric HA power only; no guessed network topology. */
 const HASSStudioPowerFlow=(()=>{
  const clamp=(n,a,b,d)=>n!==''&&n!==null&&n!==undefined&&Number.isFinite(Number(n))?Math.max(a,Math.min(b,Number(n))):d;
- const defaults=()=>({flow_power_entity:'',flow_power_mode:'off',flow_power_kw:0,flow_max_kw:10,flow_min_width:1.5,flow_max_width:6,flow_pattern:'dots',flow_power_direction:true});
+ const colorHex=(value,fallback='#38BDF8')=>
+   typeof value==='string'&&/^#[0-9a-fA-F]{6}$/.test(value)?value.toUpperCase():fallback;
+ const defaults=()=>({flow_power_entity:'',flow_power_mode:'off',flow_power_kw:0,flow_max_kw:10,flow_min_width:1.5,flow_max_width:6,flow_pattern:'dots',flow_color:'#38BDF8',flow_power_direction:true});
  const normalize=x=>{
    const d=defaults(),c={...d,...x};
    return {...c,flow_power_entity:typeof c.flow_power_entity==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(c.flow_power_entity)?c.flow_power_entity:'',
@@ -3061,6 +3063,7 @@ const HASSStudioPowerFlow=(()=>{
     flow_min_width:clamp(c.flow_min_width,.5,12,1.5),
     flow_max_width:clamp(c.flow_max_width,.5,16,6),
     flow_pattern:['dots','dashes','arrows'].includes(c.flow_pattern)?c.flow_pattern:'dots',
+    flow_color:colorHex(c.flow_color),
     flow_power_direction:c.flow_power_direction!==false};
  };
  const measure=(p,h)=>{
@@ -3098,8 +3101,8 @@ const HASSStudioPowerFlow=(()=>{
      ';--ss-flow-gap:'+v.interval+';--ss-flow-cycle:-'+cycle+
      ';animation-direction:'+v.direction;
  };
- const arrowPath=(d,w)=>'<path class="ss-power-arrow" d="'+d+'" stroke="#fff" stroke-width="'+w+'" stroke-dasharray="1 17" fill="none"/>';
- return Object.freeze({defaults,normalize,measure,visual,style,arrowPath});
+ const arrowPath=(d,w,color='#38BDF8')=>'<path class="ss-power-arrow" d="'+d+'" stroke="'+colorHex(color)+'" stroke-width="'+w+'" stroke-dasharray="1 17" fill="none"/>';
+ return Object.freeze({defaults,normalize,measure,visual,style,arrowPath,colorHex});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioPowerFlow;
 
@@ -4400,7 +4403,8 @@ const HASSStudioLayout = (() => {
         energy_end:HASSStudioEnergyTopology.connection(v).end,
         points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
           x:clamp(q.x,-5000,10000,100),y:clamp(q.y,-5000,10000,100)})),
-        style:{color:hydraulic&&colors[style.color]?style.color:hydraulic?'hot':'electric',
+        style:{color:hydraulic?(colors[style.color]?style.color:'hot'):
+            HASSStudioPowerFlow.colorHex(style.color,'#E3BC63'),
           width:clamp(style.width,2,14,hydraulic?7:5),
           cap_start:hydraulic&&style.cap_start!==false,cap_end:hydraulic&&style.cap_end!==false},
         animation:{
@@ -4568,7 +4572,7 @@ const HASSStudioCanvas = (() => {
         const pts=powerVisual.direction==='reverse'?[...connection.points].reverse():connection.points;
         const track=connectionPath(pts),size=powerVisual.size,half=+(size*.52).toFixed(2);
         const arrow='<path d="M'+(-size)+' '+(-half)+' L0 0 L'+(-size)+' '+half+
-          '" fill="none" stroke="#fff" stroke-width="'+powerVisual.width+
+          '" fill="none" stroke="'+a.flow_color+'" stroke-width="'+powerVisual.width+
           '" stroke-linecap="round" stroke-linejoin="round"/>';
         return [0,1,2].map(i=>'<g class="ss-power-arrow">'+arrow+
           '<animateMotion path="'+track+'" dur="'+a.flow_speed+
@@ -4581,7 +4585,7 @@ const HASSStudioCanvas = (() => {
         return '<g class="ss-cap" data-cap="'+(first?'start':'end')+'" transform="translate('+at.x+' '+at.y+') rotate('+angle+')">'+
           '<rect x="-6" y="-7" width="12" height="14" rx="2" fill="#7c8793" stroke="#b6c1cc"/></g>';
       };
-      const color=electric?'#e3bc63':colors[s.color];
+      const color=electric?s.color:colors[s.color];
       return '<g class="ss-connection ss-connection-'+connection.type+'" data-id="'+esc(connection.id)+'"'+
          (electric&&settings.flow_power_mode==='balance'?' data-flow-source="'+esc(powerVisual?.source||'unavailable')+'" data-flow-availability="'+esc(powerVisual?.availability||'unavailable')+'"':'')+'>'+
         '<path class="ss-connection-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
@@ -4589,7 +4593,7 @@ const HASSStudioCanvas = (() => {
         '<path class="ss-line" d="'+d+'" stroke="'+color+'" stroke-width="'+s.width+'" fill="none"/>'+
         (enabled&&powerVisual?.pattern==='arrows'?motionArrows():enabled?'<path class="ss-line ss-flow'+(electric?' ss-flow-power ss-flow-'+powerVisual.pattern:'')+'" d="'+d+'"'+
           (electric?' stroke-width="'+powerVisual.width+'" stroke-dasharray="'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:powerVisual.size*2+' '+powerVisual.interval)+'"':'')+
-          ' style="--ss-speed:'+a.flow_speed+'s;'+(electric?HASSStudioPowerFlow.style(powerVisual)+';stroke-width:'+powerVisual.width+';stroke-dasharray:'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:(powerVisual.size*2)+' '+powerVisual.interval):'animation-direction:'+a.flow_direction)+'"/>':'')+
+          ' style="--ss-speed:'+a.flow_speed+'s;'+(electric?'stroke:'+a.flow_color+';'+HASSStudioPowerFlow.style(powerVisual)+';stroke-width:'+powerVisual.width+';stroke-dasharray:'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:(powerVisual.size*2)+' '+powerVisual.interval):'animation-direction:'+a.flow_direction)+'"/>':'')+
         endcap(true)+endcap(false)+'</g>';
     }).join('');
     const accessories=data.connections.filter(c=>c.type==='hydraulic').map(c=>
@@ -4803,20 +4807,10 @@ const HASSStudioEditorInspector = (() => {
         ports+='<button type="button" data-add-energy-port>+ Dodaj port</button>';
         markup+=sect('inverter-ports','3. Porty i połączenia','mdi:connection',ports,false);
 
-        let extra='<p class="ss-note">Parametry panelu korzystają z odczytów urządzenia. Własną encję przypisujesz tylko dla wiersza „Dowolna encja”.</p>';
-        const types=HASSStudioInverter.DEFAULT_KEYS.map(key=>[key,({
-          ac_power:'Moc AC',temperature:'Temperatura falownika',status:'Stan falownika',
-          alarm:'Alarm',pv_summary:'Podsumowanie wejścia PV',pv_voltage:'Napięcie PV',
-          pv_current:'Prąd PV',pv_power:'Moc PV',custom:'Dowolna encja HA'
-        })[key]]);
+        let extra='<p class="ss-note">Tutaj dodajesz wyłącznie własne odczyty HA. PV1/PV2, moc i temperatura są już skonfigurowane w „Dane urządzenia”.</p>';
         c.panel_rows.forEach((row,i)=>{
-          let fields=field('Wyświetlany parametr','inv_row_'+i+'_key',row.key,'text',types)+
-            field('Etykieta w panelu','inv_row_'+i+'_label',row.label);
-          if(row.key.startsWith('pv_'))
-            fields+=field('Wejście PV (1, 2, …)','inv_row_'+i+'_input',row.input+1,
-              'number',null,'min="1" max="'+c.count+'"');
-          if(row.key==='custom')
-            fields+=field('Encja Home Assistant','inv_row_'+i+'_entity',row.entity,
+          let fields=field('Nazwa odczytu','inv_row_'+i+'_label',row.label);
+          fields+=field('Encja Home Assistant','inv_row_'+i+'_entity',row.entity,
               'search',null,'list="ss-entity-list"')+
               (test?'<div class="ss-metric-test">'+
                 field('Wartość TEST','inv_row_'+i+'_manual_value',row.manual_value)+'</div>':'');
@@ -4831,7 +4825,7 @@ const HASSStudioEditorInspector = (() => {
             'mdi:table-row',fields,false);
         });
         extra+='<button type="button" data-inv-row-add="true">+ Dodaj parametr panelu</button>';
-        markup+=sect('inverter-extra','4. Dodatkowe encje i parametry panelu',
+        markup+=sect('inverter-extra','4. Dodatkowe encje',
           'mdi:chart-timeline-variant',extra,false);
       }else{
       markup+='<div class="ss-inspector-heading">'+sectionIcon(selection.type==='connection'?(obj.type==='electric'?'mdi:power-plug':'mdi:pipe'):(registry.categoryIcons[registry.resolve(obj.type,obj.variant)?.category]||'mdi:cube-outline'))+
@@ -5260,6 +5254,24 @@ const HASSStudioEditorInspector = (() => {
         markup+='<p class="ss-note">'+(isHydraulic?'Rura hydrauliczna':'Przewód elektryczny')+
           ' — rodzaj wybiera się w bibliotece połączeń.</p>';
         markup+=field(L.pipeWidth,'style_width',s.width,'range',null,'min="2" max="14" step="1"');
+        if(!isHydraulic){
+          const palette=['#E3BC63','#F87171','#FB923C','#FACC15','#4ADE80','#2DD4BF',
+            '#38BDF8','#818CF8','#C084FC','#F472B6','#E2E8F0','#64748B'];
+          const colorEditor=(title,key,value)=>{
+            const c=HASSStudioPowerFlow.colorHex(value);
+            return '<div class="ss-wire-colors"><strong>'+title+'</strong>'+
+              '<div class="ss-color-palette">'+palette.map(hex=>
+                '<button type="button" data-color-pick="'+key+'" data-color-value="'+hex+
+                '" title="'+hex+'" aria-label="Ustaw kolor '+hex+'"'+
+                (hex===c?' aria-pressed="true"':' aria-pressed="false"')+
+                ' style="background:'+hex+'"></button>').join('')+'</div>'+
+              '<div class="ss-color-inputs">'+field('Próbnik',key+'_picker',c,'color')+
+              field('Kolor HEX (#RRGGBB)',key+'_hex',c,'text',null,'maxlength="7" spellcheck="false"')+
+              '</div></div>';
+          };
+          markup+=colorEditor('Kolor przewodu','style_wire_color',s.color);
+          markup+=colorEditor('Kolor animacji','anim_flow_color',a.flow_color);
+        }
         if(isHydraulic){
           markup+=field(L.pipeColor,'style_color',s.color,'text',colorsList);
           markup+=field(L.pipeStart,'style_cap_start',s.cap_start?'true':'false','text',[['true',L.yes],['false',L.no]]);
@@ -5672,6 +5684,12 @@ const HASSStudioEditorLibrary=(()=>{
       '.ss-props .ss-row{display:flex;align-items:center;gap:6px}.ss-props .ss-row>*{flex:1;min-width:0}'+
       '.ss-props .ss-row button{flex:0 0 auto}.ss-props input[type=range]{padding:0}'+
       '.ss-props label,.ss-props .ss-row{min-width:0}.ss-props .ss-row strong{overflow-wrap:anywhere}'+
+      '.ss-props .ss-color-palette{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;margin:8px 0}'+
+      '.ss-props .ss-color-palette button{min-width:0;height:28px;padding:0;border:2px solid #3d4550;border-radius:5px}'+
+      '.ss-props .ss-color-palette button[aria-pressed=true]{outline:2px solid var(--primary-color,#38BDF8);outline-offset:1px}'+
+      '.ss-props .ss-color-inputs{display:grid;grid-template-columns:1fr 2fr;gap:8px}'+
+      '.ss-props .ss-wire-colors{padding:7px 0;border-top:1px solid var(--divider-color,#53677c)}'+
+      '.ss-props input[type=color]{padding:2px;height:37px;cursor:pointer}'+
       '.ss-props .ss-metric-group{display:grid;gap:8px;border-top:1px solid var(--divider-color,#53677c);padding:11px 0}'+
       '.ss-props .ss-metric-group>strong{font-size:12px}'+
       '.ss-props .ss-metric-test{border:1px solid #aa8543;background:rgba(196,139,38,.10);border-radius:7px;padding:9px}'+
@@ -5914,7 +5932,7 @@ const HASSStudioEditorLibrary=(()=>{
         if(!hydraulic&&preset!=='electric')return;
         const connection={id:freshId('c'),type:preset,label:'',
           points:position?[{x:position.x-80,y:position.y},{x:position.x+80,y:position.y}]:[{x:180+n*10,y:120+n*12},{x:470+n*10,y:120+n*12}],
-          style:{color:hydraulic?'hot':'electric',width:hydraulic?7:5,cap_start:hydraulic,cap_end:hydraulic},
+          style:{color:hydraulic?'hot':'#E3BC63',width:hydraulic?7:5,cap_start:hydraulic,cap_end:hydraulic},
           animation:{flow_mode:hydraulic?'auto':'off',flow_entity:'',flow_direction:'forward',flow_speed:1,...HASSStudioPowerFlow.defaults(),flow_power_mode:hydraulic?'off':'balance'},
           accessories:[]};
         if(!hydraulic){
@@ -6088,6 +6106,9 @@ const HASSStudioEditorLibrary=(()=>{
         const attr=key.slice(6),s=obj.style;
         if(attr==='width')s.width=clamp(val,2,14,s.width);
         else if(attr==='color'&&obj.type==='hydraulic')s.color=colors[val]?val:s.color;
+        else if(attr.startsWith('wire_color_')&&obj.type==='electric'){
+          if(/^#[0-9a-fA-F]{6}$/.test(val))s.color=HASSStudioPowerFlow.colorHex(val);
+        }
         else if(['cap_start','cap_end'].includes(attr)&&obj.type==='hydraulic')s[attr]=val==='true';
        }else if(selection.type==='connection'&&key.startsWith('energy_attach_')){
         const side=key.slice('energy_attach_'.length),parts=val.split(':');
@@ -6128,6 +6149,7 @@ const HASSStudioEditorLibrary=(()=>{
         else if(obj.type==='electric'){
           if(attr==='flow_power_mode')a.flow_power_mode=['off','ha','manual','balance'].includes(val)?val:'off';
           else if(attr==='flow_power_entity')a.flow_power_entity=validEntity(val)?val:'';
+          else if(attr.startsWith('flow_color_'))a.flow_color=HASSStudioPowerFlow.colorHex(val,a.flow_color);
           else if(attr==='flow_pattern')a.flow_pattern=['dots','dashes','arrows'].includes(val)?val:'dots';
           else if(attr==='flow_power_direction')a.flow_power_direction=val==='true';
           else if(['flow_power_kw','flow_max_kw','flow_min_width','flow_max_width'].includes(attr)){
@@ -6411,6 +6433,15 @@ const HASSStudioEditorLibrary=(()=>{
         }
         obj.animation.flow_power_mode='balance';
         commit(model);render();return;
+      }
+      if(selection.type==='connection'&&obj.type==='electric'&&button.hasAttribute('data-color-pick')){
+        const key=button.dataset.colorPick,value=button.dataset.colorValue;
+        if(/^#[0-9a-fA-F]{6}$/.test(value)){
+          if(key==='style_wire_color')obj.style.color=value;
+          if(key==='anim_flow_color')obj.animation.flow_color=value;
+          commit(model);render();
+        }
+        return;
       }
       if(obj.type==='inverter'&&
         (button.hasAttribute('data-inv-row-add')||button.hasAttribute('data-inv-row-delete')||

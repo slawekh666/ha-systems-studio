@@ -9,21 +9,21 @@ const HASSStudioInverter=(()=>{
  const defaultRow=(key='custom',input=0)=>({key:DEFAULT_KEYS.includes(key)?key:'custom',
    input,entity:'',label:'',unit:'auto',decimals:1,manual_value:''});
  const panelRows=(raw,node,count)=>{
-   // A stored empty array is meaningful. Only older layouts need migration.
-   if(Array.isArray(raw.panel_rows))return raw.panel_rows.slice(0,MAX_ROWS).map((row)=>{
-     const key=DEFAULT_KEYS.includes(row?.key)?row.key:'custom';
-     return {key,input:Math.round(clamp(row?.input,0,count-1,0)),
-       entity:entity(row?.entity),
-       label:String(row?.label??'').slice(0,42),
-       unit:['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].includes(row?.unit)?row.unit:'auto',
-       decimals:Math.round(clamp(row?.decimals,0,3,1)),
-       manual_value:String(row?.manual_value??'').slice(0,60)};
-   });
-   const legacy=Array.from({length:count},(_,i)=>defaultRow('pv_summary',i));
-   const extras=Array.isArray(node?.entities)?node.entities.slice(0,MAX_ROWS-count).map(item=>({
-     ...defaultRow('custom'),entity:entity(item?.entity),label:String(item?.label||'').slice(0,42)
-   })):[];
-   return legacy.concat(extras);
+   // Built-in inverter metrics (including PV1/PV2) are configured under
+   // "Device data", not duplicated as independently editable panel rows.
+   // Keep only user-defined HA entities, including those from legacy layouts.
+   const source=Array.isArray(raw.panel_rows)?raw.panel_rows:
+     Array.isArray(node?.entities)?node.entities.map(item=>({
+       key:'custom',entity:item?.entity,label:item?.label
+     })):[];
+   return source.filter(row=>row&&(row.key==null||row.key==='custom'))
+     .slice(0,MAX_ROWS).map(row=>({
+       key:'custom',input:0,entity:entity(row.entity),
+       label:String(row.label??'').slice(0,42),
+       unit:['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].includes(row.unit)?row.unit:'auto',
+       decimals:Math.round(clamp(row.decimals,0,3,1)),
+       manual_value:String(row.manual_value??'').slice(0,60)
+     }));
  };
  const panelHeight=c=>Math.max(52,40+c.panel_rows.length*ROW_HEIGHT);
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,

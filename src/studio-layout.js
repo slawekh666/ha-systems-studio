@@ -115,7 +115,8 @@ const HASSStudioLayout = (() => {
         energy_end:HASSStudioEnergyTopology.connection(v).end,
         points:(Array.isArray(v.points)?v.points:[]).slice(0,30).map(q=>({
           x:clamp(q.x,-5000,10000,100),y:clamp(q.y,-5000,10000,100)})),
-        style:{color:hydraulic&&colors[style.color]?style.color:hydraulic?'hot':'electric',
+        style:{color:hydraulic?(colors[style.color]?style.color:'hot'):
+            HASSStudioPowerFlow.colorHex(style.color,'#E3BC63'),
           width:clamp(style.width,2,14,hydraulic?7:5),
           cap_start:hydraulic&&style.cap_start!==false,cap_end:hydraulic&&style.cap_end!==false},
         animation:{

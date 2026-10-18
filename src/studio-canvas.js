@@ -142,7 +142,7 @@ const HASSStudioCanvas = (() => {
         const pts=powerVisual.direction==='reverse'?[...connection.points].reverse():connection.points;
         const track=connectionPath(pts),size=powerVisual.size,half=+(size*.52).toFixed(2);
         const arrow='<path d="M'+(-size)+' '+(-half)+' L0 0 L'+(-size)+' '+half+
-          '" fill="none" stroke="#fff" stroke-width="'+powerVisual.width+
+          '" fill="none" stroke="'+a.flow_color+'" stroke-width="'+powerVisual.width+
           '" stroke-linecap="round" stroke-linejoin="round"/>';
         return [0,1,2].map(i=>'<g class="ss-power-arrow">'+arrow+
           '<animateMotion path="'+track+'" dur="'+a.flow_speed+
@@ -155,7 +155,7 @@ const HASSStudioCanvas = (() => {
         return '<g class="ss-cap" data-cap="'+(first?'start':'end')+'" transform="translate('+at.x+' '+at.y+') rotate('+angle+')">'+
           '<rect x="-6" y="-7" width="12" height="14" rx="2" fill="#7c8793" stroke="#b6c1cc"/></g>';
       };
-      const color=electric?'#e3bc63':colors[s.color];
+      const color=electric?s.color:colors[s.color];
       return '<g class="ss-connection ss-connection-'+connection.type+'" data-id="'+esc(connection.id)+'"'+
          (electric&&settings.flow_power_mode==='balance'?' data-flow-source="'+esc(powerVisual?.source||'unavailable')+'" data-flow-availability="'+esc(powerVisual?.availability||'unavailable')+'"':'')+'>'+
         '<path class="ss-connection-hit" d="'+d+'" stroke="transparent" stroke-width="24" fill="none"/>'+
@@ -163,7 +163,7 @@ const HASSStudioCanvas = (() => {
         '<path class="ss-line" d="'+d+'" stroke="'+color+'" stroke-width="'+s.width+'" fill="none"/>'+
         (enabled&&powerVisual?.pattern==='arrows'?motionArrows():enabled?'<path class="ss-line ss-flow'+(electric?' ss-flow-power ss-flow-'+powerVisual.pattern:'')+'" d="'+d+'"'+
           (electric?' stroke-width="'+powerVisual.width+'" stroke-dasharray="'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:powerVisual.size*2+' '+powerVisual.interval)+'"':'')+
-          ' style="--ss-speed:'+a.flow_speed+'s;'+(electric?HASSStudioPowerFlow.style(powerVisual)+';stroke-width:'+powerVisual.width+';stroke-dasharray:'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:(powerVisual.size*2)+' '+powerVisual.interval):'animation-direction:'+a.flow_direction)+'"/>':'')+
+          ' style="--ss-speed:'+a.flow_speed+'s;'+(electric?'stroke:'+a.flow_color+';'+HASSStudioPowerFlow.style(powerVisual)+';stroke-width:'+powerVisual.width+';stroke-dasharray:'+(powerVisual.pattern==='dots'?powerVisual.size+' '+powerVisual.interval:(powerVisual.size*2)+' '+powerVisual.interval):'animation-direction:'+a.flow_direction)+'"/>':'')+
         endcap(true)+endcap(false)+'</g>';
     }).join('');
     const accessories=data.connections.filter(c=>c.type==='hydraulic').map(c=>
