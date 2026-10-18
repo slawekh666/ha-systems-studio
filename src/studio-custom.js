@@ -92,6 +92,7 @@
       '.ss-card-viewport svg{display:block;flex:1 1 auto;min-height:0;width:100%;height:100%;max-width:none;max-height:none;touch-action:none}'+
       '.ss-card-viewport:fullscreen{width:100vw;height:100vh;aspect-ratio:auto;background:#17222d;touch-action:none}'+
       '.ss-card-viewport:fullscreen svg{touch-action:none}'+
+      HASSStudioEnergyDiagnostics.styles+
       '.ss-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap;padding:8px 12px;background:var(--card-background-color,#1c1c1c)}'+
       '.ss-card-header .ss-card-title{font-size:16px;font-weight:600;color:var(--primary-text-color);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
       '.ss-card-header .ss-view-tools{display:flex;align-items:center;gap:4px;flex-shrink:0}'+
@@ -108,7 +109,8 @@
       '<button type="button" data-view-action="in" title="Zoom +" aria-label="Zoom in">+</button>'+
       '<button type="button" data-view-action="fit" title="Dopasuj cały schemat" aria-label="Fit diagram">⤢</button>'+
       '<button type="button" data-view-action="full" title="Pełny ekran" aria-label="Fullscreen">⛶</button></div></div>'+
-      canvasSvg(this._cfg,this._hass)+'</div>';
+      canvasSvg(this._cfg,this._hass)+
+      HASSStudioEnergyDiagnostics.render(this._cfg,this._hass,pickLang(this._cfg,this._hass),'viewer')+'</div>';
   };
   const updateCardCamera=function(){
     const view=this._box?.querySelector('#ss-card-viewport'),svg=view?.querySelector('svg');
@@ -363,12 +365,21 @@
           (o.mode==='ha'?'<label>Encja<input type="search" data-balance-entity value="'+esc(o.entity)+'"></label>':'')+'</div>';
         }).join('')+
         (e.enabled?'<p>'+HASSStudioEnergyFlow.resolve(get(),this._hass).balance.networks.map(n=>n.state+' '+(n.residual_kw??'—')+' kW').join(' / ')+'</p>':'')+
-        '<p class="ss-note">Test i obliczenia nie są pomiarami HA.</p>';
+        '<p class="ss-note">Test i obliczenia nie są pomiarami HA.</p>'+
+        '<h4>Diagnostyka</h4><label><input type="checkbox" data-diagnostics-enable'+(get().energy_diagnostics.enabled?' checked':'')+'> Pokaż panel w schemacie</label>'+
+        '<label><input type="checkbox" data-diagnostics-devices'+(get().energy_diagnostics.show_devices?' checked':'')+'> Lista urządzeń</label>'+
+        '<label><input type="checkbox" data-diagnostics-cables'+(get().energy_diagnostics.show_cables?' checked':'')+'> Przepływy przewodów</label>'+
+        '<label><input type="checkbox" data-diagnostics-warnings'+(get().energy_diagnostics.show_warnings?' checked':'')+'> Ostrzeżenia</label>'+
+        HASSStudioEnergyDiagnostics.render(get(),this._hass,pickLang(this._config,this._hass),'editor');
     };
     properties.addEventListener('change',event=>{
-      if(!event.target.matches('[data-balance-enable],[data-balance-scenario],[data-balance-mode],[data-balance-kw],[data-balance-entity]'))return;
+      if(!event.target.matches('[data-balance-enable],[data-balance-scenario],[data-balance-mode],[data-balance-kw],[data-balance-entity],[data-diagnostics-enable],[data-diagnostics-devices],[data-diagnostics-cables],[data-diagnostics-warnings]'))return;
       const el=event.target,model=get(),e=model.energy_balance;
-      if(el.matches('[data-balance-enable]'))e.enabled=el.checked;
+      if(el.matches('[data-diagnostics-enable]'))model.energy_diagnostics.enabled=el.checked;
+      else if(el.matches('[data-diagnostics-devices]'))model.energy_diagnostics.show_devices=el.checked;
+      else if(el.matches('[data-diagnostics-cables]'))model.energy_diagnostics.show_cables=el.checked;
+      else if(el.matches('[data-diagnostics-warnings]'))model.energy_diagnostics.show_warnings=el.checked;
+      else if(el.matches('[data-balance-enable]'))e.enabled=el.checked;
       else if(el.matches('[data-balance-scenario]'))e.scenario=el.value;
       else {
         const id=el.closest('[data-participant]')?.dataset.participant;if(!id)return;

@@ -6,7 +6,7 @@ const ctx={isEnt:x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x),
   document:{createElement:()=>({hidden:true,appendChild(){},replaceChildren(){}})}};
 vm.createContext(ctx);
 for(const name of ['readout-scale.js','ha-state.js','power-flow.js','device-registry.js','studio-viewport.js',
-  'energy-topology.js','energy-balance.js','energy-flow.js','studio-layout.js','animation-state.js','studio-canvas.js','studio-inspector.js']){
+  'energy-topology.js','energy-balance.js','energy-flow.js','energy-diagnostics.js','studio-layout.js','animation-state.js','studio-canvas.js','studio-inspector.js']){
   const code=fs.readFileSync('src/'+name,'utf8');
   vm.runInContext(code,ctx,{filename:name});
 }
