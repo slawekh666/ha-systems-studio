@@ -55,9 +55,17 @@ const HASSStudioViewerGestures=(()=>{
     };
     const onWheel=event=>{
       if(!viewInPath(event))return;
-      // Normal view: Shift+wheel only. Fullscreen retains its existing wheel gesture.
+      // Keep ordinary HA scrolling; fullscreen retains wheel zoom without Shift.
       if(!fullscreen()&&!event.shiftKey)return;
-      event.preventDefault();zoom(event.deltaY<0?1.15:1/1.15,event);
+      // Firefox can turn Shift+wheel into horizontal wheel events (deltaY=0).
+      const raw=event.deltaY || (event.shiftKey?event.deltaX:0);
+      if(!Number.isFinite(raw)||raw===0)return;
+      // Normalize wheel pixels, wheel lines and pages. Small touchpad deltas
+      // produce small zoom steps; clamp large jumps from high-resolution devices.
+      const unit=event.deltaMode===1?40:event.deltaMode===2?600:1;
+      const delta=Math.max(-160,Math.min(160,raw*unit));
+      event.preventDefault();
+      zoom(Math.exp(-delta*.00125),event);
     };
     const startTracking=()=>{
       if(tracking)return;
