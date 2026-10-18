@@ -5193,7 +5193,8 @@ const HASSStudioEditorLibrary=(()=>{
         (e.enabled?'<p>'+HASSStudioEnergyFlow.resolve(get(),this._hass).balance.networks.map(n=>n.state+' '+(n.residual_kw??'—')+' kW').join(' / ')+'</p>':'')+
         '<p class="ss-note">Test i obliczenia nie są pomiarami HA.</p>';
     };
-    root.getElementById('ss-energy-controls')?.addEventListener('change',event=>{
+    properties.addEventListener('change',event=>{
+      if(!event.target.matches('[data-balance-enable],[data-balance-scenario],[data-balance-mode],[data-balance-kw],[data-balance-entity]'))return;
       const el=event.target,model=get(),e=model.energy_balance;
       if(el.matches('[data-balance-enable]'))e.enabled=el.checked;
       else if(el.matches('[data-balance-scenario]'))e.scenario=el.value;
@@ -5234,8 +5235,9 @@ const HASSStudioEditorLibrary=(()=>{
     const render=()=>{
       ({width:sceneW,height:sceneH}=dimensions());
       stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
-      renderBalance();
       applyCamera();renderProps();
+      properties.insertAdjacentHTML('beforeend','<div id="ss-energy-controls"></div>');
+      renderBalance();
     };
     if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>applyCamera()).observe(stage);
     const setSelected=(type,id)=>{
