@@ -1,13 +1,13 @@
 /* Building load: original, editable house/garage/workshop SVG and HA electrical load. */
 const HASSStudioBuilding=(()=>{
- const defaults=()=>({mode:'live',power_entity:'',daily_entity:'',power_kw:2,daily_kwh:0,show_readout:true,readout_scale:1,measurement:'individual',window_glow:true});
+ const defaults=()=>({mode:'live',power_entity:'',daily_entity:'',power_kw:2,daily_kwh:0,show_readout:true,readout_scale:1,measurement:'individual',remaining_enabled:false,remaining_kw:0,window_glow:true});
  const clamp=(v,a,b,d)=>v!==''&&v!=null&&Number.isFinite(Number(v))?Math.max(a,Math.min(b,Number(v))):d;
  const entity=v=>typeof v==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(v)?v:'';
  const normalize=n=>{
   const x=n?.building||n||{},d=defaults();
   return {...d,...x,mode:x.mode==='manual'?'manual':'live',power_entity:entity(x.power_entity),
    daily_entity:entity(x.daily_entity),power_kw:clamp(x.power_kw,0,10000,2),
-   daily_kwh:clamp(x.daily_kwh,0,1000000,0),
+   daily_kwh:clamp(x.daily_kwh,0,1000000,0),remaining_enabled:x.remaining_enabled===true,remaining_kw:clamp(x.remaining_kw,0,10000,0),
    readout_scale:HASSStudioReadoutScale.factor(x.readout_scale),
    measurement:x.measurement==='aggregate'?'aggregate':'individual',
    show_readout:x.show_readout!==false,window_glow:x.window_glow!==false};

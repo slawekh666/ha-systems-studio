@@ -10,13 +10,24 @@ const HASSStudioEnergyTopology=(()=>{
  const port=p=>({id:ident(p?.id),label:String(p?.label||'').slice(0,40),
    medium:medium(p?.medium),x:num(p?.x,0,100,50),y:num(p?.y,0,100,50),
    bus:ident(p?.bus)});
- const ports=n=>(Array.isArray(n?.energy_ports)?n.energy_ports:[]).slice(0,MAX_PORTS)
+ const electricalType=n=>['power_grid','inverter','building','energy_storage','ev_charger','distribution_board','pump'].includes(n?.type)||
+   n?.type==='boiler'&&['electric','electric_modern','heatpump','heatpump_modern'].includes(n?.variant);
+ const defaultPorts=n=>{
+   if(!electricalType(n))return [];
+   const ac=(id,x,y,bus='main')=>({id,label:id,medium:'ac',bus,x,y});
+   if(n.type==='building')return [ac('supply',0,50),ac('child',100,50)];
+   if(n.type==='distribution_board')return [ac('left1',0,32),ac('left2',0,68),ac('right1',100,32),ac('right2',100,68)];
+   if(n.type==='inverter')return [ac('ac',100,55),{id:'pv1',label:'PV1',medium:'dc',bus:'pv1',x:0,y:30},{id:'pv2',label:'PV2',medium:'dc',bus:'pv2',x:0,y:70}];
+   if(n.type==='power_grid')return [ac('ac',100,50)];
+   return [ac('ac',n.type==='pump'?50:0,50)];
+ };
+ const ports=n=>(Array.isArray(n?.energy_ports)?n.energy_ports:defaultPorts(n)).slice(0,MAX_PORTS)
    .map(port).filter((p,i,a)=>p.id&&a.findIndex(x=>x.id===p.id)===i);
  const defaults=n=>{
    const type=n?.type;
    return type==='power_grid'?'grid':type==='inverter'?'source':
      type==='energy_storage'?'storage':type==='building'||type==='ev_charger'?'load':
-     type==='distribution_board'?'junction':'neutral';
+     type==='distribution_board'?'junction':type==='pump'?'load':type==='boiler'&&['electric','electric_modern','heatpump','heatpump_modern'].includes(n?.variant)?'load':'neutral';
  };
  const node=n=>({role:role(n?.energy_role||defaults(n)),ports:ports(n),
    buses:(Array.isArray(n?.energy_buses)?n.energy_buses:[]).slice(0,MAX_BUSES).map(b=>({
@@ -51,11 +62,15 @@ const HASSStudioEnergyTopology=(()=>{
 
  // Attachments move only the referenced endpoint; manual bends stay untouched.
  const geometry=n=>{
-   const renderer=({
-     power_grid:HASSStudioPowerGrid,inverter:HASSStudioInverter,
-     energy_storage:HASSStudioEnergyStorage,building:HASSStudioBuilding,
-     ev_charger:HASSStudioEVCharger,distribution_board:HASSStudioDistributionBoard
-   })[n.type];
+   const renderers={
+     power_grid:typeof HASSStudioPowerGrid==='undefined'?null:HASSStudioPowerGrid,
+     inverter:typeof HASSStudioInverter==='undefined'?null:HASSStudioInverter,
+     energy_storage:typeof HASSStudioEnergyStorage==='undefined'?null:HASSStudioEnergyStorage,
+     building:typeof HASSStudioBuilding==='undefined'?null:HASSStudioBuilding,
+     ev_charger:typeof HASSStudioEVCharger==='undefined'?null:HASSStudioEVCharger,
+     distribution_board:typeof HASSStudioDistributionBoard==='undefined'?null:HASSStudioDistributionBoard
+   };
+   const renderer=renderers[n.type];
    return renderer?.geometry?.(n)||{x:4,y:3,width:112,height:113};
  };
  const anchor=(n,portId)=>{
@@ -103,7 +118,7 @@ const HASSStudioEnergyTopology=(()=>{
    }
    return best;
  };
- return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,node,end,connection,graph,
+ return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,defaultPorts,electricalType,node,end,connection,graph,
    geometry,anchor,locate,moveAttached,attach,nearest});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyTopology;

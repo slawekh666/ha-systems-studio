@@ -357,7 +357,7 @@
       const select=(list,value)=>list.map(([id,name])=>'<option value="'+id+'"'+(id===value?' selected':'')+'>'+name+'</option>').join('');
       host.innerHTML='<h4>Bilans energii</h4><label><input type="checkbox" data-balance-enable'+(e.enabled?' checked':'')+'> Włącz</label>'+
         '<label>Tryb<select data-balance-scenario>'+select([['live','HA'],['hybrid','Hybrydowy'],['simulation','Symulacja']],e.scenario)+'</select></label>'+
-        get().nodes.filter(n=>['inverter','building','power_grid','energy_storage','ev_charger'].includes(n.type)).map(n=>{
+        get().nodes.filter(n=>HASSStudioEnergyTopology.electricalType(n)&&HASSStudioEnergyTopology.node(n).role!=='junction').map(n=>{
           const o=e.participants.find(x=>x.node_id===n.id)||{mode:'device',manual_kw:0,entity:''};
           return '<div data-participant="'+esc(n.id)+'"><strong>'+esc(n.label||n.id)+'</strong>'+
           '<label>Źródło<select data-balance-mode>'+select(modes,o.mode)+'</select></label>'+
@@ -469,15 +469,18 @@
         const connection={id:freshId('c'),type:preset,label:'',
           points:position?[{x:position.x-80,y:position.y},{x:position.x+80,y:position.y}]:[{x:180+n*10,y:120+n*12},{x:470+n*10,y:120+n*12}],
           style:{color:hydraulic?'hot':'electric',width:hydraulic?7:5,cap_start:hydraulic,cap_end:hydraulic},
-          animation:{flow_mode:hydraulic?'auto':'off',flow_entity:'',flow_direction:'forward',flow_speed:1,...HASSStudioPowerFlow.defaults()},
+          animation:{flow_mode:hydraulic?'auto':'off',flow_entity:'',flow_direction:'forward',flow_speed:1,...HASSStudioPowerFlow.defaults(),flow_power_mode:hydraulic?'off':'balance'},
           accessories:[]};
-        model.connections.push(connection);selection={type:'connection',id:connection.id};
+        if(!hydraulic)model.energy_balance.enabled=true;
+         model.connections.push(connection);selection={type:'connection',id:connection.id};
       }else{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:position?position.x:80+(n%6)*170,y:position?position.y:100+Math.floor(n/6)*170,
-          scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,pellet_test_mode:false,pellet_manual_state:'burning',pellet_manual_temperature:65,pellet_manual_power_unit:'%',pellet_manual_power:65,pellet_manual_feeder:false,pellet_manual_alarm:false,pellet_burner_power_entity:'',pellet_feeder_entity:'',pellet_alarm_entity:'',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,equipment_mode:'live',equipment_test_running:false,equipment_test_speed:1,equipment_test_position:0,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?HASSStudioBuilding.defaults():undefined,entities:[],parts:[]};
-        model.nodes.push(node);selection={type:'node',id:node.id};
+          energy_ports:HASSStudioEnergyTopology.defaultPorts({type:kind,variant:preset}),energy_fallback_enabled:false,energy_grid_auto:kind==='power_grid',energy_power_entity:'',energy_manual_kw:null,
+           scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,pellet_test_mode:false,pellet_manual_state:'burning',pellet_manual_temperature:65,pellet_manual_power_unit:'%',pellet_manual_power:65,pellet_manual_feeder:false,pellet_manual_alarm:false,pellet_burner_power_entity:'',pellet_feeder_entity:'',pellet_alarm_entity:'',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,equipment_mode:'live',equipment_test_running:false,equipment_test_speed:1,equipment_test_position:0,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?{...HASSStudioBuilding.defaults(),measurement:'aggregate',remaining_kw:0}:undefined,entities:[],parts:[]};
+        if(HASSStudioEnergyTopology.electricalType(node))model.energy_balance.enabled=true;
+         model.nodes.push(node);selection={type:'node',id:node.id};
       }
       commit(model);render();
     };
@@ -636,7 +639,15 @@
         const side=key.slice('energy_attach_'.length),parts=val.split(':');
         if(['start','end'].includes(side))HASSStudioEnergyTopology.attach(model,obj,side,
           val?{node_id:parts[0],port_id:parts[1]}:null);
-      }else if(selection.type==='node'&&key==='energy_role'){
+      }else if(selection.type==='node'&&key==='energy_fallback_enabled'){
+         obj.energy_fallback_enabled=val==='true';
+       }else if(selection.type==='node'&&key==='energy_grid_auto'){
+         obj.energy_grid_auto=val==='true';
+       }else if(selection.type==='node'&&key==='energy_power_entity'){
+         obj.energy_power_entity=validEntity(val)?val:'';
+       }else if(selection.type==='node'&&key==='energy_manual_kw'){
+         obj.energy_manual_kw=val===''?null:clamp(val,0,10000,0);
+       }else if(selection.type==='node'&&key==='energy_role'){
         obj.energy_role=HASSStudioEnergyTopology.role(val);
       }else if(selection.type==='node'&&key.startsWith('energy_port_')){
         const port=obj.energy_ports?.[index];if(!port)return;
@@ -668,6 +679,8 @@
         const c=obj.building=obj.building||HASSStudioBuilding.defaults(),k=key.slice(9);
         if(k==='mode')c.mode=val==='manual'?'manual':'live';
         else if(k==='measurement')c.measurement=val==='aggregate'?'aggregate':'individual';
+        else if(k==='remaining_enabled')c.remaining_enabled=val==='true';
+        else if(k==='remaining_kw')c.remaining_kw=clamp(val,0,10000,0);
         else if(['power_entity','daily_entity'].includes(k))c[k]=validEntity(val)?val:'';
         else if(['show_readout','window_glow'].includes(k))c[k]=val==='true';
         else if(k==='readout_scale')c[k]=clamp(val,40,150,100)/100;

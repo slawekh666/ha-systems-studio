@@ -108,8 +108,8 @@ const aggregateConflict=balance.resolve(layout.normalized(cfg([
 ], [...connections,connect('garage-link','garage','ac','panel','d')],[
   {node_id:'grid',mode:'calculate'}
 ])),readings);
-assert.equal(aggregateConflict.networks[0].state,'invalid');
-assert(aggregateConflict.networks[0].reasons.includes('aggregate_overlap'));
+assert.equal(aggregateConflict.networks[0].state,'balanced'); // Independent board branch is not a child of the aggregate building.
+assert(!aggregateConflict.networks[0].reasons.includes('aggregate_overlap'));
 
 // No phantom connections through coordinates that happen to overlap.
 const isolated=balance.resolve(layout.normalized(cfg([
