@@ -124,7 +124,7 @@ assert(graphicsSrc.includes('.ss-flow-power{animation-name:ssElectricFlow}'));
 assert(graphicsSrc.includes('@keyframes ssWWFlow{to{stroke-dashoffset:-28}}'),
   'hydraulic animation must remain unchanged');
 assert.equal((svg.match(/class="ss-cap"/g)||[]).length,2,'only hydraulic connections receive pipe end caps');
-assert(svg.includes('stroke="#e3bc63"'),'cable must have a distinct electrical color');
+assert(svg.includes('stroke="#E3BC63"'),'cable must have a distinct electrical color');
 assert.equal((svg.match(/class="ss-handle"/g)||[]).length,3);
 const moved=canvas.translateConnectionPoints(points,23,-12);
 assert.equal(JSON.stringify(moved),JSON.stringify([{x:55,y:50},{x:175,y:50},{x:175,y:90}]));
