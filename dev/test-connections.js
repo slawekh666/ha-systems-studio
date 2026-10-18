@@ -2,10 +2,10 @@
  * Uses the production normalization, SVG renderer and inspector in a read-only VM.
  */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const ctx={isEnt:x=>typeof x==='string'&&/^[a-z_]+\\.[a-z0-9_]+$/.test(x),
+const ctx={isEnt:x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x),
   document:{createElement:()=>({hidden:true,appendChild(){},replaceChildren(){}})}};
 vm.createContext(ctx);
-for(const name of ['ha-state.js','power-flow.js','device-registry.js','studio-viewport.js',
+for(const name of ['readout-scale.js','ha-state.js','power-flow.js','device-registry.js','studio-viewport.js',
   'studio-layout.js','animation-state.js','studio-canvas.js','studio-inspector.js']){
   const code=fs.readFileSync('src/'+name,'utf8');
   vm.runInContext(code,ctx,{filename:name});
@@ -100,6 +100,54 @@ assert.equal((svg.match(/class="ss-handle"/g)||[]).length,3);
 const moved=canvas.translateConnectionPoints(points,23,-12);
 assert.equal(JSON.stringify(moved),JSON.stringify([{x:55,y:50},{x:175,y:50},{x:175,y:90}]));
 assert.equal(points[0].x,30,'drag must not mutate original points');
+
+// Manual states for both independent nodes and on-pipe accessories must survive
+// normalization, remain visual-only and never fabricate live HA readings.
+const testAccessories=[
+ {id:'pa',type:'pump',position:20,entity:'binary_sensor.active',mode:'manual',test_running:true,test_speed:.7},
+ {id:'va',type:'valve',position:80,mode:'manual',test_position:65}
+];
+const testNodes=[
+ {id:'np',type:'pump',variant:'circulation',equipment_mode:'manual',equipment_test_running:true,equipment_test_speed:.5},
+ {id:'nv',type:'valve',variant:'three_way',equipment_mode:'manual',equipment_test_position:35},
+ {id:'live-v',type:'valve',variant:'two_way',equipment_mode:'live',entity:'sensor.valve'}
+];
+const testLayout={studio_layout:{width:1200,height:700,nodes:testNodes,
+ connections:[{...hydraulic,id:'hydro-manual',accessories:testAccessories}]}};
+const normTest=ctx.layout.normalized(testLayout);
+assert.equal(normTest.nodes[0].equipment_mode,'manual');
+assert.equal(normTest.nodes[1].equipment_test_position,35);
+assert.equal(normTest.connections[0].accessories[0].test_speed,.7);
+assert.equal(normTest.connections[0].accessories[1].test_position,65);
+const loaded=ctx.layout.normalized({studio_layout:{...testLayout.studio_layout,
+  nodes:normTest.nodes,connections:normTest.connections}});
+assert.equal(JSON.stringify(normTest),JSON.stringify(loaded),'manual equipment settings must survive save/load');
+ctx.HASSStudioGraphics.render=()=>'<g class="stub-equipment"/>';
+ctx.HASSStudioGraphics.defs=()=>'';
+const manualSvg=canvas.canvasSvg(testLayout,{states:{
+  'sensor.valve':{state:'42',attributes:{unit_of_measurement:'%'}},
+  'binary_sensor.active':{state:'off'}
+}},true);
+assert(manualSvg.includes('class="ss-equipment-state" data-mode="manual" data-state="on"'));
+assert(manualSvg.includes('data-position="35"'));
+assert(manualSvg.includes('animation-duration:0.5s'));
+assert(manualSvg.includes('data-position="65"')===false,'on-pipe accessory should use own readout');
+assert(manualSvg.includes('>65%</text>'));
+assert(manualSvg.includes('>42%</text>'));
+assert(manualSvg.includes('animation-duration:0.7s'));
+assert(manualSvg.includes('data-mode="manual"'));
+const unknownSvg=canvas.canvasSvg({...testLayout,studio_layout:{...testLayout.studio_layout,
+  nodes:[{id:'unknown-v',type:'valve',variant:'two_way'}],
+  connections:[{...hydraulic,accessories:[{id:'unknown-p',type:'pump',position:35}]}]}},{states:{}});
+assert(unknownSvg.includes('data-state="unknown"'));
+assert(unknownSvg.includes('data-position="unknown"'));
+assert(unknownSvg.includes('>—</text>'));
+assert(!unknownSvg.includes('class="ss-pump-pulse"'),'unknown live devices cannot pulse');
+const equipmentInspector=fs.readFileSync('src/studio-inspector.js','utf8');
+assert(equipmentInspector.includes("'eq_mode'")&&equipmentInspector.includes("'eq_test_position'"));
+assert(equipmentInspector.includes("'accessoryMode'")&&equipmentInspector.includes("'accessorySpeed'"));
+const editSource=fs.readFileSync('src/studio-custom.js','utf8');
+assert(editSource.includes("key==='accessoryMode'")&&editSource.includes("key.startsWith('eq_')"));
 
 const mockInspector=obj=>{
  const props={innerHTML:'',scrollTop:0,querySelectorAll:()=>[],appendChild(){}};

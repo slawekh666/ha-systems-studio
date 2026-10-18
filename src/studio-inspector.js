@@ -262,6 +262,18 @@ const HASSStudioEditorInspector = (() => {
           }
           markup+='<p class="ss-note">Brak encji: —. Symulacja nie wysyła komend do HA.</p>';
         }else markup+=field(L.entity,'entity',obj.entity,'search',null,'list="ss-entity-list"');
+        if(['pump','valve'].includes(obj.type)){
+          markup+=field('Źródło stanu','eq_mode',obj.equipment_mode||'live','text',
+            [['live','Home Assistant'],['manual','Test ręczny']]);
+          if(obj.equipment_mode==='manual'){
+            if(obj.type==='pump')markup+=field('Test pompy','eq_test_running',obj.equipment_test_running?'true':'false','text',
+                [['false','Wyłączona'],['true','Włączona']])+
+                field('Czas animacji (s)','eq_test_speed',obj.equipment_test_speed??1,'number',null,'min="0.35" max="5" step="0.1"');
+            else markup+=field('Test otwarcia / pozycji (%)','eq_test_position',obj.equipment_test_position??0,'number',null,'min="0" max="100" step="1"')+
+                '<p class="ss-note">Zawór 3D: pozycja, nie rzeczywista proporcja mieszania.</p>';
+          }
+          markup+='<p class="ss-note">Symulacja wizualna bez sterowania HA.</p>';
+        }
         if(obj.type==='boiler'){
           if(obj.variant==='fireplace_modern')markup+='<p class="ss-note">'+esc(L.fireplaceHelp)+'</p>';
           if(obj.variant==='electric_modern')markup+=field(L.electricPower,'electric_power_entity',obj.electric_power_entity,'search',null,'list="ss-entity-list"')+
@@ -418,7 +430,14 @@ const HASSStudioEditorInspector = (() => {
               field(L.accessoryPos,'accessoryPos',a.position,'range',null,
                 'min="0" max="100" step="1" data-index="'+index+'"')+
               field(L.accessoryLabel,'accessoryLabel',a.label,'text',null,'data-index="'+index+'"')+
-              '<label>'+esc(L.entity)+entityField(a.entity,'accessoryEntity',index)+'</label>').join('')+
+              '<label>'+esc(L.entity)+entityField(a.entity,'accessoryEntity',index)+'</label>'+
+               field('Źródło stanu','accessoryMode',a.mode||'live','text',
+                 [['live','Home Assistant'],['manual','Test ręczny']],'data-index="'+index+'"')+
+               (a.mode==='manual'?(a.type==='pump'?
+                 field('Pompa testowa','accessoryRunning',a.test_running?'true':'false','text',
+                   [['false','Wyłączona'],['true','Włączona']],'data-index="'+index+'"')+
+                 field('Czas animacji (s)','accessorySpeed',a.test_speed??1,'number',null,'min="0.35" max="5" step="0.1" data-index="'+index+'"'):
+                 field('Pozycja testowa (%)','accessoryPosition',a.test_position??0,'number',null,'min="0" max="100" step="1" data-index="'+index+'"')):'')).join('')+
             '<div class="ss-add-parts"><button type="button" data-add-accessory="pump">+ '+esc(L.pump)+'</button>'+
             '<button type="button" data-add-accessory="valve">+ '+esc(L.valve)+'</button></div></section>';
         }

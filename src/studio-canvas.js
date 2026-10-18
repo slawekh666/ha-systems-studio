@@ -75,17 +75,54 @@ const HASSStudioCanvas = (() => {
     return '<circle cx="60" cy="64" r="28" fill="#47647a" stroke="#c0d2de" stroke-width="2"/>'+
       '<path d="M60 38V70" stroke="#ecf2f5" stroke-width="5"/><circle cx="60" cy="79" r="9" fill="#f2bb74"/>';
   };
+  // Existing SVG artwork remains unchanged; these read-only overlays expose
+  // manual or HA state without inventing measurements for unassigned entities.
+  const equipmentReading=(item,hass,isPump)=>{
+    const mode=(item.equipment_mode||item.mode)==='manual'?'manual':'live';
+    const speed=Math.max(.35,Math.min(5,Number(item.equipment_test_speed??item.test_speed)||1));
+    if(mode==='manual'){
+      const running=(item.equipment_test_running??item.test_running)===true;
+      const position=Math.max(0,Math.min(100,Number(item.equipment_test_position??item.test_position)||0));
+      return {mode,known:true,active:isPump?running:position>=5,position:isPump?null:position,speed};
+    }
+    const entity=HASSStudioHA.entity(hass,item.entity);
+    const state=String(entity?.state??'').trim().toLowerCase();
+    const reading=HASSStudioHA.percentage(hass,item.entity);
+    if(isPump){
+      if(['on','open','active','running','heating'].includes(state))return {mode,known:true,active:true,position:null,speed};
+      if(['off','closed','idle','stopped','inactive'].includes(state))return {mode,known:true,active:false,position:null,speed};
+      return {mode,known:false,active:false,position:null,speed};
+    }
+    const boolOn=['on','open','active','running'].includes(state),boolOff=['off','closed','inactive'].includes(state);
+    const position=reading!==null?reading:boolOn?100:boolOff?0:null;
+    return {mode,known:position!==null,active:position!==null&&position>=5,position,speed};
+  };
+  const equipmentOverlay=(node,hass)=>{
+    const pump=node.type==='pump',state=equipmentReading(node,hass,pump);
+    const color=!state.known?'#a7bbc8':state.active?'#68c69b':'#98a5b1';
+    const status=!state.known?'unknown':state.active?'on':'off';
+    return '<g class="ss-equipment-state" data-mode="'+state.mode+'" data-state="'+status+'"'+
+      (pump?'':' data-position="'+(state.position===null?'unknown':state.position)+'"')+'>'+
+      (pump&&state.active?'<circle class="ss-pump-pulse" cx="60" cy="65" r="29" fill="none" stroke="#68c69b" style="animation-duration:'+state.speed+'s"/>':'')+
+      (pump?'<circle cx="60" cy="65" r="32" fill="none" stroke="'+color+'" stroke-width="2" opacity=".85"/>':
+        '<circle cx="60" cy="66" r="12" fill="none" stroke="'+color+'" stroke-width="3"/>'+
+        '<text x="60" y="113" text-anchor="middle" font-size="12" font-weight="600" fill="'+color+'">'+
+        (state.position===null?'—':Math.round(state.position)+'%')+'</text>')+'</g>';
+  };
   const symbolOnConnection=(item,connection,hass,language)=>{
     const at=onConnection(connection,item.position),isPump=item.type==='pump';
-    const enabled=HASSStudioGraphics.on(hass,item.entity);
-    const caption=esc(item.label||words[language][item.type]||item.type);
+    const reading=equipmentReading(item,hass,isPump);
+    const enabled=reading.active,caption=esc(item.label||words[language][item.type]||item.type);
+    const known=reading.known,color=!known?'#a7bbc8':enabled?'#68c69b':'#d7e5ee';
+    const status=!known?'unknown':enabled?'on':'off';
     return '<g transform="translate('+at.x+' '+at.y+')" class="ss-accessory" data-connection="'+esc(connection.id)+'"'+
       (item.entity?' data-more="'+esc(item.entity)+'"':'')+'>'+
-      '<circle r="17" fill="#405669" stroke="'+(enabled?'#68c69b':'#d7e5ee')+'" stroke-width="2"/>'+ 
-      (isPump&&enabled?'<circle class="ss-pump-pulse" r="17" fill="none" stroke="#68c69b"/>':'')+
+      '<circle r="17" fill="#405669" stroke="'+color+'" stroke-width="2" data-state="'+status+'" data-mode="'+reading.mode+'"/>'+ 
+      (isPump&&enabled?'<circle class="ss-pump-pulse" r="17" fill="none" stroke="#68c69b" style="animation-duration:'+reading.speed+'s"/>':'')+
       (isPump?'<path d="M-7 -10L10 0L-7 10Z" fill="#dceaf3"/>':
         '<path d="M-11 -8L0 0L-11 8ZM11 -8L0 0L11 8Z" fill="#e2c78d"/>')+
       '<text x="0" y="-25" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--primary-text-color,#e5edf5)" stroke="#252525" stroke-width="2" paint-order="stroke">'+caption+'</text>'+
+      (!isPump?'<text x="0" y="31" font-size="11" font-weight="600" text-anchor="middle" fill="'+color+'">'+(reading.position===null?'—':Math.round(reading.position)+'%')+'</text>':'')+
       '</g>';
   };
   const canvasSvg=(config,hass,editable=false,selected=null)=>{
@@ -168,7 +205,8 @@ const HASSStudioCanvas = (() => {
       };
       const visual=(building?HASSStudioBuilding.render(node,hass):distributionBoard?HASSStudioDistributionBoard.render(node,hass):evCharger?HASSStudioEVCharger.render(node,hass):inverter?HASSStudioInverter.render(node,hass):energyStorage?HASSStudioEnergyStorage.render(node,hass):radiator?HASSStudioRadiator.render(node,hass):manifold?HASSStudioManifold.render(node,hass):powerGrid?HASSStudioPowerGrid.render(node,hass):node.type==='tank'&&node.variant==='modular'?HASSStudioTank.render(node,hass):node.type==='boiler'&&node.variant==='solid_fuel'?HASSStudioSolidFuel.render(node,hass):modernPellet?HASSStudioPellet.render(node,hass):modernHP?HASSStudioHeatPump.render(node,hass):modernGas?HASSStudioGasBoiler.render(node,hass):modernElectric?HASSStudioElectricBoiler.render(node,hass):modernFireplace?HASSStudioFireplace.render(node,hass):node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node));
       const panel=panels[node.variant];
-      const displayMarkup=panel?HASSStudioReadoutScale.namedGroup(visual,panel[0],panel[1],panel[2],node.readout_scale):visual;
+      const displayMarkup=(panel?HASSStudioReadoutScale.namedGroup(visual,panel[0],panel[1],panel[2],node.readout_scale):visual)+
+        (['pump','valve'].includes(node.type)?equipmentOverlay(node,hass):'');
       return '<g class="ss-node" data-id="'+esc(node.id)+'"'+ent+' transform="translate('+node.x+' '+node.y+') scale('+node.scale+')">'+
         displayMarkup+
         (editable&&active?'<rect class="ss-selection" x="'+outline.x+'" y="'+outline.y+'" width="'+outline.width+'" height="'+outline.height+'" rx="8" fill="none" stroke="#52bfff" stroke-dasharray="5 4" stroke-width="1.6" pointer-events="none"/>':'')+
