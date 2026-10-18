@@ -1,7 +1,9 @@
 /* Data-driven electric flow. Numeric HA power only; no guessed network topology. */
 const HASSStudioPowerFlow=(()=>{
  const clamp=(n,a,b,d)=>n!==''&&n!==null&&n!==undefined&&Number.isFinite(Number(n))?Math.max(a,Math.min(b,Number(n))):d;
- const defaults=()=>({flow_power_entity:'',flow_power_mode:'off',flow_power_kw:0,flow_max_kw:10,flow_min_width:1.5,flow_max_width:6,flow_pattern:'dots',flow_power_direction:true});
+ const colorHex=(value,fallback='#38BDF8')=>
+   typeof value==='string'&&/^#[0-9a-fA-F]{6}$/.test(value)?value.toUpperCase():fallback;
+ const defaults=()=>({flow_power_entity:'',flow_power_mode:'off',flow_power_kw:0,flow_max_kw:10,flow_min_width:1.5,flow_max_width:6,flow_pattern:'dots',flow_color:'#38BDF8',flow_power_direction:true});
  const normalize=x=>{
    const d=defaults(),c={...d,...x};
    return {...c,flow_power_entity:typeof c.flow_power_entity==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(c.flow_power_entity)?c.flow_power_entity:'',
@@ -10,6 +12,7 @@ const HASSStudioPowerFlow=(()=>{
     flow_min_width:clamp(c.flow_min_width,.5,12,1.5),
     flow_max_width:clamp(c.flow_max_width,.5,16,6),
     flow_pattern:['dots','dashes','arrows'].includes(c.flow_pattern)?c.flow_pattern:'dots',
+    flow_color:colorHex(c.flow_color),
     flow_power_direction:c.flow_power_direction!==false};
  };
  const measure=(p,h)=>{
@@ -47,7 +50,7 @@ const HASSStudioPowerFlow=(()=>{
      ';--ss-flow-gap:'+v.interval+';--ss-flow-cycle:-'+cycle+
      ';animation-direction:'+v.direction;
  };
- const arrowPath=(d,w)=>'<path class="ss-power-arrow" d="'+d+'" stroke="#fff" stroke-width="'+w+'" stroke-dasharray="1 17" fill="none"/>';
- return Object.freeze({defaults,normalize,measure,visual,style,arrowPath});
+ const arrowPath=(d,w,color='#38BDF8')=>'<path class="ss-power-arrow" d="'+d+'" stroke="'+colorHex(color)+'" stroke-width="'+w+'" stroke-dasharray="1 17" fill="none"/>';
+ return Object.freeze({defaults,normalize,measure,visual,style,arrowPath,colorHex});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioPowerFlow;
