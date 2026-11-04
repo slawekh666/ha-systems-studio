@@ -3444,8 +3444,8 @@ const HASSStudioEnergyTopology=(()=>{
        // A direct building-child edge that is bypassed by another power path
        // must NOT be silently treated as an independent metered branch.
        const adjacent=buildings.filter(parent=>parent!==target&&
-         keysFor(parent).some(k=>(adjacency.get(k)||new Set())
-           .values().some(peer=>keysFor(target).includes(peer))));
+         reachable(seen,parent)&&depth(parent)<depth(target)&&
+         keysFor(parent).some(k=>[...(adjacency.get(k)||[])].some(peer=>keysFor(target).includes(peer))));
        if(adjacent.length)ambiguous.set(target,adjacent);
      }
    }
