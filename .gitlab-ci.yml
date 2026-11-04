@@ -28,6 +28,7 @@ validate_card:
     - node dev/test-energy-diagnostics.js
     - node dev/test-energy-unified.js
     - node dev/test-building-power-contract.js
+    - node dev/test-building-topology.js
     - node dev/test-energy-07a.js
     - node dev/test-power-only.js
     - node dev/test-electric-ports.js

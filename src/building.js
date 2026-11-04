@@ -6,7 +6,7 @@ const HASSStudioBuilding=(()=>{
  const normalize=n=>{
   const x=n?.building||n||{},d=defaults();
   return {...d,...x,mode:x.mode==='manual'?'manual':'live',power_entity:entity(x.power_entity),
-   daily_entity:entity(x.daily_entity),power_kw:clamp(x.power_kw,0,10000,2),
+   daily_entity:entity(x.daily_entity),power_kw:clamp(x.power_kw,x.measurement==='net'?-10000:0,10000,2),
    daily_kwh:clamp(x.daily_kwh,0,1000000,0),remaining_enabled:x.remaining_enabled===true,remaining_kw:clamp(x.remaining_kw,0,10000,0),
    readout_scale:HASSStudioReadoutScale.factor(x.readout_scale),
    measurement:['aggregate','net'].includes(x.measurement)?x.measurement:'individual',
