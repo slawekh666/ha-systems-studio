@@ -84,7 +84,7 @@ assert(x.balance.networks.length>1);
 assert(x.balance.warnings.some(w=>w.reason==='unconnected_device')||x.balance.networks.some(n=>n.state!=='balanced'));
 console.log('I: separate internal buses do not become fictitious shared main PASS');
 const upstreamOnly=[wire('pvline','pv','ac','home','entrance'),wire('evline','home','outlet','ev','ladowarka')];
-x=solve([pv,house('home',10),ev],upstreamOnly);net=x.balance.networks[0];
+x=solve([{...pv,inverter:{manual:{ac_power:10}}},house('home',10),ev],upstreamOnly);net=x.balance.networks[0];
 assert.equal(net.state,'balanced');approx(net.totals.consumption_kw,10);
 console.log('J: single inverter supply without grid or board can root a tree PASS');
 console.log('PASS: stage 07A.1-B.1 automatic building measurement hierarchy.');
