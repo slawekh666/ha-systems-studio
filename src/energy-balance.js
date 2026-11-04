@@ -180,62 +180,25 @@ const HASSStudioEnergyBalance=(()=>{
   const adjustBuildings=(group,layout,warnings,tolerance)=>{
     const items=new Map(group.devices.map(d=>[d.node_id,d]));
     const nodes=new Map((layout.nodes||[]).map(n=>[n.id,n]));
-    const links=new Map(),append=(id,item)=>{
-      if(!links.has(id))links.set(id,[]);
-      links.get(id).push(item);
-    };
-    const included=new Set(group.connection_ids);
-    for(const c of layout.connections||[]){
-      if(c.type!=='electric'||!included.has(c.id))continue;
-      const a=c.energy_start,b=c.energy_end;
-      if(!a?.node_id||!b?.node_id)continue;
-      append(a.node_id,{peer:b.node_id,port:a.port_id,otherPort:b.port_id,id:c.id});
-      append(b.node_id,{peer:a.node_id,port:b.port_id,otherPort:a.port_id,id:c.id});
-    }
-    const children=new Map(),owner=new Map(),invalid=new Map();
+    const topology=HASSStudioEnergyTopology.graph(layout);
+    const hierarchy=HASSStudioEnergyTopology.meterHierarchy(layout,group,topology);
+    const children=new Map(),invalid=new Map();
     const fault=(id,reason)=>{
       if(invalid.has(id))return;
       invalid.set(id,reason);warnings.push({node_id:id,reason});
     };
-    for(const entry of group.devices){
-      if(entry.node_type!=='building')continue;
-      const direct=new Set(),visited=new Set([entry.node_id]);
-      const visit=(id,via,from)=>{
-        if(visited.has(id)){fault(entry.node_id,'building_branch_cycle');return;}
-        visited.add(id);
-        const n=nodes.get(id),target=items.get(id);
-        if(!n){fault(entry.node_id,'building_invalid_child');return;}
-        if(n.type==='building'){
-          if(via!=='supply'){fault(entry.node_id,'building_child_wrong_side');return;}
-          if(!target){fault(entry.node_id,'building_invalid_child');return;}
-          direct.add(id);return;
-        }
-        const role=HASSStudioEnergyTopology.node(n).role;
-        // AC loads, generation, and bidirectional storage are all terminal
-        // participants. A junction is transparent but never an energy source.
-        if(role==='load'||role==='source'||role==='storage'){
-          if(!target){fault(entry.node_id,'building_invalid_child');return;}
-          direct.add(id);return;
-        }
-        if(role!=='junction'&&role!=='neutral'){
-          fault(entry.node_id,'building_invalid_child');return;
-        }
-        for(const edge of links.get(id)||[]){
-          if(edge.id!==from)visit(edge.peer,edge.otherPort,edge.id);
-        }
-      };
-      for(const edge of links.get(entry.node_id)||[])
-        if(edge.port==='child')visit(edge.peer,edge.otherPort,edge.id);
-      for(const id of direct){
-        const existing=owner.get(id);
-        if(existing&&existing!==entry.node_id){
-          fault(entry.node_id,'building_multiple_parents');
-          fault(existing,'building_multiple_parents');
-        }
-        owner.set(id,entry.node_id);
-      }
-      children.set(entry.node_id,[...direct]);
+    for(const entry of group.devices)if(entry.node_type==='building')
+      children.set(entry.node_id,[]);
+    for(const [id,owner] of hierarchy.owners){
+      if(children.has(owner))children.get(owner).push(id);
     }
+    for(const [id,parents] of hierarchy.ambiguous)
+      for(const parent of parents)if(children.has(parent))
+        fault(parent,'building_ambiguous_meter_path');
+    if(hierarchy.unresolvedRoots)
+      for(const entry of group.devices)if(entry.node_type==='building'&&
+        entry.measurement!=='individual')
+        fault(entry.node_id,'building_unknown_meter_root');
     const resolved=new Map(),visiting=new Set();
     const known=(kw,kind)=>({
       consumption_kw:kw===null?kind==='source'?0:null:round(Math.max(0,-kw)),
