@@ -39,6 +39,31 @@ const HASSStudioSvg = (() => {
     return rendered;
   };
 
+  /** Turn canonical parameter-to-SVG declarations into safe apply() bindings.
+   * The renderer supplies presentation formatters; field definitions own target
+   * IDs. Missing values/targets and collisions fail closed, never silently map
+   * one value to multiple SVG fields.
+   */
+  const parameterBindings=(definitions,values,formatters={})=>{
+    const result={};
+    for(const [key,field] of Object.entries(definitions)){
+      if(!field.svg)continue;
+      const {id,attribute='text'}=field.svg;
+      if(!/^[a-zA-Z][\w-]*$/.test(id)||!['text','fill','visibility'].includes(attribute))
+        throw new Error('Invalid parameter SVG target: '+key);
+      if(Object.prototype.hasOwnProperty.call(result,id))
+        throw new Error('Duplicate parameter SVG target: '+id);
+      if(!Object.prototype.hasOwnProperty.call(values,key))
+        throw new Error('Missing parameter value: '+key);
+      const format=formatters[key];
+      if(format!==undefined&&typeof format!=='function')
+        throw new Error('Invalid parameter formatter: '+key);
+      const raw=format?format(values[key]):values[key];
+      result[id]={[attribute]:raw==null?'—':String(raw)};
+    }
+    return result;
+  };
+
   /** Fill a named empty SVG group with renderer-generated animation SVG. */
   const inject = (template, slots) => {
     let result = template;
@@ -65,5 +90,5 @@ const HASSStudioSvg = (() => {
     .replace(/url\(#([^)]+)\)/g, (_, id) => 'url(#' + prefix + id + ')')
     .replace(/(\b(?:href|xlink:href)="#)([^"]+)(")/g, (_, a, id, z) => a + prefix + id + z);
 
-  return Object.freeze({ fragment, apply, inject, namespaceIds });
+  return Object.freeze({ fragment, apply, parameterBindings, inject, namespaceIds });
 })();

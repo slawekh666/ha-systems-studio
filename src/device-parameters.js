@@ -7,7 +7,8 @@ const HASSStudioDeviceParameters=(()=>{
    [id,Object.freeze({id,...spec})])));
  const core=fields([
   ['ac_power',{label:'Moc chwilowa falownika AC (kW)',unit:'kW',kind:'number',
-    role:'energy_source',entityPath:'entities.ac_power',manualPath:'manual.ac_power',testDefault:6.4,min:-500,max:500}],
+    role:'energy_source',entityPath:'entities.ac_power',manualPath:'manual.ac_power',
+    svg:Object.freeze({id:'inv-power',attribute:'text'}),testDefault:6.4,min:-500,max:500}],
   ['temperature',{label:'Temperatura falownika (°C)',unit:'°C',kind:'number',
     role:'telemetry',entityPath:'entities.temperature',manualPath:'manual.temperature',testDefault:32,min:-40,max:150}],
   ['status',{label:'Stan pracy falownika',unit:'',kind:'enum',role:'status',

@@ -160,7 +160,8 @@ const HASSStudioInverter=(()=>{
    source=HASSStudioSvg.inject(source,{'inv-pv-rows':rowMarkup,'inv-extra-panel':c.show_extra?extra(d,h):''});
    const led=d.state==='generating'?'#4cd6ff':d.state==='standby'?'#ff9b32':
      d.state==='alarm'?'#f04444':'#7e929f';
-   source=HASSStudioSvg.apply(source,{'inv-power':{text:kw(d.power)},
+   const screen=HASSStudioSvg.parameterBindings(parameters.core,{ac_power:d.power},{ac_power:kw});
+   source=HASSStudioSvg.apply(source,{...screen,
      'inv-led':{fill:led},'inv-led-glow':{fill:led},
      'inv-alert':{visibility:d.fault?'visible':'hidden'}});
    source=HASSStudioReadoutScale.namedGroup(source,'inverter-display',150,110,c.display_scale);

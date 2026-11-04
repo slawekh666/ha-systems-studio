@@ -20,6 +20,9 @@ for(const group of [schema.core,schema.pv]){
 }
 assert(Object.isFrozen(schema));
 assert.equal(schema.core.ac_power.unit,'kW');
+assert.equal(schema.core.ac_power.svg.id,'inv-power');
+assert.equal(schema.core.ac_power.svg.attribute,'text');
+assert(Object.isFrozen(schema.core.ac_power.svg));
 assert.equal(schema.core.ac_power.role,'energy_source');
 assert.equal(schema.pv.power.unit,'W');
 assert.equal(schema.entity('sensor.pv1'),'sensor.pv1');

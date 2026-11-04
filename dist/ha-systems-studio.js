@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.26-dev';
+const VERSION = '0.4.27-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -1628,6 +1628,31 @@ const HASSStudioSvg = (() => {
     return rendered;
   };
 
+  /** Turn canonical parameter-to-SVG declarations into safe apply() bindings.
+   * The renderer supplies presentation formatters; field definitions own target
+   * IDs. Missing values/targets and collisions fail closed, never silently map
+   * one value to multiple SVG fields.
+   */
+  const parameterBindings=(definitions,values,formatters={})=>{
+    const result={};
+    for(const [key,field] of Object.entries(definitions)){
+      if(!field.svg)continue;
+      const {id,attribute='text'}=field.svg;
+      if(!/^[a-zA-Z][\w-]*$/.test(id)||!['text','fill','visibility'].includes(attribute))
+        throw new Error('Invalid parameter SVG target: '+key);
+      if(Object.prototype.hasOwnProperty.call(result,id))
+        throw new Error('Duplicate parameter SVG target: '+id);
+      if(!Object.prototype.hasOwnProperty.call(values,key))
+        throw new Error('Missing parameter value: '+key);
+      const format=formatters[key];
+      if(format!==undefined&&typeof format!=='function')
+        throw new Error('Invalid parameter formatter: '+key);
+      const raw=format?format(values[key]):values[key];
+      result[id]={[attribute]:raw==null?'—':String(raw)};
+    }
+    return result;
+  };
+
   /** Fill a named empty SVG group with renderer-generated animation SVG. */
   const inject = (template, slots) => {
     let result = template;
@@ -1654,7 +1679,7 @@ const HASSStudioSvg = (() => {
     .replace(/url\(#([^)]+)\)/g, (_, id) => 'url(#' + prefix + id + ')')
     .replace(/(\b(?:href|xlink:href)="#)([^"]+)(")/g, (_, a, id, z) => a + prefix + id + z);
 
-  return Object.freeze({ fragment, apply, inject, namespaceIds });
+  return Object.freeze({ fragment, apply, parameterBindings, inject, namespaceIds });
 })();
 
 
@@ -2688,7 +2713,8 @@ const HASSStudioDeviceParameters=(()=>{
    [id,Object.freeze({id,...spec})])));
  const core=fields([
   ['ac_power',{label:'Moc chwilowa falownika AC (kW)',unit:'kW',kind:'number',
-    role:'energy_source',entityPath:'entities.ac_power',manualPath:'manual.ac_power',testDefault:6.4,min:-500,max:500}],
+    role:'energy_source',entityPath:'entities.ac_power',manualPath:'manual.ac_power',
+    svg:Object.freeze({id:'inv-power',attribute:'text'}),testDefault:6.4,min:-500,max:500}],
   ['temperature',{label:'Temperatura falownika (°C)',unit:'°C',kind:'number',
     role:'telemetry',entityPath:'entities.temperature',manualPath:'manual.temperature',testDefault:32,min:-40,max:150}],
   ['status',{label:'Stan pracy falownika',unit:'',kind:'enum',role:'status',
@@ -2934,7 +2960,8 @@ const HASSStudioInverter=(()=>{
    source=HASSStudioSvg.inject(source,{'inv-pv-rows':rowMarkup,'inv-extra-panel':c.show_extra?extra(d,h):''});
    const led=d.state==='generating'?'#4cd6ff':d.state==='standby'?'#ff9b32':
      d.state==='alarm'?'#f04444':'#7e929f';
-   source=HASSStudioSvg.apply(source,{'inv-power':{text:kw(d.power)},
+   const screen=HASSStudioSvg.parameterBindings(parameters.core,{ac_power:d.power},{ac_power:kw});
+   source=HASSStudioSvg.apply(source,{...screen,
      'inv-led':{fill:led},'inv-led-glow':{fill:led},
      'inv-alert':{visibility:d.fault?'visible':'hidden'}});
    source=HASSStudioReadoutScale.namedGroup(source,'inverter-display',150,110,c.display_scale);
