@@ -1,4 +1,4 @@
-/* Typed connections v2: no legacy migration, distinct controls and artwork.
+/* Typed connections v2: legacy migration, distinct controls and artwork.
  * Uses the production normalization, SVG renderer and inspector in a read-only VM.
  */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
@@ -80,8 +80,15 @@ assert.equal(normalized.connections[1].animation.flow_power_kw,-5);
 assert.equal(normalized.connections[1].style.cap_start,false);
 const again=ctx.layout.normalized({studio_layout:{...cfg.studio_layout,connections:normalized.connections}});
 assert.equal(JSON.stringify(again.connections),JSON.stringify(normalized.connections),'save/load must be stable');
-const old=ctx.layout.normalized({studio_layout:{nodes:[],pipes:[hydraulic]}});
-assert.equal(old.connections.length,0,'legacy pipes must not be silently interpreted as new connections');
+const old=ctx.layout.normalized({studio_layout:{nodes:[],pipes:[{
+  id:'old-hydro',color:'hot',points,flow_mode:'on',flow_direction:'reverse',
+  accessories:[{id:'old-pump',type:'pump',entity:'binary_sensor.active'}]
+}]}});
+assert.equal(old.connections.length,1,'legacy pipes must migrate to typed connections');
+assert.equal(old.connections[0].id,'old-hydro');
+assert.equal(old.connections[0].type,'hydraulic');
+assert.equal(old.connections[0].animation.flow_mode,'on');
+assert.equal(old.connections[0].accessories[0].id,'old-pump');
 const rogue=ctx.layout.normalized({studio_layout:{nodes:[],connections:[{...hydraulic,type:'invalid'}]}});
 assert.equal(rogue.connections.length,0,'unsupported future types cannot silently render as hydraulic');
 
@@ -205,4 +212,4 @@ assert(studio.includes("if(kind==='connection')"));
 assert(studio.includes("selection.type==='connection'&&key.startsWith('style_')"));
 assert(studio.includes("selection.type==='connection'&&key.startsWith('anim_')"));
 assert(studio.includes("obj.type!=='hydraulic'||obj.accessories.length>=20"));
-console.log('OK: connections[] v2, library categories, separate inspector, SVG, animation, HA safety and no migration.');
+console.log('OK: connections[] v2, library categories, separate inspector, SVG, animation, HA safety and legacy migration.');
