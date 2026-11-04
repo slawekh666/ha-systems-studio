@@ -39,8 +39,8 @@ approx(net.totals.consumption_kw,50);approx(net.totals.grid_import_kw,45);
 approx(device(net,'home').power_model.own_consumption_kw,42.8);
 approx(x.byConnection.homeline.kw,50);approx(x.byConnection.evline.kw,7.2);
 console.log('A: arbitrary labels/ids, main bus => gross 50, not 57.2 PASS');
-const renamed=house('home',50,'aggregate',[pt('zupełnie_inny'),pt('abc')]);
-const relabeled=[standard[0],standard[1],wire('homeline','board','home','home','zupełnie_inny'),
+const renamed=house('home',50,'aggregate',[{...pt('custom_supply'),label:'Wejście budynku'}, {...pt('abc'),label:'Gniazdo ładowarki'}]);
+const relabeled=[standard[0],standard[1],wire('homeline','board','home','home','custom_supply'),
  wire('evline','home','abc','ev','ladowarka')];
 x=solve([grid,pv,board,renamed,ev],relabeled);net=x.balance.networks[0];
 assert.equal(net.state,'balanced');approx(net.totals.consumption_kw,50);
