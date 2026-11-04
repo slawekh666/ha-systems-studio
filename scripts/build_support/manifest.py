@@ -30,7 +30,7 @@ JS_MODULES = (
     'solid-fuel-stove.js', 'pellet-stove.js', 'heat-pump-stove.js',
     'gas-boiler.js', 'electric-boiler.js', 'fireplace.js', 'readout-scale.js',
     'power-grid.js', 'radiator.js', 'manifold.js', 'energy-storage.js',
-    'device-parameters.js', 'inverter.js', 'distribution-board.js', 'ev-charger.js', 'building.js',
+    'device-parameters.js', 'inverter-readings.js', 'inverter.js', 'distribution-board.js', 'ev-charger.js', 'building.js',
     'power-flow.js', 'energy-topology.js', 'energy-balance.js',
     'energy-flow.js', 'energy-diagnostics.js',
     'device-registry.js', 'studio-viewport.js', 'studio-viewer-gestures.js',

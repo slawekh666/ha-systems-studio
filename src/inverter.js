@@ -53,39 +53,12 @@ const HASSStudioInverter=(()=>{
         manual:Object.fromEntries(['voltage','current','power'].map(k=>[k,original.manual?.[k]===null?null:clamp(original.manual?.[k],0,50000,d.manual[k])]))};
     })};
  };
- const read=(h,id,units,lo,hi)=>{
-   const r=HASSStudioHA.reading(h,id);
-   return r&&units.includes(r.unit)&&r.value>=lo&&r.value<=hi?r.value:null;
- };
- const status=(h,id)=>{
-   const value=String(HASSStudioHA.entity(h,id)?.state??'').trim().toLowerCase();
-   return ['on','alarm','fault','error','critical','warning'].includes(value)?'alarm':
-     ['off','normal','ok','clear'].includes(value)?'ok':null;
- };
- const effective=(node,live,backup)=>{
-   if(node?.energy_mode==='test')return backup;
-   if(node?.energy_mode==null&&node?.inverter?.mode==='manual')return backup;
-   if(live!==null&&live!==undefined)return live;
-   return node?.energy_mode==='auto'&&node?.energy_fallback_enabled===true?backup:null;
- };
  const data=(node,h)=>{
-   const c=normalize(node),manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
-   const power=HASSStudioHA.powerInput(node,h,c.entities.ac_power,c.manual.ac_power,c.mode,true).kw;
-   const temperature=effective(node,read(h,c.entities.temperature,['°C','C',''], -40,150),c.manual.temperature);
-   const alarm=effective(node,status(h,c.entities.alarm),c.manual.alarm?'alarm':'ok');
+   const c=normalize(node),resolved=HASSStudioInverterReadings.resolve(node,h,c);
+   const {power,temperature,alarm,inputs,manual}=resolved;
    const fault=alarm==='alarm'||(manual&&c.manual.status==='fault')||
-     (!manual&&status(h,c.entities.status)==='alarm');
+     (!manual&&resolved.statusAlarm==='alarm');
    const generating=power===null?null:((c.positive_power?power:-power)*1000>c.production_threshold_w);
-   const inputs=c.inputs.map(q=>{
-     const voltage=effective(node,read(h,q.entities.voltage,['V',''],0,2000),q.manual.voltage);
-     const current=effective(node,read(h,q.entities.current,['A',''],0,200),q.manual.current);
-     const direct=effective(node,(()=>{
-       const r=HASSStudioHA.reading(h,q.entities.power);
-       return r&&['W','kW'].includes(r.unit)&&r.value>=0?r.value*(r.unit==='kW'?1000:1):null;
-     })(),q.manual.power);
-     const watts=direct!==null?direct:voltage!==null&&current!==null?voltage*current:null;
-     return {...q,voltage,current,watts,calculated:direct===null&&watts!==null};
-   });
    return {c,power,temperature,fault,generating,inputs,manual,
       state:fault?'alarm':manual&&c.manual.status!=='auto'?c.manual.status:generating===null?'unknown':generating?'generating':'standby'};
  };

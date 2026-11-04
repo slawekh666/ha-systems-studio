@@ -8,7 +8,7 @@ const ctx={
   document:{createElement:()=>({hidden:true,className:''})}
 };
 vm.createContext(ctx);
-for(const file of ['ha-state.js','readout-scale.js','device-parameters.js','inverter.js',
+for(const file of ['ha-state.js','readout-scale.js','device-parameters.js','inverter-readings.js','inverter.js',
  'studio-inspector.js']){
   vm.runInContext(fs.readFileSync('src/'+file,'utf8'),ctx,{filename:file});
 }

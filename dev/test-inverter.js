@@ -1,7 +1,7 @@
 /* Regression checks for compact inverter display, HA values and MPPT inputs. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const context={};vm.createContext(context);
-for(const file of ['src/ha-state.js','src/readout-scale.js','src/svg-template.js','src/device-parameters.js','src/inverter.js'])
+for(const file of ['src/ha-state.js','src/readout-scale.js','src/svg-template.js','src/device-parameters.js','src/inverter-readings.js','src/inverter.js'])
   vm.runInContext(fs.readFileSync(file,'utf8'),context,{filename:file});
 const svg=fs.readFileSync('src/icons/inverter.svg','utf8');
 context.svg=svg.replace(/^\s*<svg\b[^>]*>/,'').replace(/<\/svg>\s*$/,'');
