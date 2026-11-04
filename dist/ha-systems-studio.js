@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.30-dev';
+const VERSION = '0.4.31-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -3373,6 +3373,87 @@ const HASSStudioEnergyTopology=(()=>{
    return {edges,errors,junctions:[...junctions.keys()]};
  };
 
+
+ // Automatically derive a building meter's downstream devices from the AC
+ // cable graph. A building owns a device only if EVERY path from the selected
+ // upstream boundary to that device passes through the building. This is a
+ // topology dominator, not a property of a port id, display name or wire arrow.
+ //
+ // Keep internal buses: different ports on the same node/bus are the same
+ // electrical vertex, while unrelated buses remain separate. We intentionally
+ // refuse to guess active paths for loops, multiple boards or transfer switches.
+ const meterHierarchy=(layout,group,topology)=>{
+   const nodes=new Map((layout.nodes||[]).map(n=>[n.id,n]));
+   const ids=new Set(group.devices.map(d=>d.node_id));
+   const cables=new Set(group.connection_ids);
+   const adjacency=new Map();
+   const add=(a,b)=>{
+     if(!adjacency.has(a))adjacency.set(a,new Set());
+     adjacency.get(a).add(b);
+   };
+   for(const edge of topology.edges){
+     if(!cables.has(edge.id)||edge.medium!=='ac')continue;
+     add(edge.from,edge.to);add(edge.to,edge.from);
+   }
+   const keysFor=id=>[...adjacency.keys()].filter(k=>k.startsWith(id+':'));
+   const connectedIds=type=>(layout.nodes||[])
+     .filter(n=>n.type===type&&keysFor(n.id).length).map(n=>n.id);
+   const grids=connectedIds('power_grid'),boards=connectedIds('distribution_board');
+   const sources=group.devices.filter(d=>d.role==='source'&&keysFor(d.node_id).length)
+     .map(d=>d.node_id);
+   const buildings=group.devices.filter(d=>d.node_type==='building'&&keysFor(d.node_id).length)
+     .map(d=>d.node_id);
+   let rootIds=[];
+   if(grids.length)rootIds=grids;
+   else if(boards.length===1)rootIds=boards;
+   else if(boards.length===0&&sources.length===1)rootIds=sources;
+   else if(boards.length===0&&sources.length===0&&buildings.length===1)rootIds=buildings;
+   const roots=rootIds.flatMap(keysFor);
+   const reach=(blockedId=null)=>{
+     const banned=blockedId?new Set(keysFor(blockedId)):new Set();
+     const seen=new Set(),queue=[];
+     for(const r of roots)if(!banned.has(r)&&!seen.has(r)){seen.add(r);queue.push(r);}
+     for(let i=0;i<queue.length;i++)for(const dest of adjacency.get(queue[i])||[])
+       if(!banned.has(dest)&&!seen.has(dest)){seen.add(dest);queue.push(dest);}
+     return seen;
+   };
+   const seen=reach(),reachable=(set,id)=>keysFor(id).some(k=>set.has(k));
+   // Distances provide the most deeply nested parent when several buildings
+   // dominate a descendant. No priority is derived from cable drawing order.
+   const distance=new Map(),queue=[];
+   for(const key of roots)if(!distance.has(key)){distance.set(key,0);queue.push(key);}
+   for(let i=0;i<queue.length;i++)for(const key of adjacency.get(queue[i])||[]){
+     if(!distance.has(key)){distance.set(key,distance.get(queue[i])+1);queue.push(key);}
+   }
+   const depth=id=>Math.min(...keysFor(id).map(k=>distance.get(k)??Infinity));
+   const owners=new Map(),ambiguous=new Map();
+   if(roots.length){
+     const removed=new Map(buildings.map(id=>[id,reach(id)]));
+     for(const entry of group.devices){
+       const target=entry.node_id;
+       if(entry.role==='grid'||!reachable(seen,target)||rootIds.includes(target))continue;
+       const candidates=buildings.filter(parent=>parent!==target&&
+         reachable(seen,parent)&&!reachable(removed.get(parent),target));
+       if(candidates.length){
+         const sorted=candidates.sort((a,b)=>depth(b)-depth(a));
+         if(sorted.length>1&&depth(sorted[0])===depth(sorted[1])){
+           ambiguous.set(target,sorted);continue;
+         }
+         owners.set(target,sorted[0]);continue;
+       }
+       // A direct building-child edge that is bypassed by another power path
+       // must NOT be silently treated as an independent metered branch.
+       const adjacent=buildings.filter(parent=>parent!==target&&
+         keysFor(parent).some(k=>(adjacency.get(k)||new Set())
+           .values().some(peer=>keysFor(target).includes(peer))));
+       if(adjacent.length)ambiguous.set(target,adjacent);
+     }
+   }
+   return {owners,ambiguous,roots:rootIds,
+     unresolvedRoots:roots.length===0&&buildings.length>0,
+     medium:'ac'};
+ };
+
  // Attachments move only the referenced endpoint; manual bends stay untouched.
  const geometry=n=>{
    const renderers={
@@ -3433,7 +3514,7 @@ const HASSStudioEnergyTopology=(()=>{
    return best;
  };
  return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,busKey,defaultPorts,electricalType,node,end,connection,graph,
-   geometry,anchor,locate,moveAttached,attach,nearest});
+   geometry,anchor,locate,moveAttached,attach,nearest,meterHierarchy});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyTopology;
 
@@ -3620,62 +3701,25 @@ const HASSStudioEnergyBalance=(()=>{
   const adjustBuildings=(group,layout,warnings,tolerance)=>{
     const items=new Map(group.devices.map(d=>[d.node_id,d]));
     const nodes=new Map((layout.nodes||[]).map(n=>[n.id,n]));
-    const links=new Map(),append=(id,item)=>{
-      if(!links.has(id))links.set(id,[]);
-      links.get(id).push(item);
-    };
-    const included=new Set(group.connection_ids);
-    for(const c of layout.connections||[]){
-      if(c.type!=='electric'||!included.has(c.id))continue;
-      const a=c.energy_start,b=c.energy_end;
-      if(!a?.node_id||!b?.node_id)continue;
-      append(a.node_id,{peer:b.node_id,port:a.port_id,otherPort:b.port_id,id:c.id});
-      append(b.node_id,{peer:a.node_id,port:b.port_id,otherPort:a.port_id,id:c.id});
-    }
-    const children=new Map(),owner=new Map(),invalid=new Map();
+    const topology=HASSStudioEnergyTopology.graph(layout);
+    const hierarchy=HASSStudioEnergyTopology.meterHierarchy(layout,group,topology);
+    const children=new Map(),invalid=new Map();
     const fault=(id,reason)=>{
       if(invalid.has(id))return;
       invalid.set(id,reason);warnings.push({node_id:id,reason});
     };
-    for(const entry of group.devices){
-      if(entry.node_type!=='building')continue;
-      const direct=new Set(),visited=new Set([entry.node_id]);
-      const visit=(id,via,from)=>{
-        if(visited.has(id)){fault(entry.node_id,'building_branch_cycle');return;}
-        visited.add(id);
-        const n=nodes.get(id),target=items.get(id);
-        if(!n){fault(entry.node_id,'building_invalid_child');return;}
-        if(n.type==='building'){
-          if(via!=='supply'){fault(entry.node_id,'building_child_wrong_side');return;}
-          if(!target){fault(entry.node_id,'building_invalid_child');return;}
-          direct.add(id);return;
-        }
-        const role=HASSStudioEnergyTopology.node(n).role;
-        // AC loads, generation, and bidirectional storage are all terminal
-        // participants. A junction is transparent but never an energy source.
-        if(role==='load'||role==='source'||role==='storage'){
-          if(!target){fault(entry.node_id,'building_invalid_child');return;}
-          direct.add(id);return;
-        }
-        if(role!=='junction'&&role!=='neutral'){
-          fault(entry.node_id,'building_invalid_child');return;
-        }
-        for(const edge of links.get(id)||[]){
-          if(edge.id!==from)visit(edge.peer,edge.otherPort,edge.id);
-        }
-      };
-      for(const edge of links.get(entry.node_id)||[])
-        if(edge.port==='child')visit(edge.peer,edge.otherPort,edge.id);
-      for(const id of direct){
-        const existing=owner.get(id);
-        if(existing&&existing!==entry.node_id){
-          fault(entry.node_id,'building_multiple_parents');
-          fault(existing,'building_multiple_parents');
-        }
-        owner.set(id,entry.node_id);
-      }
-      children.set(entry.node_id,[...direct]);
+    for(const entry of group.devices)if(entry.node_type==='building')
+      children.set(entry.node_id,[]);
+    for(const [id,owner] of hierarchy.owners){
+      if(children.has(owner))children.get(owner).push(id);
     }
+    for(const [id,parents] of hierarchy.ambiguous)
+      for(const parent of parents)if(children.has(parent))
+        fault(parent,'building_ambiguous_meter_path');
+    if(hierarchy.unresolvedRoots)
+      for(const entry of group.devices)if(entry.node_type==='building'&&
+        entry.measurement!=='individual')
+        fault(entry.node_id,'building_unknown_meter_root');
     const resolved=new Map(),visiting=new Set();
     const known=(kw,kind)=>({
       consumption_kw:kw===null?kind==='source'?0:null:round(Math.max(0,-kw)),
@@ -4000,6 +4044,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
       building_net_generation_insufficient:'Moc netto budynku wymaga dodatkowego źródła energii',
       building_child_reading_missing:'Brak pomiaru urządzenia za budynkiem',
       building_invalid_measurement:'Nieprawidłowy pomiar budynku',
+      building_ambiguous_meter_path:'Niejednoznaczna droga pomiarowa — wiele dróg zasilania',
+      building_unknown_meter_root:'Nie ustalono zasilania nadrzędnego dla budynku',
       invalid_derived_direction:'Niedozwolony kierunek obliczonej mocy',
       imbalance:'Niezgodny bilans',unresolved_flow:'Nieznany przepływ',
       unaccounted:'Moc nierozliczona',unaccounted_generation:'Brak zidentyfikowanego odbiornika lub przepływu',
@@ -4035,6 +4081,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
       building_net_generation_insufficient:'Net meter requires additional generation',
       building_child_reading_missing:'Missing reading for building child',
       building_invalid_measurement:'Invalid building power reading',
+      building_ambiguous_meter_path:'Ambiguous metering path — multiple supply routes',
+      building_unknown_meter_root:'Unable to establish the upstream building supply',
       invalid_derived_direction:'Impossible derived power direction',
       imbalance:'Balance mismatch',unresolved_flow:'Unresolved flow',
       unaccounted:'Unaccounted power',unaccounted_generation:'Unidentified load or energy path',

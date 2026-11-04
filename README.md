@@ -4,13 +4,15 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 ## Current status
 
-**0.4.30-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
+**0.4.31-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
 
 **Update 0.4.15-dev:** the Custom editor now has a grouped equipment library with solid-fuel boiler and pellet boiler separated, device-family-specific graphic variants, a central device registry and shared read-only HA state/animation helpers. The modular tank and solar collector inspector edits one selected part at a time (by stable part ID), including selection from the tank graphic, while keeping legacy `studio_layout` identifiers and manual animation settings. Circuit grouping and additional SVG models remain deferred.
 
 **Important:** the card is still under Home Assistant browser acceptance testing. CI checks packaging, JavaScript syntax and selected logic, but cannot verify final SVG appearance and pointer behavior in HA.
 
-**0.4.30-dev test build:** legacy `pipes[]` / `edges[]` configurations are migrated only when `connections[]` is absent; when `connections[]` is present, even empty, older lists are ignored. The maintainer tests this build from the shared GitHub `main` and publishes only a pre-release until acceptance.
+**0.4.31-dev test build:** legacy `pipes[]` / `edges[]` configurations are migrated only when `connections[]` is absent; when `connections[]` is present, even empty, older lists are ignored. The maintainer tests this build from the shared GitHub `main` and publishes only a pre-release until acceptance.
+
+**Stage 07A.1-B.1 (0.4.31-dev):** infer measurement hierarchy on AC buses from cable graph dominance, not port identifiers. One upstream supply path permits automatic building ownership; bypassed/cyclic paths are rejected as ambiguous rather than double counted. Legacy `main` buses, ports, rendering and inspector remain unchanged.
 
 **Stage 07A.1-B (0.4.30-dev):** the AC topology solver consumes the building power snapshot, allocates load and generation behind the child port once, and validates individual, gross, and signed net measurements. EV loads, nested buildings, AC storage charge/discharge and child inverters have dedicated regression tests. Icons and editor controls are deferred to C; DC hybrid power conversion remains a separate stage.
 

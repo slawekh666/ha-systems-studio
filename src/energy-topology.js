@@ -67,6 +67,87 @@ const HASSStudioEnergyTopology=(()=>{
    return {edges,errors,junctions:[...junctions.keys()]};
  };
 
+
+ // Automatically derive a building meter's downstream devices from the AC
+ // cable graph. A building owns a device only if EVERY path from the selected
+ // upstream boundary to that device passes through the building. This is a
+ // topology dominator, not a property of a port id, display name or wire arrow.
+ //
+ // Keep internal buses: different ports on the same node/bus are the same
+ // electrical vertex, while unrelated buses remain separate. We intentionally
+ // refuse to guess active paths for loops, multiple boards or transfer switches.
+ const meterHierarchy=(layout,group,topology)=>{
+   const nodes=new Map((layout.nodes||[]).map(n=>[n.id,n]));
+   const ids=new Set(group.devices.map(d=>d.node_id));
+   const cables=new Set(group.connection_ids);
+   const adjacency=new Map();
+   const add=(a,b)=>{
+     if(!adjacency.has(a))adjacency.set(a,new Set());
+     adjacency.get(a).add(b);
+   };
+   for(const edge of topology.edges){
+     if(!cables.has(edge.id)||edge.medium!=='ac')continue;
+     add(edge.from,edge.to);add(edge.to,edge.from);
+   }
+   const keysFor=id=>[...adjacency.keys()].filter(k=>k.startsWith(id+':'));
+   const connectedIds=type=>(layout.nodes||[])
+     .filter(n=>n.type===type&&keysFor(n.id).length).map(n=>n.id);
+   const grids=connectedIds('power_grid'),boards=connectedIds('distribution_board');
+   const sources=group.devices.filter(d=>d.role==='source'&&keysFor(d.node_id).length)
+     .map(d=>d.node_id);
+   const buildings=group.devices.filter(d=>d.node_type==='building'&&keysFor(d.node_id).length)
+     .map(d=>d.node_id);
+   let rootIds=[];
+   if(grids.length)rootIds=grids;
+   else if(boards.length===1)rootIds=boards;
+   else if(boards.length===0&&sources.length===1)rootIds=sources;
+   else if(boards.length===0&&sources.length===0&&buildings.length===1)rootIds=buildings;
+   const roots=rootIds.flatMap(keysFor);
+   const reach=(blockedId=null)=>{
+     const banned=blockedId?new Set(keysFor(blockedId)):new Set();
+     const seen=new Set(),queue=[];
+     for(const r of roots)if(!banned.has(r)&&!seen.has(r)){seen.add(r);queue.push(r);}
+     for(let i=0;i<queue.length;i++)for(const dest of adjacency.get(queue[i])||[])
+       if(!banned.has(dest)&&!seen.has(dest)){seen.add(dest);queue.push(dest);}
+     return seen;
+   };
+   const seen=reach(),reachable=(set,id)=>keysFor(id).some(k=>set.has(k));
+   // Distances provide the most deeply nested parent when several buildings
+   // dominate a descendant. No priority is derived from cable drawing order.
+   const distance=new Map(),queue=[];
+   for(const key of roots)if(!distance.has(key)){distance.set(key,0);queue.push(key);}
+   for(let i=0;i<queue.length;i++)for(const key of adjacency.get(queue[i])||[]){
+     if(!distance.has(key)){distance.set(key,distance.get(queue[i])+1);queue.push(key);}
+   }
+   const depth=id=>Math.min(...keysFor(id).map(k=>distance.get(k)??Infinity));
+   const owners=new Map(),ambiguous=new Map();
+   if(roots.length){
+     const removed=new Map(buildings.map(id=>[id,reach(id)]));
+     for(const entry of group.devices){
+       const target=entry.node_id;
+       if(entry.role==='grid'||!reachable(seen,target)||rootIds.includes(target))continue;
+       const candidates=buildings.filter(parent=>parent!==target&&
+         reachable(seen,parent)&&!reachable(removed.get(parent),target));
+       if(candidates.length){
+         const sorted=candidates.sort((a,b)=>depth(b)-depth(a));
+         if(sorted.length>1&&depth(sorted[0])===depth(sorted[1])){
+           ambiguous.set(target,sorted);continue;
+         }
+         owners.set(target,sorted[0]);continue;
+       }
+       // A direct building-child edge that is bypassed by another power path
+       // must NOT be silently treated as an independent metered branch.
+       const adjacent=buildings.filter(parent=>parent!==target&&
+         keysFor(parent).some(k=>(adjacency.get(k)||new Set())
+           .values().some(peer=>keysFor(target).includes(peer))));
+       if(adjacent.length)ambiguous.set(target,adjacent);
+     }
+   }
+   return {owners,ambiguous,roots:rootIds,
+     unresolvedRoots:roots.length===0&&buildings.length>0,
+     medium:'ac'};
+ };
+
  // Attachments move only the referenced endpoint; manual bends stay untouched.
  const geometry=n=>{
    const renderers={
@@ -127,6 +208,6 @@ const HASSStudioEnergyTopology=(()=>{
    return best;
  };
  return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,busKey,defaultPorts,electricalType,node,end,connection,graph,
-   geometry,anchor,locate,moveAttached,attach,nearest});
+   geometry,anchor,locate,moveAttached,attach,nearest,meterHierarchy});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyTopology;
