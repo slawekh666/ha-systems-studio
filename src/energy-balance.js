@@ -334,7 +334,7 @@ const HASSStudioEnergyBalance=(()=>{
       adjustBuildings(g,src,warnings,config.tolerance_kw);
       // Stage 07A: isolate the visual grid boundary, never actuate hardware.
       const boards=allNodes.filter(n=>n.type==='distribution_board'&&
-        n.energy_grid_connected===false&&g.ports.some(k=>k.startsWith(n.id+':')));
+        n.energy_grid_connected===false&&[...g.ports].some(k=>k.startsWith(n.id+':')));
       const grids=entries.filter(e=>e.role==='grid');
       if(boards.length)for(const e of grids){
         e.injection_kw=0;e.source='calculated';e.mode='device';
