@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.27-dev';
+const VERSION = '0.4.28-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2829,7 +2829,7 @@ const HASSStudioInverter=(()=>{
  const panelHeight=c=>Math.max(52,40+c.panel_rows.length*ROW_HEIGHT);
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
-   rated_kw:10,production_threshold_w:10,positive_power:true,entities:parameters.entities(parameters.core),
+   rated_kw:10,production_threshold_w:10,positive_power:true,export_allowed:true,entities:parameters.entities(parameters.core),
    manual:parameters.manualDefaults(parameters.core),inputs:[]});
  const normalize=node=>{
    const raw=node?.inverter||node||{},d=defaults(),count=Math.round(clamp(raw.count,1,MAX_INPUTS,2));
@@ -2838,7 +2838,7 @@ const HASSStudioInverter=(()=>{
     extra_scale:HASSStudioReadoutScale.factor(raw.extra_scale),
     show_extra:raw.show_extra===true,extra_position:raw.extra_position==='left'?'left':'right',
     rated_kw:clamp(raw.rated_kw,.1,500,10),production_threshold_w:clamp(raw.production_threshold_w,0,1000,10),
-    positive_power:raw.positive_power!==false,
+    positive_power:raw.positive_power!==false,export_allowed:raw.export_allowed!==false,
     panel_title:String(raw.panel_title??'Parametry falownika').slice(0,46),
     panel_rows:panelRows(raw,node,count),
     entities:parameters.entities(parameters.core,raw.entities),
@@ -3668,7 +3668,36 @@ const HASSStudioEnergyBalance=(()=>{
     const networks=[...grouped.values()].map(g=>{
       const entries=g.devices;
       adjustBuildings(g,src,warnings,config.tolerance_kw);
+      // Stage 07A: isolate the visual grid boundary, never actuate hardware.
+      const boards=allNodes.filter(n=>n.type==='distribution_board'&&
+        n.energy_grid_connected===false&&g.ports.some(k=>k.startsWith(n.id+':')));
+      const grids=entries.filter(e=>e.role==='grid');
+      if(boards.length)for(const e of grids){
+        e.injection_kw=0;e.source='calculated';e.mode='device';
+      }
+      // Only one unmetered building can absorb the nonnegative known surplus.
+      // This is an estimate, not an HA reading. Never invent a split.
+      const unknown=entries.filter(e=>e.mode!=='off'&&e.injection_kw===null);
+      const homes=unknown.filter(e=>e.node_type==='building');
+      if(homes.length===1&&unknown.every(e=>e.role==='grid'||e.node_type==='building')&&grids.length<=1){
+        const known=entries.filter(e=>e.role!=='grid'&&e.injection_kw!==null);
+        const surplus=round(known.reduce((s,e)=>s+e.injection_kw,0));
+        if(surplus>=0){
+          homes[0].injection_kw=-surplus;homes[0].source='estimated';
+          homes[0].estimated_total_kw=surplus;
+          for(const e of grids)if(e.injection_kw===null){
+            e.injection_kw=0;e.source='estimated';e.mode='device';
+          }
+        }
+      }
       const result=solve(entries,config.tolerance_kw);
+      const inverters=entries.filter(e=>e.node_type==='inverter');
+      if(inverters.length&&inverters.every(e=>
+        HASSStudioInverter.normalize(allNodes.find(n=>n.id===e.node_id)).export_allowed===false)&&
+        grids.some(e=>e.injection_kw!==null&&e.injection_kw< -config.tolerance_kw))
+        warnings.push({reason:'export_blocked_by_inverters',network_id:g.id});
+      if(boards.length&&result.state==='unbalanced')
+        warnings.push({reason:'grid_disconnected_imbalance',network_id:g.id});
       return {id:g.id,medium:g.medium,connection_ids:g.connection_ids,
         port_keys:[...g.ports],devices:entries,state:result.state,
         residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons};
@@ -3699,7 +3728,7 @@ const HASSStudioEnergyFlow=(()=>{
        adj.get(e.to).push({to:e.from,id:e.id});
      }
      for(const edge of edges){
-       if(network.state!=='balanced'){
+       if(network.state==='invalid'||network.state==='unbalanced'){
          byConnection[edge.id]=unavailable(network.state,network.id);continue;
        }
        // Only a bridge has a uniquely determined signed flow.
@@ -3716,8 +3745,11 @@ const HASSStudioEnergyFlow=(()=>{
          const port=HASSStudioEnergyTopology.ports(n).find(p=>p.id===d.port_id);
          return !!port&&seen.has(HASSStudioEnergyTopology.busKey(d.node_id,port));
        });
+       if(participants.some(d=>d.injection_kw===null)){
+         byConnection[edge.id]=unavailable('unknown_branch',network.id);continue;
+       }
        const kw=round(participants.reduce((sum,d)=>sum+d.injection_kw,0));
-       const sources=[...new Set(network.devices.map(d=>d.source))].sort();
+       const sources=[...new Set(participants.map(d=>d.source))].sort();
        const source=sources.length===1?(sources[0]==='measured'?'ha':
          sources[0]==='simulated'?'simulation':sources[0]):'mixed';
        byConnection[edge.id]={available:true,kw,
@@ -4522,6 +4554,7 @@ const HASSStudioLayout = (() => {
       energy_mode:['auto','ha','test'].includes(v.energy_mode)?v.energy_mode:null,
       energy_test_configured:v.energy_test_configured===true,
        energy_grid_auto:v.energy_grid_auto===true,
+        energy_grid_connected:v.energy_grid_connected!==false,
        energy_power_entity:validEntity(v.energy_power_entity)?v.energy_power_entity:'',
        energy_manual_kw:v.energy_manual_kw==null?null:clamp(v.energy_manual_kw,0,10000,0),
        energy_role:HASSStudioEnergyTopology.node(v).role,
@@ -4898,7 +4931,9 @@ const HASSStudioEditorInspector = (() => {
           field('Liczba wejść PV / MPPT','inv_count',c.count,'number',null,'min="1" max="12" step="1"')+
           field('Moc znamionowa falownika (kW)','inv_rated_kw',c.rated_kw,'number',null,
             'min="0.1" max="500" step="0.1"')+
-          field('Pokaż panel parametrów','inv_show_extra',c.show_extra?'true':'false','text',
+          field('Eksport do sieci — model','inv_export_allowed',c.export_allowed?'true':'false','text',
+             [['true','Dozwolony'],['false','Zablokowany']])+
+           field('Pokaż panel parametrów','inv_show_extra',c.show_extra?'true':'false','text',
             [['true','Tak'],['false','Nie']]);
         if(c.show_extra)basics+=field('Nagłówek panelu','inv_panel_title',c.panel_title)+
           field('Położenie panelu','inv_extra_position',c.extra_position,'text',
@@ -5039,7 +5074,11 @@ const HASSStudioEditorInspector = (() => {
             metric('Moc elektryczna pompy ciepła (kW)','hp_power_entity',obj.hp_power_entity,
               'hp_manual_kw',obj.hp_manual_kw);
         }
-        if(electrical)markup+='<details class="ss-section-details" data-section="electrical-advanced"'+
+        if(isDistribution)markup+=field('Przyłącze sieci — model','energy_grid_connected',
+           obj.energy_grid_connected!==false?'true':'false','text',
+           [['true','Podłączone'],['false','Odłączone']])+
+           '<p class="ss-note">Wyłącznie wizualizacja — bez sterowania fizycznym rozłącznikiem.</p>';
+         if(electrical)markup+='<details class="ss-section-details" data-section="electrical-advanced"'+
           (openSections.get('electrical-advanced')===true?' open':'')+
           '><summary>'+sectionIcon('mdi:tune')+'<span>Dodatkowe parametry i wygląd</span></summary><section>';
         if(electrical){
@@ -6096,7 +6135,7 @@ const HASSStudioEditorLibrary=(()=>{
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:position?position.x:80+(n%6)*170,y:position?position.y:100+Math.floor(n/6)*170,
-          energy_ports:HASSStudioEnergyTopology.defaultPorts({type:kind,variant:preset}),energy_mode:'auto',energy_fallback_enabled:false,energy_test_configured:false,energy_grid_auto:kind==='power_grid',energy_power_entity:'',energy_manual_kw:null,
+          energy_ports:HASSStudioEnergyTopology.defaultPorts({type:kind,variant:preset}),energy_mode:'auto',energy_fallback_enabled:false,energy_test_configured:false,energy_grid_auto:kind==='power_grid',energy_grid_connected:true,energy_power_entity:'',energy_manual_kw:null,
            scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,pellet_test_mode:false,pellet_manual_state:'burning',pellet_manual_temperature:65,pellet_manual_power_unit:'%',pellet_manual_power:65,pellet_manual_feeder:false,pellet_manual_alarm:false,pellet_burner_power_entity:'',pellet_feeder_entity:'',pellet_alarm_entity:'',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,equipment_mode:'live',equipment_test_running:false,equipment_test_speed:1,equipment_test_position:0,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?{...HASSStudioBuilding.defaults(),measurement:'aggregate',remaining_kw:0}:undefined,entities:[],parts:[]};
         if(HASSStudioEnergyTopology.electricalType(node))model.energy_balance.enabled=true;
          model.nodes.push(node);selection={type:'node',id:node.id};
@@ -6273,6 +6312,8 @@ const HASSStudioEditorLibrary=(()=>{
          obj.energy_fallback_enabled=val==='true';obj.energy_test_configured=true;
        }else if(selection.type==='node'&&key==='energy_grid_auto'){
          obj.energy_grid_auto=val==='true';
+        }else if(selection.type==='node'&&key==='energy_grid_connected'&&obj.type==='distribution_board'){
+          obj.energy_grid_connected=val==='true';
        }else if(selection.type==='node'&&key==='energy_power_entity'){
          obj.energy_power_entity=validEntity(val)?val:'';
        }else if(selection.type==='node'&&key==='energy_manual_kw'){
@@ -6385,7 +6426,7 @@ const HASSStudioEditorLibrary=(()=>{
         else if(k==='extra_position')c.extra_position=val==='left'?'left':'right';
         else if(k==='rated_kw')c.rated_kw=clamp(val,.1,500,10);
         else if(k==='production_threshold_w')c.production_threshold_w=clamp(val,0,1000,10);
-        else if(['positive_power','show_extra'].includes(k))c[k]=val==='true';
+        else if(['positive_power','show_extra','export_allowed'].includes(k))c[k]=val==='true';
       }else if(obj.type==='energy_storage'&&key.startsWith('storage_')){
         const c=obj.energy_storage=obj.energy_storage||HASSStudioEnergyStorage.defaults();
         const k=key.slice(8);

@@ -85,7 +85,9 @@ const HASSStudioEditorInspector = (() => {
           field('Liczba wejść PV / MPPT','inv_count',c.count,'number',null,'min="1" max="12" step="1"')+
           field('Moc znamionowa falownika (kW)','inv_rated_kw',c.rated_kw,'number',null,
             'min="0.1" max="500" step="0.1"')+
-          field('Pokaż panel parametrów','inv_show_extra',c.show_extra?'true':'false','text',
+          field('Eksport do sieci — model','inv_export_allowed',c.export_allowed?'true':'false','text',
+             [['true','Dozwolony'],['false','Zablokowany']])+
+           field('Pokaż panel parametrów','inv_show_extra',c.show_extra?'true':'false','text',
             [['true','Tak'],['false','Nie']]);
         if(c.show_extra)basics+=field('Nagłówek panelu','inv_panel_title',c.panel_title)+
           field('Położenie panelu','inv_extra_position',c.extra_position,'text',
@@ -226,7 +228,11 @@ const HASSStudioEditorInspector = (() => {
             metric('Moc elektryczna pompy ciepła (kW)','hp_power_entity',obj.hp_power_entity,
               'hp_manual_kw',obj.hp_manual_kw);
         }
-        if(electrical)markup+='<details class="ss-section-details" data-section="electrical-advanced"'+
+        if(isDistribution)markup+=field('Przyłącze sieci — model','energy_grid_connected',
+           obj.energy_grid_connected!==false?'true':'false','text',
+           [['true','Podłączone'],['false','Odłączone']])+
+           '<p class="ss-note">Wyłącznie wizualizacja — bez sterowania fizycznym rozłącznikiem.</p>';
+         if(electrical)markup+='<details class="ss-section-details" data-section="electrical-advanced"'+
           (openSections.get('electrical-advanced')===true?' open':'')+
           '><summary>'+sectionIcon('mdi:tune')+'<span>Dodatkowe parametry i wygląd</span></summary><section>';
         if(electrical){

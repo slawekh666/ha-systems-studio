@@ -332,7 +332,36 @@ const HASSStudioEnergyBalance=(()=>{
     const networks=[...grouped.values()].map(g=>{
       const entries=g.devices;
       adjustBuildings(g,src,warnings,config.tolerance_kw);
+      // Stage 07A: isolate the visual grid boundary, never actuate hardware.
+      const boards=allNodes.filter(n=>n.type==='distribution_board'&&
+        n.energy_grid_connected===false&&g.ports.some(k=>k.startsWith(n.id+':')));
+      const grids=entries.filter(e=>e.role==='grid');
+      if(boards.length)for(const e of grids){
+        e.injection_kw=0;e.source='calculated';e.mode='device';
+      }
+      // Only one unmetered building can absorb the nonnegative known surplus.
+      // This is an estimate, not an HA reading. Never invent a split.
+      const unknown=entries.filter(e=>e.mode!=='off'&&e.injection_kw===null);
+      const homes=unknown.filter(e=>e.node_type==='building');
+      if(homes.length===1&&unknown.every(e=>e.role==='grid'||e.node_type==='building')&&grids.length<=1){
+        const known=entries.filter(e=>e.role!=='grid'&&e.injection_kw!==null);
+        const surplus=round(known.reduce((s,e)=>s+e.injection_kw,0));
+        if(surplus>=0){
+          homes[0].injection_kw=-surplus;homes[0].source='estimated';
+          homes[0].estimated_total_kw=surplus;
+          for(const e of grids)if(e.injection_kw===null){
+            e.injection_kw=0;e.source='estimated';e.mode='device';
+          }
+        }
+      }
       const result=solve(entries,config.tolerance_kw);
+      const inverters=entries.filter(e=>e.node_type==='inverter');
+      if(inverters.length&&inverters.every(e=>
+        HASSStudioInverter.normalize(allNodes.find(n=>n.id===e.node_id)).export_allowed===false)&&
+        grids.some(e=>e.injection_kw!==null&&e.injection_kw< -config.tolerance_kw))
+        warnings.push({reason:'export_blocked_by_inverters',network_id:g.id});
+      if(boards.length&&result.state==='unbalanced')
+        warnings.push({reason:'grid_disconnected_imbalance',network_id:g.id});
       return {id:g.id,medium:g.medium,connection_ids:g.connection_ids,
         port_keys:[...g.ports],devices:entries,state:result.state,
         residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons};

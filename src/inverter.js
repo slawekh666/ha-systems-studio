@@ -29,7 +29,7 @@ const HASSStudioInverter=(()=>{
  const panelHeight=c=>Math.max(52,40+c.panel_rows.length*ROW_HEIGHT);
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
-   rated_kw:10,production_threshold_w:10,positive_power:true,entities:parameters.entities(parameters.core),
+   rated_kw:10,production_threshold_w:10,positive_power:true,export_allowed:true,entities:parameters.entities(parameters.core),
    manual:parameters.manualDefaults(parameters.core),inputs:[]});
  const normalize=node=>{
    const raw=node?.inverter||node||{},d=defaults(),count=Math.round(clamp(raw.count,1,MAX_INPUTS,2));
@@ -38,7 +38,7 @@ const HASSStudioInverter=(()=>{
     extra_scale:HASSStudioReadoutScale.factor(raw.extra_scale),
     show_extra:raw.show_extra===true,extra_position:raw.extra_position==='left'?'left':'right',
     rated_kw:clamp(raw.rated_kw,.1,500,10),production_threshold_w:clamp(raw.production_threshold_w,0,1000,10),
-    positive_power:raw.positive_power!==false,
+    positive_power:raw.positive_power!==false,export_allowed:raw.export_allowed!==false,
     panel_title:String(raw.panel_title??'Parametry falownika').slice(0,46),
     panel_rows:panelRows(raw,node,count),
     entities:parameters.entities(parameters.core,raw.entities),

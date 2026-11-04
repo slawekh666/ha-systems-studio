@@ -139,6 +139,7 @@ const HASSStudioLayout = (() => {
       energy_mode:['auto','ha','test'].includes(v.energy_mode)?v.energy_mode:null,
       energy_test_configured:v.energy_test_configured===true,
        energy_grid_auto:v.energy_grid_auto===true,
+        energy_grid_connected:v.energy_grid_connected!==false,
        energy_power_entity:validEntity(v.energy_power_entity)?v.energy_power_entity:'',
        energy_manual_kw:v.energy_manual_kw==null?null:clamp(v.energy_manual_kw,0,10000,0),
        energy_role:HASSStudioEnergyTopology.node(v).role,
