@@ -34,6 +34,10 @@ const HASSStudioEnergyFlow=(()=>{
          const port=HASSStudioEnergyTopology.ports(n).find(p=>p.id===d.port_id);
          return !!port&&seen.has(HASSStudioEnergyTopology.busKey(d.node_id,port));
        });
+       // The unresolved residual cannot be assigned to a shared trunk.
+       if(network.state==='unaccounted'&&participants.length>1){
+         byConnection[edge.id]=unavailable('unaccounted_branch',network.id);continue;
+       }
        if(participants.some(d=>d.injection_kw===null)){
          byConnection[edge.id]=unavailable('unknown_branch',network.id);continue;
        }

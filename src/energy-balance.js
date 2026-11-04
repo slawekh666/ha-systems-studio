@@ -354,17 +354,41 @@ const HASSStudioEnergyBalance=(()=>{
           }
         }
       }
-      const result=solve(entries,config.tolerance_kw);
+      // Source-specific export is an accounting policy, never a mutation of HA.
       const inverters=entries.filter(e=>e.node_type==='inverter');
-      if(inverters.length&&inverters.every(e=>
-        HASSStudioInverter.normalize(allNodes.find(n=>n.id===e.node_id)).export_allowed===false)&&
-        grids.some(e=>e.injection_kw!==null&&e.injection_kw< -config.tolerance_kw))
-        warnings.push({reason:'export_blocked_by_inverters',network_id:g.id});
+      const restricted=inverters.filter(e=>
+        HASSStudioInverter.normalize(allNodes.find(n=>n.id===e.node_id)).export_allowed===false);
+      const eligible=inverters.filter(e=>!restricted.includes(e));
+      const known=entries.filter(e=>e.mode!=='off'&&e.role!=='grid')
+        .every(e=>e.injection_kw!==null);
+      let unaccounted_kw=null,export_cap_kw=null;
+      if(known&&grids.length<=1&&(restricted.length||boards.length)){
+        const net=round(entries.filter(e=>e.mode!=='off'&&e.role!=='grid')
+          .reduce((sum,e)=>sum+e.injection_kw,0));
+        // Do not infer grid-export permission from battery discharge.
+        export_cap_kw=boards.length?0:round(eligible.reduce((sum,e)=>
+          sum+Math.max(0,e.injection_kw),0));
+        const exportKw=Math.min(Math.max(0,net),export_cap_kw);
+        unaccounted_kw=round(Math.max(0,net-exportKw));
+        if(grids.length===1&&grids[0].source!=='measured'){
+          grids[0].injection_kw=net<0?-net:-exportKw;
+          grids[0].source='calculated';grids[0].mode='device';
+        }
+      }
+      const result=solve(entries,config.tolerance_kw);
+      if(result.state==='unbalanced'&&unaccounted_kw!==null&&
+          Math.abs(result.residual_kw-unaccounted_kw)<=config.tolerance_kw&&
+          result.residual_kw>=-config.tolerance_kw){
+        result.state='unaccounted';result.reasons=['unaccounted_generation'];
+      }
+      if(unaccounted_kw!==null&&unaccounted_kw>config.tolerance_kw)
+        warnings.push({reason:'unaccounted_generation',network_id:g.id});
       if(boards.length&&result.state==='unbalanced')
         warnings.push({reason:'grid_disconnected_imbalance',network_id:g.id});
       return {id:g.id,medium:g.medium,connection_ids:g.connection_ids,
         port_keys:[...g.ports],devices:entries,state:result.state,
-        residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons};
+        residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons,
+        unaccounted_kw,export_cap_kw};
     });
     return {enabled:true,config,networks,warnings,topology};
   };

@@ -32,6 +32,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
       for(const id of n.connection_ids)networkOf.set(id,i);
       return {id:n.id,index:i+1,medium:n.medium,state:n.state,
         reasons:[...n.reasons],residual_kw:n.residual_kw,totals:n.totals,
+        unaccounted_kw:n.unaccounted_kw,export_cap_kw:n.export_cap_kw,
         devices:n.devices.map(d=>({ ...d,name:devices.get(d.node_id)?.label||
           devices.get(d.node_id)?.id||d.node_id })),
         cables:[]};
@@ -75,6 +76,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
       aggregate_overlap:'Nakładające się pomiary zużycia',invalid_direction_or_power:'Błędna moc lub znak',
       invalid_derived_direction:'Niedozwolony kierunek obliczonej mocy',
       imbalance:'Niezgodny bilans',unresolved_flow:'Nieznany przepływ',
+      unaccounted:'Moc nierozliczona',unaccounted_generation:'Brak zidentyfikowanego odbiornika lub przepływu',
+      unaccounted_branch:'Nieustalony przepływ — moc nierozliczona',unaccounted_power:'Moc nierozliczona (nie strata)',
       calculated:'Wyliczone',measured:'Pomiar HA',simulated:'Symulacja',missing:'Brak pomiaru',
       invalid_source:'Niepoprawny odczyt',pending:'Do obliczenia',excluded:'Wyłączone',
       ha:'HA',simulation:'Symulacja',mixed:'Mieszane',unknown:'Nieznane',unavailable:'Niedostępne',
@@ -104,6 +107,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
       aggregate_overlap:'Overlapping load measurements',invalid_direction_or_power:'Invalid sign or power',
       invalid_derived_direction:'Impossible derived power direction',
       imbalance:'Balance mismatch',unresolved_flow:'Unresolved flow',
+      unaccounted:'Unaccounted power',unaccounted_generation:'Unidentified load or energy path',
+      unaccounted_branch:'Unresolved flow — unaccounted power',unaccounted_power:'Unaccounted power (not a loss)',
       calculated:'Calculated',measured:'HA measured',simulated:'Simulation',missing:'Missing',
       invalid_source:'Invalid',pending:'Calculation pending',excluded:'Excluded',
       ha:'HA',simulation:'Simulation',mixed:'Mixed',unknown:'Unknown',unavailable:'Unavailable',
@@ -132,7 +137,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
     '.ss-energy-diagnostics ul{margin:5px 8px 8px 16px;padding:0;overflow-wrap:anywhere}',
     '.ss-energy-diagnostics [data-state="balanced"]{color:#65bd92}',
     '.ss-energy-diagnostics [data-state="invalid"],.ss-energy-diagnostics [data-state="unbalanced"]{color:#f0a06c}',
-    '.ss-energy-diagnostics [data-state="insufficient"]{color:#f0c56e}',
+    '.ss-energy-diagnostics [data-state="insufficient"],.ss-energy-diagnostics [data-state="unaccounted"]{color:#f0c56e}',
     '.ss-energy-diagnostics .ss-diag-caption{font-size:10.5px;opacity:.82}',
     '.ss-energy-diagnostics .ss-diag-scroller{max-height:min(66vh,620px);overflow:auto}',
     '@media(max-width:600px){.ss-energy-diagnostics--viewer{top:40px;right:4px;width:calc(100% - 8px);max-height:calc(100% - 44px)}}'
@@ -151,7 +156,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
         [label('grid_export'),fmt(n.totals.grid_export_kw)],
         [label('storage_charge'),fmt(n.totals.storage_charge_kw)],
         [label('storage_discharge'),fmt(n.totals.storage_discharge_kw)],
-        [label('residual'),fmt(n.residual_kw)]
+        ...(n.unaccounted_kw!==null?[[label('unaccounted_power'),fmt(n.unaccounted_kw)]]:[]),
+         [label('residual'),fmt(n.residual_kw)]
       ]):'<p>'+escape(label('noData'))+'</p>';
       const rows=o.show_devices?'<h5>'+escape(label('role'))+'</h5>'+
         table(n.devices.map(d=>[
