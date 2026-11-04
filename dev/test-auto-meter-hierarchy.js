@@ -78,6 +78,14 @@ assert.equal(net.state,'invalid');
 assert(x.balance.warnings.some(w=>w.reason==='building_ambiguous_meter_path'));
 assert.equal(x.byConnection.evline.available,false);
 console.log('H: bypass/ring does not silently choose a parent PASS');
+const junction=node('junction','distribution_board',[pt('a'),pt('b'),pt('c')]);
+const indirect=[...standard.slice(0,3),wire('housejunction','home','outlet','junction','a'),
+ wire('junctionev','junction','b','ev','ladowarka'),
+ wire('junctionbypass','board','ev','junction','c')];
+x=solve([...basic,junction],indirect);net=x.balance.networks[0];
+assert.equal(net.state,'invalid');
+assert(x.balance.warnings.some(w=>w.reason==='building_ambiguous_meter_path'));
+console.log('H2: indirect bypass through a junction is flagged ambiguous PASS');
 const customSeparateBus=house('home',50,'aggregate',[pt('entrance','ac','input'),pt('outlet','ac','output')]);
 x=solve([grid,pv,board,customSeparateBus,ev],standard);
 assert(x.balance.networks.length>1);

@@ -32,3 +32,5 @@ I: distinct internal buses cannot be merged by `main` labels.
 J: single on-grid inverter without grid node anchors a simple tree.
 
 Legacy electrical modes and saved port/bus labels are not migrated or renamed. This is stage B.1 only: no SVG/UI changes and no hybrid DC/AC conversion. A production HA browser acceptance test is required after GitHub synchronization. Next stage C needs explicit permission.
+
+The ambiguous-path check also detects bypasses through downstream junctions, not only direct duplicate house/child cables. It excludes false sibling paths by refusing to walk back through shallower upstream buses.

@@ -77,8 +77,6 @@ const HASSStudioEnergyTopology=(()=>{
  // electrical vertex, while unrelated buses remain separate. We intentionally
  // refuse to guess active paths for loops, multiple boards or transfer switches.
  const meterHierarchy=(layout,group,topology)=>{
-   const nodes=new Map((layout.nodes||[]).map(n=>[n.id,n]));
-   const ids=new Set(group.devices.map(d=>d.node_id));
    const cables=new Set(group.connection_ids);
    const adjacency=new Map();
    const add=(a,b)=>{
@@ -137,10 +135,28 @@ const HASSStudioEnergyTopology=(()=>{
        }
        // A direct building-child edge that is bypassed by another power path
        // must NOT be silently treated as an independent metered branch.
-       const adjacent=buildings.filter(parent=>parent!==target&&
+       // Detect a non-dominating building on an alternate downstream path,
+       // even when a junction sits between the house and the child.
+       // Do not count a sibling route that would travel backwards through
+       // the upstream board: it has a strictly smaller root distance.
+       const possibleDownstream=(parent,target)=>{
+         const floor=depth(parent),dest=new Set(keysFor(target));
+         const seenDown=new Set(),queueDown=[];
+         for(const key of keysFor(parent)){seenDown.add(key);queueDown.push(key);}
+         for(let i=0;i<queueDown.length;i++){
+           const key=queueDown[i];
+           if(dest.has(key))return true;
+           for(const next of adjacency.get(key)||[]){
+             if(seenDown.has(next)||(distance.get(next)??-1)<floor)continue;
+             seenDown.add(next);queueDown.push(next);
+           }
+         }
+         return false;
+       };
+       const bypassed=buildings.filter(parent=>parent!==target&&
          reachable(seen,parent)&&depth(parent)<=depth(target)&&
-         keysFor(parent).some(k=>[...(adjacency.get(k)||[])].some(peer=>keysFor(target).includes(peer))));
-       if(adjacent.length)ambiguous.set(target,adjacent);
+         possibleDownstream(parent,target));
+       if(bypassed.length)ambiguous.set(target,bypassed);
      }
    }
    return {owners,ambiguous,roots:rootIds,
