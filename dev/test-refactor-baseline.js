@@ -11,7 +11,8 @@ const vm = require('node:vm');
 const fixtures = JSON.parse(fs.readFileSync('dev/fixtures/refactor-050-baseline.json', 'utf8'));
 assert.equal(fixtures.baseline.version, '0.4.22-dev');
 assert.equal(fixtures.baseline.source_sha, 'ddf15c7c12e9c3566b5f861a2266ca7a7a6a9c0f');
-assert.equal(fs.readFileSync('VERSION', 'utf8').trim(), fixtures.baseline.version);
+// Fixture records the frozen 0.4.22-dev baseline, not the current application version.
+// The current version is independently validated by scripts/check.py.
 
 const sandbox = {
   isEnt: id => typeof id === 'string' && /^[a-z_]+\.[a-z0-9_]+$/.test(id)

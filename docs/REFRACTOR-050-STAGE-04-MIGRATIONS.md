@@ -18,9 +18,9 @@ A persisted modern \`connections[]\` removes ambiguity on subsequent load. Migra
 - Existing 720px legacy canvas dimensions remain intact even for \`pipes[]\`- or \`edges[]\`-only layouts.
 - \`dev/test-config-migrations.js\` verifies precedence (including explicit empty array), idempotence, deterministic duplicates, port geometry, malformed/invalid input, accessory binding and mixed hydraulic/electric formats.
 - Stage 02 baseline test now expects migration. Existing typed-connection test updated accordingly.
-- Run the full GitLab CI, regenerate and commit \`dist/ha-systems-studio.js\`. A test in Home Assistant is mandatory before merging because the runtime bundle now changes.
+- Run the full GitLab CI, regenerate and commit \`dist/ha-systems-studio.js\`. By explicit maintainer decision, merge after successful automated CI and perform browser acceptance on the shared GitHub main channel before any stable release.
 
-## HA visual acceptance (before merging)
+## HA visual acceptance (after main merge, before a stable release)
 
 1. Back up the current dashboard YAML / Home Assistant configuration and test on a copy of the dashboard.
 2. Load a historical \`pipes[]\`-only diagram: verify pipe geometry, colors, sensor labels, pump accessories and flow animations.
@@ -29,4 +29,4 @@ A persisted modern \`connections[]\` removes ambiguity on subsequent load. Migra
 5. Load an existing current \`connections[]\` electrical diagram: verify port linkage, bends, HA telemetry and manual TEST settings unchanged.
 6. Edit and save a migrated diagram. Reopen it and confirm no duplicate connections or unexpected changes.
 
-If any visual regression occurs: do not merge, capture config and report the result without publishing the modified card. Stage 05 starts only by explicit instruction.
+If any visual regression occurs in the test/dev release: stop the rollout, capture the failing config, and revert the MR via a reviewed rollback commit; do not publish a stable release. Stage 05 starts only by explicit instruction.
