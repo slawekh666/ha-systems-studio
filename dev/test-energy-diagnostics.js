@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const ctx={isEnt:x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x)};
 vm.createContext(ctx);
 for(const f of ['ha-state.js','readout-scale.js','device-registry.js','studio-viewport.js',
-'device-parameters.js','inverter.js','building.js','ev-charger.js','energy-storage.js','power-grid.js',
+'device-parameters.js','inverter-readings.js','inverter.js','building.js','ev-charger.js','energy-storage.js','power-grid.js',
 'distribution-board.js','radiator.js','manifold.js','energy-topology.js','energy-balance.js',
 'energy-flow.js','energy-diagnostics.js','power-flow.js','studio-layout.js'])
  vm.runInContext(fs.readFileSync('src/'+f,'utf8'),ctx,{filename:f});

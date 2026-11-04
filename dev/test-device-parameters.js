@@ -2,7 +2,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const ctx={};vm.createContext(ctx);
-for(const f of ['ha-state.js','readout-scale.js','device-parameters.js','inverter.js'])
+for(const f of ['ha-state.js','readout-scale.js','device-parameters.js','inverter-readings.js','inverter.js'])
  vm.runInContext(fs.readFileSync('src/'+f,'utf8'),ctx,{filename:f});
 vm.runInContext('this.schema=HASSStudioDeviceParameters.inverter;this.inv=HASSStudioInverter;',ctx);
 const {schema,inv}=ctx;

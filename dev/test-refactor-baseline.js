@@ -20,7 +20,7 @@ const sandbox = {
 vm.createContext(sandbox);
 const dependencies = [
   'ha-state.js', 'readout-scale.js', 'device-registry.js', 'studio-viewport.js',
-  'device-parameters.js','inverter.js', 'building.js', 'ev-charger.js', 'energy-storage.js',
+  'device-parameters.js','inverter-readings.js','inverter.js', 'building.js', 'ev-charger.js', 'energy-storage.js',
   'power-grid.js', 'distribution-board.js', 'radiator.js', 'manifold.js',
   'energy-topology.js', 'energy-balance.js', 'energy-flow.js',
   'energy-diagnostics.js', 'power-flow.js', 'studio-layout.js'
