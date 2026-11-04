@@ -4,7 +4,8 @@ const HASSStudioInverter=(()=>{
  const PANEL_WIDTH=210,ROW_HEIGHT=19;
  const clamp=(v,min,max,d)=>v!==''&&v!=null&&Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):d;
  const entity=x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x)?x:'';
- const defaultInput=i=>({name:'PV'+(i+1),visible:i<3,entities:{voltage:'',current:'',power:''},manual:{voltage:380,current:8,power:null}});
+ const parameters=HASSStudioDeviceParameters.inverter;
+ const defaultInput=i=>parameters.inputDefaults(i);
  const DEFAULT_KEYS=['ac_power','temperature','status','alarm','pv_summary','pv_voltage','pv_current','pv_power','custom'];
  const defaultRow=(key='custom',input=0)=>({key:DEFAULT_KEYS.includes(key)?key:'custom',
    input,entity:'',label:'',unit:'auto',decimals:1,manual_value:''});
@@ -28,8 +29,8 @@ const HASSStudioInverter=(()=>{
  const panelHeight=c=>Math.max(52,40+c.panel_rows.length*ROW_HEIGHT);
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
-   rated_kw:10,production_threshold_w:10,positive_power:true,entities:{ac_power:'',temperature:'',status:'',alarm:''},
-   manual:{ac_power:6.4,temperature:32,status:'auto',alarm:false},inputs:[]});
+   rated_kw:10,production_threshold_w:10,positive_power:true,entities:parameters.entities(parameters.core),
+   manual:parameters.manualDefaults(parameters.core),inputs:[]});
  const normalize=node=>{
    const raw=node?.inverter||node||{},d=defaults(),count=Math.round(clamp(raw.count,1,MAX_INPUTS,2));
    return {...d,...raw,mode:raw.mode==='manual'?'manual':'live',count,
@@ -40,7 +41,7 @@ const HASSStudioInverter=(()=>{
     positive_power:raw.positive_power!==false,
     panel_title:String(raw.panel_title??'Parametry falownika').slice(0,46),
     panel_rows:panelRows(raw,node,count),
-    entities:Object.fromEntries(['ac_power','temperature','status','alarm'].map(k=>[k,entity(raw.entities?.[k])])),
+    entities:parameters.entities(parameters.core,raw.entities),
     manual:{ac_power:clamp(raw.manual?.ac_power,-500,500,6.4),
        temperature:clamp(raw.manual?.temperature,-40,150,32),
        status:['auto','generating','standby','off','fault'].includes(raw.manual?.status)?raw.manual.status:'auto',
@@ -48,7 +49,7 @@ const HASSStudioInverter=(()=>{
     inputs:Array.from({length:count},(_,i)=>{
       const original=raw.inputs?.[i]||{},d=defaultInput(i);
       return {name:String(original.name??d.name).slice(0,12),visible:original.visible!==false,
-        entities:Object.fromEntries(['voltage','current','power'].map(k=>[k,entity(original.entities?.[k])])),
+        entities:parameters.entities(parameters.pv,original.entities),
         manual:Object.fromEntries(['voltage','current','power'].map(k=>[k,original.manual?.[k]===null?null:clamp(original.manual?.[k],0,50000,d.manual[k])]))};
     })};
  };
@@ -197,6 +198,6 @@ const HASSStudioInverter=(()=>{
    const bottom=c.show_extra?Math.max(300,65+panelHeight(c)*c.extra_scale+10):300;
    return '<svg width="'+(150+extraWidth/2)+'" height="'+(bottom/2)+'" viewBox="'+left+' 0 '+(300+extraWidth)+' '+bottom+'" preserveAspectRatio="xMinYMin meet">'+content+'</svg>';
  };
- return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,defaultInput,defaultRow,defaults,normalize,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
+ return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,defaults,normalize,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverter;

@@ -750,8 +750,8 @@
         const c=obj.inverter=obj.inverter||HASSStudioInverter.defaults(),k=key.slice(4);
         if(k.startsWith('entity_')){
           const f=k.slice(7);
-          if(['ac_power','temperature','status','alarm'].includes(f)){
-            c.entities=c.entities||{};c.entities[f]=validEntity(val)?val:'';
+          if(HASSStudioDeviceParameters.inverter.coreKeys.includes(f)){
+            c.entities=c.entities||{};c.entities[f]=HASSStudioDeviceParameters.inverter.entity(val);
           }
         }else if(k.startsWith('manual_')){
           const f=k.slice(7);c.manual=c.manual||{};
@@ -768,7 +768,7 @@
             const q=c.inputs[i],fieldName=match[2];
             if(fieldName==='name')q.name=val.slice(0,12);
             else if(fieldName==='visible')q.visible=val==='true';
-            else if(fieldName.startsWith('entity_')){q.entities=q.entities||{};q.entities[fieldName.slice(7)]=validEntity(val)?val:'';}
+            else if(fieldName.startsWith('entity_')){q.entities=q.entities||{};q.entities[fieldName.slice(7)]=HASSStudioDeviceParameters.inverter.entity(val);}
             else if(fieldName.startsWith('manual_')){
               q.manual=q.manual||{};
               q.manual[fieldName.slice(7)]=val===''?null:clamp(val,0,50000,0);
