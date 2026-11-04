@@ -10,6 +10,7 @@ validate_card:
     - python3 scripts/build.py
     - python3 scripts/check.py
     - node scripts/test_studio.js
+    - node dev/test-refactor-baseline.js
     - node dev/test-power-grid.js
     - node dev/test-scaled-icons.js
     - node dev/test-energy-storage.js

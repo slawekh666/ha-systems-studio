@@ -1,0 +1,218 @@
+{
+  "baseline": {
+    "version": "0.4.22-dev",
+    "source_sha": "ddf15c7c12e9c3566b5f861a2266ca7a7a6a9c0f",
+    "kind": "synthetic-fixtures-no-user-data"
+  },
+  "legacy_pipes_v1": {
+    "studio_layout": {
+      "name": "Legacy plumbing example",
+      "nodes": [
+        {
+          "id": "old_tank",
+          "type": "tank",
+          "variant": "buffer",
+          "x": 140,
+          "y": 220,
+          "scale": 1.25,
+          "parts": [
+            {
+              "id": "top_sensor",
+              "kind": "sensor",
+              "label": "Top",
+              "entity": "sensor.tank_top",
+              "height": 80
+            }
+          ]
+        }
+      ],
+      "pipes": [
+        {
+          "id": "old_pipe_1",
+          "label": "Supply",
+          "color": "hot",
+          "width": 7,
+          "points": [
+            {
+              "x": 200,
+              "y": 240
+            },
+            {
+              "x": 400,
+              "y": 240
+            }
+          ],
+          "flow_mode": "on"
+        }
+      ]
+    }
+  },
+  "typed_connections_v2": {
+    "studio_layout": {
+      "name": "Energy and heating demo",
+      "width": 1300,
+      "height": 760,
+      "nodes": [
+        {
+          "id": "pv",
+          "type": "inverter",
+          "variant": "modern",
+          "x": 100,
+          "y": 100,
+          "energy_mode": "test",
+          "inverter": {
+            "mode": "live",
+            "count": 2,
+            "entities": {
+              "ac_power": "sensor.ac_power"
+            },
+            "manual": {
+              "ac_power": 6.4
+            },
+            "inputs": [
+              {
+                "name": "PV1",
+                "entities": {
+                  "power": "sensor.pv1_power"
+                }
+              },
+              {
+                "name": "PV2",
+                "entities": {
+                  "power": "sensor.pv2_power"
+                }
+              }
+            ],
+            "panel_rows": [
+              {
+                "key": "custom",
+                "label": "Daily production",
+                "entity": "sensor.daily",
+                "unit": "kWh"
+              },
+              {
+                "key": "ac_power",
+                "label": "Do not duplicate"
+              }
+            ]
+          }
+        },
+        {
+          "id": "house",
+          "type": "building",
+          "variant": "house",
+          "x": 700,
+          "y": 90,
+          "building": {
+            "mode": "manual",
+            "power_kw": 2
+          }
+        },
+        {
+          "id": "tank",
+          "type": "tank",
+          "variant": "modular",
+          "x": 300,
+          "y": 400,
+          "parts": [
+            {
+              "id": "upper",
+              "kind": "sensor",
+              "entity": "sensor.upper",
+              "height": 70
+            },
+            {
+              "id": "invalid",
+              "kind": "sensor",
+              "entity": "not an entity",
+              "height": 30
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "id": "hydraulic_1",
+          "type": "hydraulic",
+          "label": "Supply",
+          "points": [
+            {
+              "x": 350,
+              "y": 450
+            },
+            {
+              "x": 490,
+              "y": 450
+            }
+          ],
+          "style": {
+            "color": "hot",
+            "width": 7,
+            "cap_start": true,
+            "cap_end": true
+          },
+          "animation": {
+            "flow_mode": "on",
+            "flow_direction": "reverse"
+          },
+          "accessories": [
+            {
+              "id": "pump_a",
+              "type": "pump",
+              "entity": "binary_sensor.pump",
+              "position": 50,
+              "mode": "manual",
+              "test_running": true
+            }
+          ]
+        },
+        {
+          "id": "electric_1",
+          "type": "electric",
+          "label": "AC cable",
+          "points": [
+            {
+              "x": 200,
+              "y": 140
+            },
+            {
+              "x": 400,
+              "y": 140
+            },
+            {
+              "x": 700,
+              "y": 130
+            }
+          ],
+          "energy_start": {
+            "node_id": "pv",
+            "port_id": "ac"
+          },
+          "energy_end": {
+            "node_id": "house",
+            "port_id": "supply"
+          },
+          "style": {
+            "color": "#A1B2C3",
+            "width": 5,
+            "cap_start": true,
+            "cap_end": true
+          },
+          "animation": {
+            "flow_power_mode": "manual",
+            "flow_power_kw": -5,
+            "flow_max_kw": 10,
+            "flow_pattern": "dots"
+          },
+          "accessories": [
+            {
+              "id": "invalid_pump",
+              "type": "pump",
+              "position": 50
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
