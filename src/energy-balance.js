@@ -52,7 +52,7 @@ const HASSStudioEnergyBalance=(()=>{
     if(n.type==='building'){
       const c=HASSStudioBuilding.normalize(n);
       const backup=c.measurement==='individual'&&c.remaining_enabled?c.remaining_kw:c.power_kw;
-      v=read(c.power_entity,backup,c.mode);
+      v=read(c.power_entity,backup,c.mode,c.measurement==='net');
       return {kw:v.kw===null?null:-v.kw,source:v.source};
     }
     if(n.type==='ev_charger'){
@@ -132,7 +132,7 @@ const HASSStudioEnergyBalance=(()=>{
     if(kw!==null&&p.reverse_sign)kw=-kw;
     if(kw!==null&&(!Number.isFinite(kw)||Math.abs(kw)>10000))
       return {mode:p.mode,source:'invalid',injection_kw:null,reason:'invalid_power'};
-    if(kw!==null&&!validDirection(kw,role))
+    if(kw!==null&&!(n.type==='building'&&HASSStudioBuilding.normalize(n).measurement==='net')&&!validDirection(kw,role))
       return {mode:p.mode,source:'invalid',injection_kw:null,reason:'invalid_direction'};
     return {mode:p.mode,source,injection_kw:kw===null?null:round(kw)};
   };
@@ -173,9 +173,10 @@ const HASSStudioEnergyBalance=(()=>{
       reasons:Math.abs(residual)<=tolerance_kw?[]:['imbalance']};
   };
 
-  // Building child ports express the scope of an aggregate meter. The enclosing
-  // building injects only the *remaining* load. A junction between house and
-  // child is transparent; crossing SVG paths never creates a relationship.
+  // Port-driven building hierarchy. The raw meter and every attached device are
+  // read once, then the pure building power contract determines OWN consumption.
+  // Descendant sources are NOT extra loads. A signed net meter is a boundary
+  // reading; only the derived own load enters the shared AC network injection sum.
   const adjustBuildings=(group,layout,warnings,tolerance)=>{
     const items=new Map(group.devices.map(d=>[d.node_id,d]));
     const nodes=new Map((layout.nodes||[]).map(n=>[n.id,n]));
@@ -192,22 +193,27 @@ const HASSStudioEnergyBalance=(()=>{
       append(b.node_id,{peer:a.node_id,port:b.port_id,otherPort:a.port_id,id:c.id});
     }
     const children=new Map(),owner=new Map(),invalid=new Map();
-    const fault=(id,reason)=>{invalid.set(id,reason);warnings.push({node_id:id,reason});};
+    const fault=(id,reason)=>{
+      if(invalid.has(id))return;
+      invalid.set(id,reason);warnings.push({node_id:id,reason});
+    };
     for(const entry of group.devices){
       if(entry.node_type!=='building')continue;
-      const direct=new Set(),traversed=new Set([entry.node_id]),stack=[];
+      const direct=new Set(),visited=new Set([entry.node_id]);
       const visit=(id,via,from)=>{
-        if(traversed.has(id)){fault(entry.node_id,'building_branch_cycle');return;}
-        traversed.add(id);
-        const obj=nodes.get(id),target=items.get(id);
-        if(!obj){fault(entry.node_id,'building_invalid_child');return;}
-        if(obj.type==='building'){
+        if(visited.has(id)){fault(entry.node_id,'building_branch_cycle');return;}
+        visited.add(id);
+        const n=nodes.get(id),target=items.get(id);
+        if(!n){fault(entry.node_id,'building_invalid_child');return;}
+        if(n.type==='building'){
           if(via!=='supply'){fault(entry.node_id,'building_child_wrong_side');return;}
           if(!target){fault(entry.node_id,'building_invalid_child');return;}
           direct.add(id);return;
         }
-        const role=HASSStudioEnergyTopology.node(obj).role;
-        if(role==='load'){
+        const role=HASSStudioEnergyTopology.node(n).role;
+        // AC loads, generation, and bidirectional storage are all terminal
+        // participants. A junction is transparent but never an energy source.
+        if(role==='load'||role==='source'||role==='storage'){
           if(!target){fault(entry.node_id,'building_invalid_child');return;}
           direct.add(id);return;
         }
@@ -215,64 +221,80 @@ const HASSStudioEnergyBalance=(()=>{
           fault(entry.node_id,'building_invalid_child');return;
         }
         for(const edge of links.get(id)||[]){
-          if(edge.id===from)continue;
-          visit(edge.peer,edge.otherPort,edge.id);
+          if(edge.id!==from)visit(edge.peer,edge.otherPort,edge.id);
         }
       };
-      for(const edge of links.get(entry.node_id)||[]){
+      for(const edge of links.get(entry.node_id)||[])
         if(edge.port==='child')visit(edge.peer,edge.otherPort,edge.id);
-      }
       for(const id of direct){
-        const old=owner.get(id);
-        if(old&&old!==entry.node_id){
+        const existing=owner.get(id);
+        if(existing&&existing!==entry.node_id){
           fault(entry.node_id,'building_multiple_parents');
-          fault(old,'building_multiple_parents');
+          fault(existing,'building_multiple_parents');
         }
         owner.set(id,entry.node_id);
       }
       children.set(entry.node_id,[...direct]);
     }
-    const results=new Map(),visiting=new Set();
+    const resolved=new Map(),visiting=new Set();
+    const known=(kw,kind)=>({
+      consumption_kw:kw===null?kind==='source'?0:null:round(Math.max(0,-kw)),
+      generation_kw:kw===null?kind==='load'?0:null:round(Math.max(0,kw))
+    });
     const compute=id=>{
-      if(results.has(id))return results.get(id);
+      if(resolved.has(id))return resolved.get(id);
       const e=items.get(id),n=nodes.get(id);
       if(!e||!n)return null;
       if(visiting.has(id)){fault(id,'building_branch_cycle');return null;}
+      if(e.node_type!=='building')return known(e.injection_kw,e.role);
       visiting.add(id);
-      let total=0,ok=true;
+      let totalLoad=0,totalGeneration=0;
       for(const child of children.get(id)||[]){
-        const qty=compute(child);
-        if(qty===null){ok=false;break;}
-        total+=qty;
-      }
-      if(invalid.has(id))ok=false;
-      if(e.node_type==='building'&&e.measurement==='aggregate'&&(children.get(id)||[]).length){
-        const raw=e.injection_kw===null?null:-e.injection_kw;
-        if(!ok||raw===null){
-          if(!invalid.has(id))fault(id,'building_child_reading_missing');
-          e.injection_kw=null;e.source='missing';
-        }else if(total>raw+tolerance){
-          fault(id,'building_child_exceeds_total');
-          e.injection_kw=null;e.source='invalid';
-        }else{
-          e.aggregate_total_kw=round(raw);
-          e.aggregate_children_kw=round(total);
-          e.injection_kw=-round(Math.max(0,raw-total));
-          e.source=e.source==='measured'?'calculated':e.source;
+        const result=compute(child);
+        if(!result){
+          totalLoad=null;totalGeneration=null;continue;
         }
+        totalLoad=totalLoad===null||result.consumption_kw===null?null:
+          round(totalLoad+result.consumption_kw);
+        totalGeneration=totalGeneration===null||result.generation_kw===null?null:
+          round(totalGeneration+result.generation_kw);
       }
-      // For a building without a main meter, the device's own entry is
-      // its remaining consumption, added to the explicitly wired children.
-      let result=null;
-      if(ok&&e.injection_kw!==null&&e.injection_kw<=0&&
-          (e.role==='load'||e.node_type==='building')){
-        result=-e.injection_kw+total;
-      }else if(e.node_type!=='building'&&e.role==='load'&&e.injection_kw!==null&&e.injection_kw<=0){
-        result=-e.injection_kw;
+      // The selected building reading is a power measurement, not a second
+      // physical load. Preserve raw data in model.measured_kw for diagnostics.
+      const originalInjection=e.injection_kw,originalSource=e.source;
+      const snapshot=HASSStudioBuilding.powerSnapshot({
+        measurement:e.measurement,measured_kw:originalInjection===null?null:-originalInjection,
+        source:originalSource,children_consumption_kw:totalLoad,
+        children_generation_kw:totalGeneration,tolerance_kw:tolerance
+      });
+      e.power_model=snapshot;
+      e.measured_kw=snapshot.measured_kw;
+      e.measurement_scope=snapshot.measurement_scope;
+      if(e.measurement==='aggregate'&&totalLoad!==null)
+        e.aggregate_children_kw=totalLoad;
+      if(e.measurement==='aggregate'&&snapshot.measured_kw!==null)
+        e.aggregate_total_kw=snapshot.measured_kw;
+      if(invalid.has(id)||originalSource==='invalid'||snapshot.status==='invalid'){
+        const reason=invalid.get(id)||(
+          snapshot.reasons.includes('children_exceed_gross')?
+            'building_child_exceeds_total':
+          snapshot.reasons.includes('net_exceeds_known_generation')?
+            'building_net_generation_insufficient':'building_invalid_measurement');
+        fault(id,reason);
+        e.injection_kw=null;e.source='invalid';e.reason=reason;
+      }else if(snapshot.own_consumption_kw!==null){
+        e.injection_kw=-snapshot.own_consumption_kw;
+        e.source=e.measurement==='individual'?originalSource:'calculated';
+      }else{
+        if((children.get(id)||[]).length&&e.measurement!=='individual')
+          warnings.push({node_id:id,reason:'building_child_reading_missing'});
+        e.injection_kw=null;e.source='missing';
       }
-      visiting.delete(id);
-      results.set(id,result===null?null:round(result));
-      return results.get(id);
+      const result={
+        consumption_kw:snapshot.gross_consumption_kw,
+        generation_kw:snapshot.children_generation_kw
+      };
+      visiting.delete(id);resolved.set(id,result);return result;
     };
     for(const e of group.devices)if(e.node_type==='building')compute(e.node_id);
   };
