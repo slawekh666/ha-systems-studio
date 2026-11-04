@@ -228,7 +228,7 @@ const HASSStudioEditorInspector = (() => {
             metric('Moc elektryczna pompy ciepła (kW)','hp_power_entity',obj.hp_power_entity,
               'hp_manual_kw',obj.hp_manual_kw);
         }
-        if(isDistribution)markup+=field('Przyłącze sieci — model','energy_grid_connected',
+        if(obj.type==='distribution_board')markup+=field('Przyłącze sieci — model','energy_grid_connected',
            obj.energy_grid_connected!==false?'true':'false','text',
            [['true','Podłączone'],['false','Odłączone']])+
            '<p class="ss-note">Wyłącznie wizualizacja — bez sterowania fizycznym rozłącznikiem.</p>';
