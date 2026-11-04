@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.25-dev';
+const VERSION = '0.4.26-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2716,6 +2716,62 @@ const HASSStudioDeviceParameters=(()=>{
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioDeviceParameters;
 
 
+/* Stage 06: shared inverter HA/TEST readings, without service calls.
+ * AC uses the existing signed HASSStudioHA.powerInput contract. Auxiliary
+ * fields preserve the historical (different) fallback rules.
+ */
+const HASSStudioInverterReadings=(()=>{
+ const measured=(h,id,units,lo,hi)=>{
+   const r=HASSStudioHA.reading(h,id);
+   return r&&units.includes(r.unit)&&r.value>=lo&&r.value<=hi?r.value:null;
+ };
+ const alarmState=(h,id)=>{
+   const value=String(HASSStudioHA.entity(h,id)?.state??'').trim().toLowerCase();
+   return ['on','alarm','fault','error','critical','warning'].includes(value)?'alarm':
+     ['off','normal','ok','clear'].includes(value)?'ok':null;
+ };
+ const choose=(node,live,backup)=>{
+   const forceTest=node?.energy_mode==='test'||
+     (node?.energy_mode==null&&node?.inverter?.mode==='manual');
+   if(forceTest)return {value:backup,source:backup===null||backup===undefined?'missing':'simulated'};
+   if(live!==null&&live!==undefined)return {value:live,source:'measured'};
+   if(node?.energy_mode==='auto'&&node?.energy_fallback_enabled===true)
+     return {value:backup,source:backup===null||backup===undefined?'missing':'simulated'};
+   return {value:null,source:'missing'};
+ };
+ const power=(node,h,c)=>HASSStudioHA.powerInput(
+   node,h,c.entities.ac_power,c.manual.ac_power,c.mode,true);
+ const resolve=(node,h,c)=>{
+   const manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
+   const ac=power(node,h,c);
+   const temperature=choose(node,measured(h,c.entities.temperature,['°C','C',''],-40,150),c.manual.temperature);
+   const alarm=choose(node,alarmState(h,c.entities.alarm),c.manual.alarm?'alarm':'ok');
+   const status=alarmState(h,c.entities.status);
+   const provenance=[];
+   const inputs=c.inputs.map(q=>{
+     const voltage=choose(node,measured(h,q.entities.voltage,['V',''],0,2000),q.manual.voltage);
+     const current=choose(node,measured(h,q.entities.current,['A',''],0,200),q.manual.current);
+     const reading=HASSStudioHA.reading(h,q.entities.power);
+     const directLive=reading&&['W','kW'].includes(reading.unit)&&reading.value>=0?
+       reading.value*(reading.unit==='kW'?1000:1):null;
+     const direct=choose(node,directLive,q.manual.power);
+     const watts=direct.value!==null?direct.value:
+       voltage.value!==null&&current.value!==null?voltage.value*current.value:null;
+     const calculated=direct.value===null&&watts!==null;
+     provenance.push({voltage:voltage.source,current:current.source,
+       power:direct.source,derived:calculated});
+     return {...q,voltage:voltage.value,current:current.value,watts,calculated};
+   });
+   return {power:ac.kw,temperature:temperature.value,alarm:alarm.value,
+     statusAlarm:status,inputs,manual,
+     sources:{power:ac.source,temperature:temperature.source,
+       alarm:alarm.source,inputs:provenance}};
+ };
+ return Object.freeze({measured,alarmState,choose,power,resolve});
+})();
+if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverterReadings;
+
+
 /* Photovoltaic inverter: read-only HA metrics and compact SVG visualization. */
 const HASSStudioInverter=(()=>{
  const MAX_INPUTS=12,MAX_ROWS=40;
@@ -2771,39 +2827,12 @@ const HASSStudioInverter=(()=>{
         manual:Object.fromEntries(['voltage','current','power'].map(k=>[k,original.manual?.[k]===null?null:clamp(original.manual?.[k],0,50000,d.manual[k])]))};
     })};
  };
- const read=(h,id,units,lo,hi)=>{
-   const r=HASSStudioHA.reading(h,id);
-   return r&&units.includes(r.unit)&&r.value>=lo&&r.value<=hi?r.value:null;
- };
- const status=(h,id)=>{
-   const value=String(HASSStudioHA.entity(h,id)?.state??'').trim().toLowerCase();
-   return ['on','alarm','fault','error','critical','warning'].includes(value)?'alarm':
-     ['off','normal','ok','clear'].includes(value)?'ok':null;
- };
- const effective=(node,live,backup)=>{
-   if(node?.energy_mode==='test')return backup;
-   if(node?.energy_mode==null&&node?.inverter?.mode==='manual')return backup;
-   if(live!==null&&live!==undefined)return live;
-   return node?.energy_mode==='auto'&&node?.energy_fallback_enabled===true?backup:null;
- };
  const data=(node,h)=>{
-   const c=normalize(node),manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
-   const power=HASSStudioHA.powerInput(node,h,c.entities.ac_power,c.manual.ac_power,c.mode,true).kw;
-   const temperature=effective(node,read(h,c.entities.temperature,['°C','C',''], -40,150),c.manual.temperature);
-   const alarm=effective(node,status(h,c.entities.alarm),c.manual.alarm?'alarm':'ok');
+   const c=normalize(node),resolved=HASSStudioInverterReadings.resolve(node,h,c);
+   const {power,temperature,alarm,inputs,manual}=resolved;
    const fault=alarm==='alarm'||(manual&&c.manual.status==='fault')||
-     (!manual&&status(h,c.entities.status)==='alarm');
+     (!manual&&resolved.statusAlarm==='alarm');
    const generating=power===null?null:((c.positive_power?power:-power)*1000>c.production_threshold_w);
-   const inputs=c.inputs.map(q=>{
-     const voltage=effective(node,read(h,q.entities.voltage,['V',''],0,2000),q.manual.voltage);
-     const current=effective(node,read(h,q.entities.current,['A',''],0,200),q.manual.current);
-     const direct=effective(node,(()=>{
-       const r=HASSStudioHA.reading(h,q.entities.power);
-       return r&&['W','kW'].includes(r.unit)&&r.value>=0?r.value*(r.unit==='kW'?1000:1):null;
-     })(),q.manual.power);
-     const watts=direct!==null?direct:voltage!==null&&current!==null?voltage*current:null;
-     return {...q,voltage,current,watts,calculated:direct===null&&watts!==null};
-   });
    return {c,power,temperature,fault,generating,inputs,manual,
       state:fault?'alarm':manual&&c.manual.status!=='auto'?c.manual.status:generating===null?'unknown':generating?'generating':'standby'};
  };
@@ -3326,7 +3355,7 @@ const HASSStudioEnergyBalance=(()=>{
     let v;
     if(n.type==='inverter'){
       const c=HASSStudioInverter.normalize(n);
-      v=read(c.entities.ac_power,c.manual.ac_power,c.mode,true);
+      v=HASSStudioInverterReadings.power(n,h,c);
       return {kw:v.kw===null?null:(c.positive_power?v.kw:-v.kw),source:v.source};
     }
     if(n.type==='building'){

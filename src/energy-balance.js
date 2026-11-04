@@ -46,7 +46,7 @@ const HASSStudioEnergyBalance=(()=>{
     let v;
     if(n.type==='inverter'){
       const c=HASSStudioInverter.normalize(n);
-      v=read(c.entities.ac_power,c.manual.ac_power,c.mode,true);
+      v=HASSStudioInverterReadings.power(n,h,c);
       return {kw:v.kw===null?null:(c.positive_power?v.kw:-v.kw),source:v.source};
     }
     if(n.type==='building'){
