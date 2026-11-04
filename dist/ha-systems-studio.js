@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.22-dev';
+const VERSION = '0.4.23-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -4065,7 +4065,8 @@ const HASSStudioViewport=(()=>{
   const dimensions=config=>{
     const layout=config?.studio_layout||{};
     // Existing saved layouts used 1200x720. Only newly created empty layouts use 1200x700.
-    const existing=Array.isArray(layout.nodes)||Array.isArray(layout.connections);
+    const existing=Array.isArray(layout.nodes)||Array.isArray(layout.connections)||
+      Array.isArray(layout.pipes)||Array.isArray(layout.edges);
     return {width:dimension(layout.width,1200),height:dimension(layout.height,existing?720:700)};
   };
   const fresh=(w,h)=>({cx:w/2,cy:h/2,zoom:1,autoFit:true});
@@ -4286,7 +4287,7 @@ const HASSStudioViewerGestures=(()=>{
 })();
 
 
-/* Custom layout normalization; connections[] v2 intentionally drops legacy pipes[]. */
+/* Custom layout normalization and non-destructive legacy configuration reader. */
 const HASSStudioLayout = (() => {
   const W=1200,H=720,MAX_NODES=60,MAX_CONNECTIONS=80;
   const registry=HASSStudioDeviceRegistry;
@@ -4324,6 +4325,57 @@ const HASSStudioLayout = (() => {
     test_speed:clamp(item.test_speed,.35,5,1),
     test_position:clamp(item.test_position,0,100,0)
   });
+  // Read-only migration of saved legacy layouts. The presence of connections[]
+  // (including an empty or malformed value) always overrides older schemas:
+  // deleted modern connections must NEVER reappear on the next edit/save.
+  const legacyConnections=(source,nodes)=>{
+    if(Object.prototype.hasOwnProperty.call(source,'connections'))
+      return Array.isArray(source.connections)?source.connections:[];
+    const existingPipes=Array.isArray(source.pipes);
+    const hasPipes=Object.prototype.hasOwnProperty.call(source,'pipes');
+    let pipes=existingPipes?source.pipes:[];
+    if(!hasPipes && Array.isArray(source.edges)){
+      const byId=new Map(nodes.map(n=>[n.id,n]));
+      const ports={left:[0,42],right:[112,42],top:[56,0],bottom:[56,84]};
+      pipes=source.edges.slice(0,MAX_CONNECTIONS).map((edge,index)=>{
+        const from=byId.get(edge?.from?.node),to=byId.get(edge?.to?.node);
+        const a=ports[edge?.from?.port],b=ports[edge?.to?.port];
+        if(!from||!to||!a||!b)return null;
+        const ax=from.x+a[0]*from.scale,ay=from.y+a[1]*from.scale;
+        const bx=to.x+b[0]*to.scale,by=to.y+b[1]*to.scale;
+        const mx=(ax+bx)/2;
+        return {id:'migrated-'+index,label:'',color:edge.color,width:7,
+          flow_mode:'auto',flow_direction:'forward',flow_speed:1,
+          cap_start:true,cap_end:true,
+          points:[{x:ax,y:ay},{x:mx,y:ay},{x:mx,y:by},{x:bx,y:by}],
+          accessories:[]};
+      }).filter(Boolean);
+    }
+    const used=new Set();
+    return pipes.slice(0,MAX_CONNECTIONS).filter(v=>v && typeof v==='object')
+      .map((v,index)=>{
+        const oldId=typeof v.id==='string'&&v.id?v.id.slice(0,32):'legacy-p-'+index;
+        let id=oldId,suffix=2;
+        while(used.has(id)){
+          const end='-'+suffix++;
+          id=oldId.slice(0,32-end.length)+end;
+        }
+        used.add(id);
+        const electric=v.connection_type==='electric'||v.type==='electric';
+        const style=v.style||{};
+        const animation=v.animation||{};
+        const color=style.color??v.color;
+        const width=style.width??v.width;
+        return {id,type:electric?'electric':'hydraulic',label:v.label,
+          points:v.points,
+          energy_start:v.energy_start,energy_end:v.energy_end,
+          style:{color:electric?HASSStudioPowerFlow.colorHex(color,'#E3BC63'):color,
+            width,cap_start:style.cap_start??v.cap_start,
+            cap_end:style.cap_end??v.cap_end},
+          animation:{...v,...animation},
+          accessories:v.accessories};
+      });
+  };
   const normalized=(config)=>{
     const source=config?.studio_layout||{};
     const {width,height}=HASSStudioViewport.dimensions(config);
@@ -4394,8 +4446,8 @@ const HASSStudioLayout = (() => {
       power_grid:v.type==='power_grid'?HASSStudioPowerGrid.normalize(v):undefined,
       parts:(Array.isArray(v.parts)?v.parts:[]).slice(0,40).map(normalizeItem)
     }));
-    // New connections schema is intentionally not migrated from legacy pipes[].
-    const connections=(Array.isArray(source.connections)?source.connections:[]).slice(0,MAX_CONNECTIONS).filter(v=>v&&typeof v.id==='string'&&['hydraulic','electric'].includes(v.type)).map(v=>{
+    // Migration is read-only; the editor persists only normalized connections[].
+    const connections=legacyConnections(source,nodes).slice(0,MAX_CONNECTIONS).filter(v=>v&&typeof v.id==='string'&&['hydraulic','electric'].includes(v.type)).map(v=>{
       const style=v.style||{},a=v.animation||{},hydraulic=v.type==='hydraulic';
       return {
         id:v.id.slice(0,32),type:v.type,label:String(v.label||'').slice(0,64),

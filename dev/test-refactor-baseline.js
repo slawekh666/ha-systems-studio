@@ -1,7 +1,7 @@
 /* Baseline contracts for the pre-0.5.0 implementation.
  * Synthetic fixtures, no HA installation or real user configuration required.
- * IMPORTANT: legacy pipes[] is intentionally UNSUPPORTED in 0.4.22-dev.
- * Update the explicit known-gap assertion only in the approved migration stage 04.
+ * The original 0.4.22-dev baseline did not migrate legacy pipes[].
+ * Stage 04 explicitly replaces that known gap with a migration assertion.
  */
 'use strict';
 const assert = require('node:assert/strict');
@@ -11,7 +11,8 @@ const vm = require('node:vm');
 const fixtures = JSON.parse(fs.readFileSync('dev/fixtures/refactor-050-baseline.json', 'utf8'));
 assert.equal(fixtures.baseline.version, '0.4.22-dev');
 assert.equal(fixtures.baseline.source_sha, 'ddf15c7c12e9c3566b5f861a2266ca7a7a6a9c0f');
-assert.equal(fs.readFileSync('VERSION', 'utf8').trim(), fixtures.baseline.version);
+// Fixture records the frozen 0.4.22-dev baseline, not the current application version.
+// The current version is independently validated by scripts/check.py.
 
 const sandbox = {
   isEnt: id => typeof id === 'string' && /^[a-z_]+\.[a-z0-9_]+$/.test(id)
@@ -39,8 +40,8 @@ const typedConfig = fixtures.typed_connections_v2;
 const legacyBefore = JSON.stringify(legacyConfig);
 const typedBefore = JSON.stringify(typedConfig);
 
-// A: Legacy YAML-like saved layout retains ordinary nodes and dimensions.
-// KNOWN GAP: pre-v2 pipes[] are ignored; this is NOT a migration implementation.
+// A: Legacy YAML-like saved layout retains nodes, dimensions and connections.
+// Migration is read-only; the original fixture remains unmodified.
 const legacy = layout.normalized(legacyConfig);
 assert.equal(legacy.name, 'Legacy plumbing example');
 assert.equal(legacy.width, 1200);
@@ -51,10 +52,14 @@ assert.equal(legacy.nodes[0].variant, 'buffer');
 assert.equal(legacy.nodes[0].x, 140);
 assert.equal(legacy.nodes[0].scale, 1.25);
 assert.equal(legacy.nodes[0].parts[0].entity, 'sensor.tank_top');
-assert.equal(legacy.connections.length, 0,
-  'KNOWN GAP (stage 04): 0.4.22-dev does not migrate legacy studio_layout.pipes[]');
+assert.equal(legacy.connections.length, 1);
+assert.equal(legacy.connections[0].id, 'old_pipe_1');
+assert.equal(legacy.connections[0].type, 'hydraulic');
+assert.equal(legacy.connections[0].style.color, 'hot');
+assert.equal(legacy.connections[0].animation.flow_mode, 'on');
+assert.equal(legacy.connections[0].points.length, 2);
 assert.equal(JSON.stringify(legacyConfig), legacyBefore, 'legacy input must not be mutated');
-console.log('BASELINE A: legacy nodes preserved; pipes[] known migration gap recorded');
+console.log('BASELINE A: legacy nodes and pipes[] migrated without source mutation');
 
 // B: Typed electrical/hydraulic connections: ordering, endpoints, accessories,
 // readout metadata and round-trip normalization are part of the existing contract.
@@ -155,4 +160,4 @@ const zeroFlow = flow.visual({
 assert.equal(zeroFlow.known, true);
 assert.equal(zeroFlow.active, false);
 console.log('BASELINE E: electrical animation data and missing/zero semantics');
-console.log('PASS: Stage 02 pre-refactor baseline contracts (legacy gap is intentional).');
+console.log('PASS: Stage 02 baseline contracts, including Stage 04 migration.');

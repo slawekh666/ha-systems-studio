@@ -12,6 +12,7 @@ validate_card:
     - python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
     - node scripts/test_studio.js
     - node dev/test-refactor-baseline.js
+    - node dev/test-config-migrations.js
     - node dev/test-power-grid.js
     - node dev/test-scaled-icons.js
     - node dev/test-energy-storage.js
