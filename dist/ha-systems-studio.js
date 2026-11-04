@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.28-dev';
+const VERSION = '0.4.29-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -3104,8 +3104,112 @@ const HASSStudioBuilding=(()=>{
    daily_entity:entity(x.daily_entity),power_kw:clamp(x.power_kw,0,10000,2),
    daily_kwh:clamp(x.daily_kwh,0,1000000,0),remaining_enabled:x.remaining_enabled===true,remaining_kw:clamp(x.remaining_kw,0,10000,0),
    readout_scale:HASSStudioReadoutScale.factor(x.readout_scale),
-   measurement:x.measurement==='aggregate'?'aggregate':'individual',
+   measurement:['aggregate','net'].includes(x.measurement)?x.measurement:'individual',
    show_readout:x.show_readout!==false,window_glow:x.window_glow!==false};
+ };
+ // Stage 07A.1-A: pure, read-only power model. No topology or SVG decisions.
+ // Inputs are instantaneous AC kW, not kWh. Missing values MUST be null.
+ // Existing measurement codes remain stable:
+ //   individual = own consumers only; aggregate = gross consumer load;
+ //   net = signed power crossing the building boundary (+import / -export).
+ // Child aggregates are separate magnitudes: loads (+) and AC sources (+).
+ // A caller must pass explicit zeros only when it knows there are no such
+ // devices; absence of a sensor or incomplete topology is not zero power.
+ const powerSnapshot=(input={})=>{
+  const mode=['individual','aggregate','net'].includes(input.measurement)?input.measurement:'individual';
+  const scope=mode==='individual'?'own':mode==='aggregate'?'gross':'net';
+  const tolerance=typeof input.tolerance_kw==='number'&&Number.isFinite(input.tolerance_kw)&&
+    input.tolerance_kw>=0?input.tolerance_kw:0.05;
+  const number=x=>x===null||x===undefined?null:
+    typeof x==='number'&&Number.isFinite(x)?x:NaN;
+  const round=x=>Math.round(x*1e6)/1e6;
+  const measured=number(input.measured_kw);
+  const childLoad=number(input.children_consumption_kw);
+  const childSource=number(input.children_generation_kw);
+  const acceptedSources=['measured','simulated','calculated','estimated','mixed'];
+  const origin=(value,name,fallback)=>value===null?'missing':
+    acceptedSources.includes(input[name])?input[name]:fallback;
+  const source=origin(measured,'source','missing');
+  const field_sources={
+    measured_kw:source,
+    children_consumption_kw:origin(childLoad,'children_consumption_source','calculated'),
+    children_generation_kw:origin(childSource,'children_generation_source','calculated'),
+    own_consumption_kw:'missing',gross_consumption_kw:'missing',net_supply_kw:'missing'
+  };
+  let own=null,gross=null,net=null;
+  const reasons=[];
+  if(Number.isNaN(measured)||measured!==null&&mode!=='net'&&measured<0)
+    reasons.push('invalid_measurement');
+  if(Number.isNaN(childLoad)||childLoad!==null&&childLoad<0)
+    reasons.push('invalid_children_consumption');
+  if(Number.isNaN(childSource)||childSource!==null&&childSource<0)
+    reasons.push('invalid_children_generation');
+  // Preserve a valid original readout even if the remaining data contradict it.
+  if(!reasons.length&&measured!==null){
+    if(mode==='individual'){
+      own=measured;field_sources.own_consumption_kw=source;
+      if(childLoad!==null){
+        gross=round(own+childLoad);field_sources.gross_consumption_kw='calculated';
+      }
+      if(gross!==null&&childSource!==null){
+        net=round(gross-childSource);field_sources.net_supply_kw='calculated';
+      }
+    }else if(mode==='aggregate'){
+      gross=measured;field_sources.gross_consumption_kw=source;
+      if(childLoad!==null){
+        const remainder=round(gross-childLoad);
+        if(remainder< -tolerance)reasons.push('children_exceed_gross');
+        else {
+          own=Math.max(0,remainder);field_sources.own_consumption_kw='calculated';
+        }
+      }
+      if(childSource!==null){
+        net=round(gross-childSource);field_sources.net_supply_kw='calculated';
+      }
+    }else {
+      net=measured;field_sources.net_supply_kw=source;
+      if(childSource!==null){
+        const consumed=round(net+childSource);
+        if(consumed< -tolerance)reasons.push('net_exceeds_known_generation');
+        else{
+          gross=Math.max(0,consumed);field_sources.gross_consumption_kw='calculated';
+        }
+      }
+      if(gross!==null&&childLoad!==null){
+        const remainder=round(gross-childLoad);
+        if(remainder< -tolerance)reasons.push('children_exceed_gross');
+        else{
+          own=Math.max(0,remainder);field_sources.own_consumption_kw='calculated';
+        }
+      }
+    }
+  }
+  if(reasons.length){
+    // Invalid arithmetic must not leak apparently correct derived values.
+    own=mode==='individual'&&!Number.isNaN(measured)&&measured!==null&&measured>=0?measured:null;
+    gross=mode==='aggregate'&&!Number.isNaN(measured)&&measured!==null&&measured>=0?measured:null;
+    net=mode==='net'&&!Number.isNaN(measured)?measured:null;
+    for(const k of ['own_consumption_kw','gross_consumption_kw','net_supply_kw'])
+      field_sources[k]=k==='own_consumption_kw'&&mode==='individual'&&own!==null?source:
+        k==='gross_consumption_kw'&&mode==='aggregate'&&gross!==null?source:
+        k==='net_supply_kw'&&mode==='net'&&net!==null?source:'missing';
+  }
+  const complete=own!==null&&gross!==null&&net!==null&&
+    childLoad!==null&&childSource!==null;
+  const anyKnown=measured!==null&&!Number.isNaN(measured)||
+    childLoad!==null&&!Number.isNaN(childLoad)||
+    childSource!==null&&!Number.isNaN(childSource);
+  const status=reasons.length?'invalid':complete?'complete':anyKnown?'partial':'missing';
+  return Object.freeze({
+    measurement:mode,measurement_scope:scope,
+    measured_kw:Number.isNaN(measured)?null:measured,
+    own_consumption_kw:own,
+    children_consumption_kw:Number.isNaN(childLoad)?null:childLoad,
+    children_generation_kw:Number.isNaN(childSource)?null:childSource,
+    gross_consumption_kw:gross,net_supply_kw:net,
+    source,status,reasons:Object.freeze(reasons),
+    field_sources:Object.freeze(field_sources)
+  });
  };
  const numeric=(h,id,kind)=>{
   const x=HASSStudioHA.reading(h,id);
@@ -3139,7 +3243,7 @@ const HASSStudioBuilding=(()=>{
   graphic=HASSStudioSvg.namespaceIds(graphic+box,prefix);
   return '<svg width="150" height="150" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">'+graphic+'</svg>';
  };
- return Object.freeze({defaults,normalize,data,geometry,render});
+ return Object.freeze({defaults,normalize,powerSnapshot,data,geometry,render});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioBuilding;
 
