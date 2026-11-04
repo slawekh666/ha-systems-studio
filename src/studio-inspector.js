@@ -46,6 +46,7 @@ const HASSStudioEditorInspector = (() => {
       // retain their existing inspector until their own migration is reviewed.
       if(selection.type==='node'&&obj.type==='inverter'){
         const c=HASSStudioInverter.normalize(obj);
+        const fields=HASSStudioDeviceParameters.inverter;
         const mode=obj.energy_mode||
           (obj.energy_fallback_enabled===true?'auto':c.mode==='manual'?'test':'ha');
         const test=mode==='test'||mode==='auto'&&obj.energy_fallback_enabled===true;
@@ -93,15 +94,15 @@ const HASSStudioEditorInspector = (() => {
             'range',null,'min="40" max="150" step="5"');
         markup+=sect('inverter-basics','1. Podstawowe ustawienia i wygląd','mdi:tune-variant',basics,true);
 
-        let readings=numeric('Moc chwilowa falownika AC (kW)','inv_entity_ac_power',
+        let readings=numeric(fields.core.ac_power.label,'inv_entity_ac_power',
           c.entities.ac_power,'inv_manual_ac_power',c.manual.ac_power)+
-          numeric('Temperatura falownika (°C)','inv_entity_temperature',
+          numeric(fields.core.temperature.label,'inv_entity_temperature',
             c.entities.temperature,'inv_manual_temperature',c.manual.temperature)+
-          selectMetric('Stan pracy falownika','inv_entity_status',c.entities.status,
+          selectMetric(fields.core.status.label,'inv_entity_status',c.entities.status,
             'inv_manual_status',c.manual.status,[
               ['auto','Automatycznie z mocy AC'],['generating','Produkcja'],['standby','Czuwanie'],['off','Wyłączony'],
               ['fault','Awaria']])+
-          selectMetric('Alarm falownika','inv_entity_alarm',c.entities.alarm,
+          selectMetric(fields.core.alarm.label,'inv_entity_alarm',c.entities.alarm,
             'inv_manual_alarm',c.manual.alarm?'true':'false',[
               ['false','Brak alarmu'],['true','Alarm']]);
         readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
@@ -109,11 +110,11 @@ const HASSStudioEditorInspector = (() => {
           let fields=field('Nazwa wejścia','inv_pv_'+i+'_name',input.name)+
             field('Pokaż na ekranie falownika','inv_pv_'+i+'_visible',
               input.visible?'true':'false','text',[['true','Tak'],['false','Nie']])+
-            numeric('Napięcie '+input.name+' (V)','inv_pv_'+i+'_entity_voltage',
+            numeric(fields.pv.voltage.label+' '+input.name+' ('+fields.pv.voltage.unit+')','inv_pv_'+i+'_entity_voltage',
               input.entities.voltage,'inv_pv_'+i+'_manual_voltage',input.manual.voltage)+
-            numeric('Prąd '+input.name+' (A)','inv_pv_'+i+'_entity_current',
+            numeric(fields.pv.current.label+' '+input.name+' ('+fields.pv.current.unit+')','inv_pv_'+i+'_entity_current',
               input.entities.current,'inv_pv_'+i+'_manual_current',input.manual.current)+
-            numeric('Moc '+input.name+' (W)','inv_pv_'+i+'_entity_power',
+            numeric(fields.pv.power.label+' '+input.name+' ('+fields.pv.power.unit+')','inv_pv_'+i+'_entity_power',
               input.entities.power,'inv_pv_'+i+'_manual_power',input.manual.power);
           readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1),
             'mdi:solar-panel',fields,false);

@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.23-dev';
+const VERSION = '0.4.24-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2679,13 +2679,51 @@ const HASSStudioEnergyStorage=(()=>{
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyStorage;
 
 
+/* Stage 05: immutable device parameter declarations (inverter family first).
+ * These describe configuration, labels and defaults; source resolution stays
+ * in HASSStudioHA and HASSStudioInverter until a later reviewed stage.
+ */
+const HASSStudioDeviceParameters=(()=>{
+ const fields=entries=>Object.freeze(Object.fromEntries(entries.map(([id,spec])=>
+   [id,Object.freeze({id,...spec})])));
+ const core=fields([
+  ['ac_power',{label:'Moc chwilowa falownika AC (kW)',unit:'kW',kind:'number',
+    role:'energy_source',entityPath:'entities.ac_power',manualPath:'manual.ac_power',testDefault:6.4,min:-500,max:500}],
+  ['temperature',{label:'Temperatura falownika (°C)',unit:'°C',kind:'number',
+    role:'telemetry',entityPath:'entities.temperature',manualPath:'manual.temperature',testDefault:32,min:-40,max:150}],
+  ['status',{label:'Stan pracy falownika',unit:'',kind:'enum',role:'status',
+    entityPath:'entities.status',manualPath:'manual.status',testDefault:'auto',
+    options:Object.freeze(['auto','generating','standby','off','fault'])}],
+  ['alarm',{label:'Alarm falownika',unit:'',kind:'boolean',role:'alarm',
+    entityPath:'entities.alarm',manualPath:'manual.alarm',testDefault:false}]
+ ]);
+ const pv=fields([
+  ['voltage',{label:'Napięcie',unit:'V',kind:'number',role:'pv_input',
+    entityPath:'entities.voltage',manualPath:'manual.voltage',testDefault:380,min:0,max:50000}],
+  ['current',{label:'Prąd',unit:'A',kind:'number',role:'pv_input',
+    entityPath:'entities.current',manualPath:'manual.current',testDefault:8,min:0,max:50000}],
+  ['power',{label:'Moc',unit:'W',kind:'number',role:'pv_input',
+    entityPath:'entities.power',manualPath:'manual.power',testDefault:null,min:0,max:50000}]
+ ]);
+ const entity=x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x)?x:'';
+ const entities=(definitions,raw)=>Object.fromEntries(Object.keys(definitions).map(k=>[k,entity(raw?.[k])]));
+ const manualDefaults=definitions=>Object.fromEntries(Object.keys(definitions).map(k=>[k,definitions[k].testDefault]));
+ const inputDefaults=i=>({name:'PV'+(i+1),visible:i<3,entities:entities(pv),manual:manualDefaults(pv)});
+ const inverter=Object.freeze({core,pv,entity,entities,manualDefaults,inputDefaults,
+  coreKeys:Object.freeze(Object.keys(core)),pvKeys:Object.freeze(Object.keys(pv))});
+ return Object.freeze({inverter});
+})();
+if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioDeviceParameters;
+
+
 /* Photovoltaic inverter: read-only HA metrics and compact SVG visualization. */
 const HASSStudioInverter=(()=>{
  const MAX_INPUTS=12,MAX_ROWS=40;
  const PANEL_WIDTH=210,ROW_HEIGHT=19;
  const clamp=(v,min,max,d)=>v!==''&&v!=null&&Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):d;
  const entity=x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x)?x:'';
- const defaultInput=i=>({name:'PV'+(i+1),visible:i<3,entities:{voltage:'',current:'',power:''},manual:{voltage:380,current:8,power:null}});
+ const parameters=HASSStudioDeviceParameters.inverter;
+ const defaultInput=i=>parameters.inputDefaults(i);
  const DEFAULT_KEYS=['ac_power','temperature','status','alarm','pv_summary','pv_voltage','pv_current','pv_power','custom'];
  const defaultRow=(key='custom',input=0)=>({key:DEFAULT_KEYS.includes(key)?key:'custom',
    input,entity:'',label:'',unit:'auto',decimals:1,manual_value:''});
@@ -2709,8 +2747,8 @@ const HASSStudioInverter=(()=>{
  const panelHeight=c=>Math.max(52,40+c.panel_rows.length*ROW_HEIGHT);
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
-   rated_kw:10,production_threshold_w:10,positive_power:true,entities:{ac_power:'',temperature:'',status:'',alarm:''},
-   manual:{ac_power:6.4,temperature:32,status:'auto',alarm:false},inputs:[]});
+   rated_kw:10,production_threshold_w:10,positive_power:true,entities:parameters.entities(parameters.core),
+   manual:parameters.manualDefaults(parameters.core),inputs:[]});
  const normalize=node=>{
    const raw=node?.inverter||node||{},d=defaults(),count=Math.round(clamp(raw.count,1,MAX_INPUTS,2));
    return {...d,...raw,mode:raw.mode==='manual'?'manual':'live',count,
@@ -2721,7 +2759,7 @@ const HASSStudioInverter=(()=>{
     positive_power:raw.positive_power!==false,
     panel_title:String(raw.panel_title??'Parametry falownika').slice(0,46),
     panel_rows:panelRows(raw,node,count),
-    entities:Object.fromEntries(['ac_power','temperature','status','alarm'].map(k=>[k,entity(raw.entities?.[k])])),
+    entities:parameters.entities(parameters.core,raw.entities),
     manual:{ac_power:clamp(raw.manual?.ac_power,-500,500,6.4),
        temperature:clamp(raw.manual?.temperature,-40,150,32),
        status:['auto','generating','standby','off','fault'].includes(raw.manual?.status)?raw.manual.status:'auto',
@@ -2729,7 +2767,7 @@ const HASSStudioInverter=(()=>{
     inputs:Array.from({length:count},(_,i)=>{
       const original=raw.inputs?.[i]||{},d=defaultInput(i);
       return {name:String(original.name??d.name).slice(0,12),visible:original.visible!==false,
-        entities:Object.fromEntries(['voltage','current','power'].map(k=>[k,entity(original.entities?.[k])])),
+        entities:parameters.entities(parameters.pv,original.entities),
         manual:Object.fromEntries(['voltage','current','power'].map(k=>[k,original.manual?.[k]===null?null:clamp(original.manual?.[k],0,50000,d.manual[k])]))};
     })};
  };
@@ -2878,7 +2916,7 @@ const HASSStudioInverter=(()=>{
    const bottom=c.show_extra?Math.max(300,65+panelHeight(c)*c.extra_scale+10):300;
    return '<svg width="'+(150+extraWidth/2)+'" height="'+(bottom/2)+'" viewBox="'+left+' 0 '+(300+extraWidth)+' '+bottom+'" preserveAspectRatio="xMinYMin meet">'+content+'</svg>';
  };
- return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,defaultInput,defaultRow,defaults,normalize,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
+ return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,defaults,normalize,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverter;
 
@@ -4765,6 +4803,7 @@ const HASSStudioEditorInspector = (() => {
       // retain their existing inspector until their own migration is reviewed.
       if(selection.type==='node'&&obj.type==='inverter'){
         const c=HASSStudioInverter.normalize(obj);
+        const fields=HASSStudioDeviceParameters.inverter;
         const mode=obj.energy_mode||
           (obj.energy_fallback_enabled===true?'auto':c.mode==='manual'?'test':'ha');
         const test=mode==='test'||mode==='auto'&&obj.energy_fallback_enabled===true;
@@ -4812,15 +4851,15 @@ const HASSStudioEditorInspector = (() => {
             'range',null,'min="40" max="150" step="5"');
         markup+=sect('inverter-basics','1. Podstawowe ustawienia i wygląd','mdi:tune-variant',basics,true);
 
-        let readings=numeric('Moc chwilowa falownika AC (kW)','inv_entity_ac_power',
+        let readings=numeric(fields.core.ac_power.label,'inv_entity_ac_power',
           c.entities.ac_power,'inv_manual_ac_power',c.manual.ac_power)+
-          numeric('Temperatura falownika (°C)','inv_entity_temperature',
+          numeric(fields.core.temperature.label,'inv_entity_temperature',
             c.entities.temperature,'inv_manual_temperature',c.manual.temperature)+
-          selectMetric('Stan pracy falownika','inv_entity_status',c.entities.status,
+          selectMetric(fields.core.status.label,'inv_entity_status',c.entities.status,
             'inv_manual_status',c.manual.status,[
               ['auto','Automatycznie z mocy AC'],['generating','Produkcja'],['standby','Czuwanie'],['off','Wyłączony'],
               ['fault','Awaria']])+
-          selectMetric('Alarm falownika','inv_entity_alarm',c.entities.alarm,
+          selectMetric(fields.core.alarm.label,'inv_entity_alarm',c.entities.alarm,
             'inv_manual_alarm',c.manual.alarm?'true':'false',[
               ['false','Brak alarmu'],['true','Alarm']]);
         readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
@@ -4828,11 +4867,11 @@ const HASSStudioEditorInspector = (() => {
           let fields=field('Nazwa wejścia','inv_pv_'+i+'_name',input.name)+
             field('Pokaż na ekranie falownika','inv_pv_'+i+'_visible',
               input.visible?'true':'false','text',[['true','Tak'],['false','Nie']])+
-            numeric('Napięcie '+input.name+' (V)','inv_pv_'+i+'_entity_voltage',
+            numeric(fields.pv.voltage.label+' '+input.name+' ('+fields.pv.voltage.unit+')','inv_pv_'+i+'_entity_voltage',
               input.entities.voltage,'inv_pv_'+i+'_manual_voltage',input.manual.voltage)+
-            numeric('Prąd '+input.name+' (A)','inv_pv_'+i+'_entity_current',
+            numeric(fields.pv.current.label+' '+input.name+' ('+fields.pv.current.unit+')','inv_pv_'+i+'_entity_current',
               input.entities.current,'inv_pv_'+i+'_manual_current',input.manual.current)+
-            numeric('Moc '+input.name+' (W)','inv_pv_'+i+'_entity_power',
+            numeric(fields.pv.power.label+' '+input.name+' ('+fields.pv.power.unit+')','inv_pv_'+i+'_entity_power',
               input.entities.power,'inv_pv_'+i+'_manual_power',input.manual.power);
           readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1),
             'mdi:solar-panel',fields,false);
@@ -6244,8 +6283,8 @@ const HASSStudioEditorLibrary=(()=>{
         const c=obj.inverter=obj.inverter||HASSStudioInverter.defaults(),k=key.slice(4);
         if(k.startsWith('entity_')){
           const f=k.slice(7);
-          if(['ac_power','temperature','status','alarm'].includes(f)){
-            c.entities=c.entities||{};c.entities[f]=validEntity(val)?val:'';
+          if(HASSStudioDeviceParameters.inverter.coreKeys.includes(f)){
+            c.entities=c.entities||{};c.entities[f]=HASSStudioDeviceParameters.inverter.entity(val);
           }
         }else if(k.startsWith('manual_')){
           const f=k.slice(7);c.manual=c.manual||{};
@@ -6262,7 +6301,7 @@ const HASSStudioEditorLibrary=(()=>{
             const q=c.inputs[i],fieldName=match[2];
             if(fieldName==='name')q.name=val.slice(0,12);
             else if(fieldName==='visible')q.visible=val==='true';
-            else if(fieldName.startsWith('entity_')){q.entities=q.entities||{};q.entities[fieldName.slice(7)]=validEntity(val)?val:'';}
+            else if(fieldName.startsWith('entity_')){q.entities=q.entities||{};q.entities[fieldName.slice(7)]=HASSStudioDeviceParameters.inverter.entity(val);}
             else if(fieldName.startsWith('manual_')){
               q.manual=q.manual||{};
               q.manual[fieldName.slice(7)]=val===''?null:clamp(val,0,50000,0);
