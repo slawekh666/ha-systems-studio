@@ -507,7 +507,7 @@
         if(model.nodes.length>=MAX_NODES)return;
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:position?position.x:80+(n%6)*170,y:position?position.y:100+Math.floor(n/6)*170,
-          energy_ports:HASSStudioEnergyTopology.defaultPorts({type:kind,variant:preset}),energy_mode:'auto',energy_fallback_enabled:false,energy_test_configured:false,energy_grid_auto:kind==='power_grid',energy_power_entity:'',energy_manual_kw:null,
+          energy_ports:HASSStudioEnergyTopology.defaultPorts({type:kind,variant:preset}),energy_mode:'auto',energy_fallback_enabled:false,energy_test_configured:false,energy_grid_auto:kind==='power_grid',energy_grid_connected:true,energy_power_entity:'',energy_manual_kw:null,
            scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,pellet_test_mode:false,pellet_manual_state:'burning',pellet_manual_temperature:65,pellet_manual_power_unit:'%',pellet_manual_power:65,pellet_manual_feeder:false,pellet_manual_alarm:false,pellet_burner_power_entity:'',pellet_feeder_entity:'',pellet_alarm_entity:'',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,equipment_mode:'live',equipment_test_running:false,equipment_test_speed:1,equipment_test_position:0,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?{...HASSStudioBuilding.defaults(),measurement:'aggregate',remaining_kw:0}:undefined,entities:[],parts:[]};
         if(HASSStudioEnergyTopology.electricalType(node))model.energy_balance.enabled=true;
          model.nodes.push(node);selection={type:'node',id:node.id};
@@ -684,6 +684,8 @@
          obj.energy_fallback_enabled=val==='true';obj.energy_test_configured=true;
        }else if(selection.type==='node'&&key==='energy_grid_auto'){
          obj.energy_grid_auto=val==='true';
+        }else if(selection.type==='node'&&key==='energy_grid_connected'&&obj.type==='distribution_board'){
+          obj.energy_grid_connected=val==='true';
        }else if(selection.type==='node'&&key==='energy_power_entity'){
          obj.energy_power_entity=validEntity(val)?val:'';
        }else if(selection.type==='node'&&key==='energy_manual_kw'){
@@ -796,7 +798,7 @@
         else if(k==='extra_position')c.extra_position=val==='left'?'left':'right';
         else if(k==='rated_kw')c.rated_kw=clamp(val,.1,500,10);
         else if(k==='production_threshold_w')c.production_threshold_w=clamp(val,0,1000,10);
-        else if(['positive_power','show_extra'].includes(k))c[k]=val==='true';
+        else if(['positive_power','show_extra','export_allowed'].includes(k))c[k]=val==='true';
       }else if(obj.type==='energy_storage'&&key.startsWith('storage_')){
         const c=obj.energy_storage=obj.energy_storage||HASSStudioEnergyStorage.defaults();
         const k=key.slice(8);

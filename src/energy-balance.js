@@ -332,10 +332,63 @@ const HASSStudioEnergyBalance=(()=>{
     const networks=[...grouped.values()].map(g=>{
       const entries=g.devices;
       adjustBuildings(g,src,warnings,config.tolerance_kw);
+      // Stage 07A: isolate the visual grid boundary, never actuate hardware.
+      const boards=allNodes.filter(n=>n.type==='distribution_board'&&
+        n.energy_grid_connected===false&&[...g.ports].some(k=>k.startsWith(n.id+':')));
+      const grids=entries.filter(e=>e.role==='grid');
+      if(boards.length)for(const e of grids){
+        e.injection_kw=0;e.source='calculated';e.mode='device';
+      }
+      // Only one unmetered building can absorb the nonnegative known surplus.
+      // This is an estimate, not an HA reading. Never invent a split.
+      const unknown=entries.filter(e=>e.mode!=='off'&&e.injection_kw===null);
+      const homes=unknown.filter(e=>e.node_type==='building');
+      if(homes.length===1&&unknown.every(e=>e.role==='grid'||e.node_type==='building')&&grids.length<=1){
+        const known=entries.filter(e=>e.role!=='grid'&&e.injection_kw!==null);
+        const surplus=round(known.reduce((s,e)=>s+e.injection_kw,0));
+        if(surplus>=0){
+          homes[0].injection_kw=-surplus;homes[0].source='estimated';
+          homes[0].estimated_total_kw=surplus;
+          for(const e of grids)if(e.injection_kw===null){
+            e.injection_kw=0;e.source='estimated';e.mode='device';
+          }
+        }
+      }
+      // Source-specific export is an accounting policy, never a mutation of HA.
+      const inverters=entries.filter(e=>e.node_type==='inverter');
+      const restricted=inverters.filter(e=>
+        HASSStudioInverter.normalize(allNodes.find(n=>n.id===e.node_id)).export_allowed===false);
+      const eligible=inverters.filter(e=>!restricted.includes(e));
+      const known=entries.filter(e=>e.mode!=='off'&&e.role!=='grid')
+        .every(e=>e.injection_kw!==null);
+      let unaccounted_kw=null,export_cap_kw=null;
+      if(known&&grids.length<=1&&(restricted.length||boards.length)){
+        const net=round(entries.filter(e=>e.mode!=='off'&&e.role!=='grid')
+          .reduce((sum,e)=>sum+e.injection_kw,0));
+        // Do not infer grid-export permission from battery discharge.
+        export_cap_kw=boards.length?0:round(eligible.reduce((sum,e)=>
+          sum+Math.max(0,e.injection_kw),0));
+        const exportKw=Math.min(Math.max(0,net),export_cap_kw);
+        unaccounted_kw=round(Math.max(0,net-exportKw));
+        if(grids.length===1&&grids[0].source!=='measured'){
+          grids[0].injection_kw=net<0?-net:-exportKw;
+          grids[0].source='calculated';grids[0].mode='device';
+        }
+      }
       const result=solve(entries,config.tolerance_kw);
+      if(result.state==='unbalanced'&&unaccounted_kw!==null&&
+          Math.abs(result.residual_kw-unaccounted_kw)<=config.tolerance_kw&&
+          result.residual_kw>=-config.tolerance_kw){
+        result.state='unaccounted';result.reasons=['unaccounted_generation'];
+      }
+      if(unaccounted_kw!==null&&unaccounted_kw>config.tolerance_kw)
+        warnings.push({reason:'unaccounted_generation',network_id:g.id});
+      if(boards.length&&result.state==='unbalanced')
+        warnings.push({reason:'grid_disconnected_imbalance',network_id:g.id});
       return {id:g.id,medium:g.medium,connection_ids:g.connection_ids,
         port_keys:[...g.ports],devices:entries,state:result.state,
-        residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons};
+        residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons,
+        unaccounted_kw,export_cap_kw};
     });
     return {enabled:true,config,networks,warnings,topology};
   };

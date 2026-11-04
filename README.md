@@ -4,13 +4,13 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 ## Current status
 
-**0.4.27-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
+**0.4.28-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
 
 **Update 0.4.15-dev:** the Custom editor now has a grouped equipment library with solid-fuel boiler and pellet boiler separated, device-family-specific graphic variants, a central device registry and shared read-only HA state/animation helpers. The modular tank and solar collector inspector edits one selected part at a time (by stable part ID), including selection from the tank graphic, while keeping legacy `studio_layout` identifiers and manual animation settings. Circuit grouping and additional SVG models remain deferred.
 
 **Important:** the card is still under Home Assistant browser acceptance testing. CI checks packaging, JavaScript syntax and selected logic, but cannot verify final SVG appearance and pointer behavior in HA.
 
-**0.4.27-dev test build:** legacy `pipes[]` / `edges[]` configurations are migrated only when `connections[]` is absent; when `connections[]` is present, even empty, older lists are ignored. The maintainer tests this build from the shared GitHub `main` and publishes only a pre-release until acceptance.
+**0.4.28-dev test build:** legacy `pipes[]` / `edges[]` configurations are migrated only when `connections[]` is absent; when `connections[]` is present, even empty, older lists are ignored. The maintainer tests this build from the shared GitHub `main` and publishes only a pre-release until acceptance.
 
 **Stage 05:** inverter parameter definitions for AC power, temperature, status, alarm and PV1–PV12 now share metadata across normalization and the inspector. HA/TEST calculations and saved configuration keys are unchanged.
 
@@ -19,6 +19,8 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 **Stage 06 (0.4.26-dev):** inverter HA/TEST telemetry resolution is extracted to a single read-only module used by the inverter display and energy balance for AC power. Existing fallback rules and saved configuration keys remain intact.
 
 **Stage 07 (0.4.27-dev):** the inverter's AC power readout declares its SVG target in the device parameter schema. A shared, validated binder joins the existing HA/TEST resolver to the unchanged SVG and energy balance without altering legacy configuration fields.
+
+**Stage 07A (0.4.28-dev):** known electrical branches can animate despite missing readings elsewhere; one missing building can receive a clearly estimated residual. The distribution board controls a visual grid disconnect, and each inverter declares an individual visual export policy.
 
 The source of truth for the code version is [`VERSION`](VERSION). A GitHub Release with a matching version tag enables clear HACS release versioning; during development, the current `main` branch can also be selected/redownloaded in HACS. Changing this README **does not update the installed JavaScript**.
 See [Release process](docs/RELEASING.md).

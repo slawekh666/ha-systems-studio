@@ -17,7 +17,7 @@ const HASSStudioEnergyFlow=(()=>{
        adj.get(e.to).push({to:e.from,id:e.id});
      }
      for(const edge of edges){
-       if(network.state!=='balanced'){
+       if(network.state==='invalid'||network.state==='unbalanced'){
          byConnection[edge.id]=unavailable(network.state,network.id);continue;
        }
        // Only a bridge has a uniquely determined signed flow.
@@ -34,8 +34,15 @@ const HASSStudioEnergyFlow=(()=>{
          const port=HASSStudioEnergyTopology.ports(n).find(p=>p.id===d.port_id);
          return !!port&&seen.has(HASSStudioEnergyTopology.busKey(d.node_id,port));
        });
+       // The unresolved residual cannot be assigned to a shared trunk.
+       if(network.state==='unaccounted'&&participants.length>1){
+         byConnection[edge.id]=unavailable('unaccounted_branch',network.id);continue;
+       }
+       if(participants.some(d=>d.injection_kw===null)){
+         byConnection[edge.id]=unavailable('unknown_branch',network.id);continue;
+       }
        const kw=round(participants.reduce((sum,d)=>sum+d.injection_kw,0));
-       const sources=[...new Set(network.devices.map(d=>d.source))].sort();
+       const sources=[...new Set((network.state==='balanced'?network.devices:participants).map(d=>d.source))].sort();
        const source=sources.length===1?(sources[0]==='measured'?'ha':
          sources[0]==='simulated'?'simulation':sources[0]):'mixed';
        byConnection[edge.id]={available:true,kw,
