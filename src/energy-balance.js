@@ -132,7 +132,14 @@ const HASSStudioEnergyBalance=(()=>{
     if(kw!==null&&p.reverse_sign)kw=-kw;
     if(kw!==null&&(!Number.isFinite(kw)||Math.abs(kw)>10000))
       return {mode:p.mode,source:'invalid',injection_kw:null,reason:'invalid_power'};
-    if(kw!==null&&!(n.type==='building'&&HASSStudioBuilding.normalize(n).measurement==='net')&&!validDirection(kw,role))
+    // A converter-enabled inverter can import AC for DC battery charging.
+    // Legacy AC-only inverters preserve their original source-direction rule.
+    const hybridInverter=n.type==='inverter'&&
+      HASSStudioInverter.normalize(n).hybrid?.enabled===true&&
+      HASSStudioInverter.normalize(n).hybrid?.converter?.enabled===true;
+    if(kw!==null&&!hybridInverter&&
+      !(n.type==='building'&&HASSStudioBuilding.normalize(n).measurement==='net')&&
+      !validDirection(kw,role))
       return {mode:p.mode,source:'invalid',injection_kw:null,reason:'invalid_direction'};
     return {mode:p.mode,source,injection_kw:kw===null?null:round(kw)};
   };
@@ -303,7 +310,10 @@ const HASSStudioEnergyBalance=(()=>{
       for(const terminal of mapping.terminals){
         const port=portsById.get(terminal.port_id);
         const network=port?keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port)):null;
-        if(!network)
+        // An inverter's own MPPT meter can observe an installed PV string
+        // even when no separate PV-array icon/cable is drawn on the diagram.
+        // Legacy B.2 mode retains its original unconnected-port warning.
+        if(!network&&!HASSStudioInverter.normalize(n).hybrid?.converter?.enabled)
           warnings.push({reason:'pv_dc_unconnected_port',node_id:n.id,
             port_id:terminal.port_id,input_index:terminal.input_index});
         dc_terminals.push({...terminal,network_id:network?.id||null,connected:!!network});
