@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.36-dev';
+const VERSION = '0.4.37-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2879,6 +2879,17 @@ const HASSStudioInverter=(()=>{
      }));
  };
  const panelHeight=c=>Math.max(52,40+c.panel_rows.length*ROW_HEIGHT);
+ // Explicit, opt-in port bindings. Legacy inverter nodes without hybrid
+ // metadata retain their old AC-only accounting on normalization and saving.
+ const hybridDefaults=()=>({schema_version:1,enabled:false,pv_ports:Array(MAX_INPUTS).fill('')});
+ const normalizeHybrid=raw=>{
+   const c=raw&&typeof raw==='object'?raw:{};
+   return {schema_version:1,enabled:c.schema_version===1&&c.enabled===true,
+     pv_ports:Array.from({length:MAX_INPUTS},(_,i)=>{
+       const id=c.pv_ports?.[i];
+       return typeof id==='string'&&/^[A-Za-z0-9_-]{1,32}$/.test(id)?id:'';
+     })};
+ };
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
    rated_kw:10,production_threshold_w:10,positive_power:true,export_allowed:true,entities:parameters.entities(parameters.core),
@@ -2913,7 +2924,37 @@ const HASSStudioInverter=(()=>{
         manual:Object.fromEntries(keys.map(k=>[k,original.manual?.[k]===null?null:
           clamp(original.manual?.[k],0,50000,d.manual[k])])),
         manual_enabled:manualEnabled};
-    })};
+    }),...(raw.hybrid&&typeof raw.hybrid==='object'?{hybrid:normalizeHybrid(raw.hybrid)}:{})};
+ };
+ // An MPPT reading measures power entering the inverter on a separate PV
+ // circuit. It is NOT a battery-bus generator or an AC/DC converter transfer.
+ const dcTerminals=(node,h)=>{
+   const c=normalize(node);
+   if(node?.type!=='inverter'||c.hybrid?.enabled!==true)
+     return {enabled:false,terminals:[],errors:[]};
+   const terminals=[],errors=[],seen=new Set(),
+     byId=new Map(HASSStudioEnergyTopology.ports(node).map(p=>[p.id,p])),
+     inputs=HASSStudioInverterReadings.resolve(node,h,c).inputs;
+   for(let i=0;i<c.count;i++){
+     const portId=c.hybrid.pv_ports[i],input=c.inputs[i];
+     if(!portId){
+       if(input.required)errors.push({reason:'pv_dc_required_mapping_missing',input_index:i,port_id:''});
+       continue;
+     }
+     const report=reason=>errors.push({reason,input_index:i,port_id:portId});
+     if(seen.has(portId)){report('pv_dc_duplicate_mapping');continue;}
+     seen.add(portId);
+     const port=byId.get(portId);
+     if(!port){report('pv_dc_missing_port');continue;}
+     if(port.medium!=='dc'){report('pv_dc_wrong_medium');continue;}
+     const value=inputs[i],powerKw=value.watts===null?null:value.watts/1000;
+     terminals.push({node_id:node.id,port_id:portId,input_index:i,
+       input_name:input.name,medium:'dc',measurement_point:'inverter_mppt_input',
+       power_kw:powerKw,injection_kw:powerKw===null?null:-powerKw,
+       source:value.power_source,status:value.status,included_in_balance:false});
+     if(powerKw===null&&input.required)report('pv_dc_missing_measurement');
+   }
+   return {enabled:true,terminals,errors};
  };
  const data=(node,h)=>{
    const c=normalize(node),resolved=HASSStudioInverterReadings.resolve(node,h,c);
@@ -3034,7 +3075,7 @@ const HASSStudioInverter=(()=>{
    const bottom=c.show_extra?Math.max(300,65+panelHeight(c)*c.extra_scale+10):300;
    return '<svg width="'+(150+extraWidth/2)+'" height="'+(bottom/2)+'" viewBox="'+left+' 0 '+(300+extraWidth)+' '+bottom+'" preserveAspectRatio="xMinYMin meet">'+content+'</svg>';
  };
- return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,defaults,normalize,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
+ return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,hybridDefaults,normalizeHybrid,defaults,normalize,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverter;
 
@@ -3931,6 +3972,26 @@ const HASSStudioEnergyBalance=(()=>{
     const overrides=new Map(config.participants.map(p=>[p.node_id,p]));
     const allNodes=(Array.isArray(src.nodes)?src.nodes:[]);
     const nodesById=new Map(allNodes.map(n=>[n.id,n]));
+    // MPPT observations describe DC power entering the inverter, not the
+    // battery bus. Report them separately from participants and totals.
+    const dc_terminals=[];
+    for(const n of allNodes){
+      if(n.type!=='inverter')continue;
+      const mapping=HASSStudioInverter.dcTerminals(n,hass);
+      if(!mapping.enabled)continue;
+      for(const issue of mapping.errors)
+        warnings.push({reason:issue.reason,node_id:n.id,
+          input_index:issue.input_index,port_id:issue.port_id});
+      const portsById=new Map(HASSStudioEnergyTopology.ports(n).map(p=>[p.id,p]));
+      for(const terminal of mapping.terminals){
+        const port=portsById.get(terminal.port_id);
+        const network=port?keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port)):null;
+        if(!network)
+          warnings.push({reason:'pv_dc_unconnected_port',node_id:n.id,
+            port_id:terminal.port_id,input_index:terminal.input_index});
+        dc_terminals.push({...terminal,network_id:network?.id||null,connected:!!network});
+      }
+    }
     for(const n of allNodes){
       const descriptor=HASSStudioEnergyTopology.node(n);
       const role=descriptor.role;
@@ -3951,6 +4012,15 @@ const HASSStudioEnergyBalance=(()=>{
       if(!unique.size){warnings.push({reason:'unconnected_device',node_id:n.id});continue;}
       if(unique.size!==1){warnings.push({reason:'ambiguous_device_network',node_id:n.id});continue;}
       const [group,port]=[...unique][0];
+      // Legacy inverter AC power must not be assigned to a DC-only network.
+      // An explicit participant override cannot bypass this safety guard.
+      if(n.type==='inverter'&&port.medium==='dc'){
+        warnings.push({reason:'inverter_ac_reading_on_dc_network',node_id:n.id,port_id:port.id});
+        group.devices.push({node_id:n.id,node_type:n.type,port_id:port.id,
+          role,measurement:null,mode:'device',source:'missing',injection_kw:null,
+          reason:'inverter_ac_reading_on_dc_network'});
+        continue;
+      }
       const reading=measure(n,role,p,hass,config.scenario);
       const measurement=n.type==='building'?HASSStudioBuilding.normalize(n).measurement:null;
       group.devices.push({node_id:n.id,node_type:n.type,port_id:port.id,role,measurement,
@@ -4018,7 +4088,7 @@ const HASSStudioEnergyBalance=(()=>{
         residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons,
         unaccounted_kw,export_cap_kw};
     });
-    return {enabled:true,config,networks,warnings,topology};
+    return {enabled:true,config,networks,warnings,topology,dc_terminals};
   };
   return Object.freeze({MAX_ASSIGNMENTS,defaults,normalize,participant,haPower,injection,deviceReading,measure,totals,solve,resolve});
 })();
@@ -4139,12 +4209,15 @@ const HASSStudioEnergyDiagnostics=(()=>{
     }
     const warnings=(balance.warnings||[]).map(w=>({
       reason:w.reason,node_id:w.node_id||null,connection_id:w.connection_id||null,
-      side:w.side||null
+      side:w.side||null,input_index:w.input_index??null,port_id:w.port_id||null
+    }));
+    const dcTerminals=(balance.dc_terminals||[]).map(t=>({
+      ...t,device_name:deviceName(t.node_id)
     }));
     for(const c of cables)if(!c.available&&!warnings.some(w=>w.connection_id===c.id&&w.reason===c.reason))
       warnings.push({reason:c.reason||'unresolved_flow',connection_id:c.id,node_id:null,side:null});
     return {options,enabled:balance.enabled===true,scenario:balance.config.scenario,
-      networks,cables,warnings,balanced:networks.filter(n=>n.state==='balanced').length,
+      networks,cables,warnings,dcTerminals,balanced:networks.filter(n=>n.state==='balanced').length,
       unresolved:networks.filter(n=>n.state!=='balanced').length};
   };
   const messages={
@@ -4160,6 +4233,15 @@ const HASSStudioEnergyDiagnostics=(()=>{
       missing_node:'Brak urządzenia',missing_port:'Brak portu',unconnected_device:'Urządzenie niepodłączone',
       ambiguous_device_network:'Urządzenie należy do wielu sieci',
       invalid_or_unconnected_port:'Nieprawidłowy lub niepodłączony port',
+      inverter_ac_reading_on_dc_network:'Nie wolno zaliczyć mocy AC falownika do sieci DC',
+      pv_dc_required_mapping_missing:'Wymagane wejście MPPT bez przypisanego portu DC',
+      pv_dc_duplicate_mapping:'Dwa wejścia MPPT przypisane do jednego portu DC',
+      pv_dc_missing_port:'Wskazany port PV nie istnieje',
+      pv_dc_wrong_medium:'Port MPPT musi mieć typ DC',
+      pv_dc_missing_measurement:'Brak odczytu mocy wejścia PV',
+      pv_dc_unconnected_port:'Przypisany port PV DC nie jest podłączony',
+      pv_dc_observations:'Obserwacje wejść PV DC — poza bilansem magazynu',
+      pv_dc_not_source:'PV wpływa do falownika. Bez modelu konwersji brak przepływu do magazynu DC',
       missing_measurements:'Brak wymaganych pomiarów',multiple_unknowns:'Wiele niewiadomych',
       aggregate_overlap:'Nakładające się pomiary zużycia',invalid_direction_or_power:'Błędna moc lub znak',
       building_child_exceeds_total:'Odbiorniki za budynkiem przekraczają jego pomiar całkowity',
@@ -4197,6 +4279,15 @@ const HASSStudioEnergyDiagnostics=(()=>{
       missing_node:'Missing device',missing_port:'Missing port',unconnected_device:'Disconnected device',
       ambiguous_device_network:'Device in multiple networks',
       invalid_or_unconnected_port:'Invalid or disconnected port',
+      inverter_ac_reading_on_dc_network:'Inverter AC power cannot supply a DC network',
+      pv_dc_required_mapping_missing:'Required MPPT input has no mapped DC port',
+      pv_dc_duplicate_mapping:'Two MPPT inputs are mapped to the same DC port',
+      pv_dc_missing_port:'Mapped PV port does not exist',
+      pv_dc_wrong_medium:'MPPT port must be DC',
+      pv_dc_missing_measurement:'PV input power reading is missing',
+      pv_dc_unconnected_port:'Mapped PV DC port is not connected',
+      pv_dc_observations:'PV DC input observations — excluded from battery balance',
+      pv_dc_not_source:'PV power enters the inverter; battery DC transfer requires a converter model',
       missing_measurements:'Missing measurements',multiple_unknowns:'Multiple unknowns',
       aggregate_overlap:'Overlapping load measurements',invalid_direction_or_power:'Invalid sign or power',
       building_child_exceeds_total:'Child loads exceed the building gross meter',
@@ -4284,7 +4375,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
       (view.warnings.length?'<ul>'+view.warnings.map(w=>{
         const cable=view.cables.find(c=>c.id===w.connection_id);
         const name=cable?.name||view.networks.flatMap(n=>n.devices)
-          .find(d=>d.node_id===w.node_id)?.name||'';
+          .find(d=>d.node_id===w.node_id)?.name||
+          view.dcTerminals.find(t=>t.node_id===w.node_id)?.device_name||'';
         const link=mode==='editor'&&(w.connection_id||w.node_id)?
           '<button type="button" data-energy-jump="'+escape(w.connection_id||w.node_id)+
           '" data-energy-jump-kind="'+(w.connection_id?'connection':'node')+'">'+
@@ -4292,6 +4384,13 @@ const HASSStudioEnergyDiagnostics=(()=>{
         return '<li>'+escape(label(w.reason))+(link?' · '+link:'')+'</li>';
       }).join('')+'</ul>':
         '<p>'+escape(label('noWarnings'))+'</p>')+'</article>':'';
+    const pvReadouts=view.dcTerminals.length?
+      '<article><h5>'+escape(label('pv_dc_observations'))+'</h5>'+
+      table(view.dcTerminals.map(t=>[
+        t.device_name+' · '+t.input_name+' → '+t.port_id+
+          (t.connected?'':' (niepodłączony / disconnected)'),
+        fmt(t.power_kw)+' · '+label(t.source)]))+
+      '<p class="ss-diag-caption">'+escape(label('pv_dc_not_source'))+'</p></article>':'';
     const title=label('title')+' · '+view.balanced+'/'+view.networks.length;
     return '<details class="ss-energy-diagnostics ss-energy-diagnostics--'+
       (mode==='editor'?'editor':'viewer')+'" data-energy-status="'+
@@ -4302,7 +4401,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
       ' · '+view.unresolved+' '+escape(label('issueNetworks'))+'</p>'+
       '<p class="ss-diag-caption">'+escape(label('notMeasured'))+'</p>'+
       (!view.enabled?'<p>'+escape(label('off'))+'</p>':
-      (view.networks.length?networks:'<p>'+escape(label('noNetwork'))+'</p>')+detached+warningList)+
+      (view.networks.length?networks:'<p>'+escape(label('noNetwork'))+'</p>')+pvReadouts+detached+warningList)+
       '</div></details>';
   };
   return Object.freeze({defaults,normalize,viewModel,render,styles,escape,fmt});
@@ -5293,14 +5392,26 @@ const HASSStudioEditorInspector = (() => {
             'inv_manual_alarm',c.manual.alarm?'true':'false',[
               ['false','Brak alarmu'],['true','Alarm']]);
         readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
+        readings+=field('Powiąż wejścia PV z portami DC (wersja testowa)',
+          'inv_hybrid_enabled',c.hybrid?.enabled?'true':'false','text',
+          [['true','Tak'],['false','Nie — zachowaj starszy model']]);
+        const dcMapping=HASSStudioInverter.dcTerminals(obj,editor._hass);
+        const dcOptions=[['','Nie przypisano'],...HASSStudioEnergyTopology.ports(obj)
+          .filter(p=>p.medium==='dc').map(p=>[p.id,(p.label||p.id)+' ('+p.id+')'])];
         c.inputs.forEach((input,i)=>{
           const resolved=pvResolved.inputs[i];
+          const mappingError=dcMapping.errors.find(e=>e.input_index===i);
+          const mappedTerminal=dcMapping.terminals.find(t=>t.input_index===i);
           const manualValue=key=>input.manual_enabled?.[key]===true?input.manual[key]:'';
           let fields=field('Nazwa wejścia','inv_pv_'+i+'_name',input.name)+
             field('Pokaż na ekranie falownika','inv_pv_'+i+'_visible',
               input.visible?'true':'false','text',[['true','Tak'],['false','Nie']])+
             field('Wymagaj poprawnego odczytu mocy','inv_pv_'+i+'_required',
               input.required?'true':'false','text',[['true','Tak'],['false','Nie']])+
+            (c.hybrid?.enabled?field('Port DC dla '+input.name,'inv_pv_'+i+'_port',
+              c.hybrid.pv_ports[i]||'','text',
+              dcOptions.concat(c.hybrid.pv_ports[i]&&!dcOptions.some(x=>x[0]===c.hybrid.pv_ports[i])?
+                [[c.hybrid.pv_ports[i],'Nieistniejący port: '+c.hybrid.pv_ports[i]]]:[])):'')+
             numeric(inverterFields.pv.voltage.label+' '+input.name+' ('+inverterFields.pv.voltage.unit+')','inv_pv_'+i+'_entity_voltage',
               input.entities.voltage,'inv_pv_'+i+'_manual_voltage',manualValue('voltage'))+
             numeric(inverterFields.pv.current.label+' '+input.name+' ('+inverterFields.pv.current.unit+')','inv_pv_'+i+'_entity_current',
@@ -5310,6 +5421,9 @@ const HASSStudioEditorInspector = (() => {
           const sourceName={measured:'HA — moc',simulated:'TEST — moc',
             calculated_ha:'Obliczone: HA V × A',calculated_test:'Obliczone: TEST V × A',
             missing:'Brak danych'}[resolved.power_source];
+          if(mappingError)
+            fields+='<div role="alert" style="border:1px solid #df4444;color:#ff7373;padding:8px">'+
+              'Błędne powiązanie DC: '+esc(mappingError.reason)+'</div>';
           if(resolved.error)
             fields+='<div class="ss-pv-reading-error" role="alert" style="border:1px solid #df4444;color:#ff7373;padding:10px;margin:8px 0">'+
               '<strong>Nie można obliczyć mocy '+esc(input.name)+'</strong><p>'+esc(resolved.error)+'</p></div>';
@@ -5318,12 +5432,17 @@ const HASSStudioEditorInspector = (() => {
           fields+='<p class="ss-note">Wynik '+esc(input.name)+': '+
             (resolved.watts===null?'—':esc(resolved.watts.toFixed(2)+' W'))+
             ' · '+esc(sourceName||'Brak danych')+'</p>'+
+            (c.hybrid?.enabled&&c.hybrid.pv_ports[i]?
+              '<p class="ss-note">MPPT → port DC: '+esc(c.hybrid.pv_ports[i])+
+              '. Moc na wejściu falownika: '+
+              (mappedTerminal?.power_kw==null?'—':esc(mappedTerminal.power_kw.toFixed(3))+' kW')+
+              '. Bez modelu konwersji nie zasila bilansu magazynu DC.</p>':'')+
             '<p class="ss-note">TEST aktywuje się po wpisaniu wartości (również 0); puste pole go wyłącza. Bez mieszania HA z TEST przy obliczaniu V × A.</p>';
           readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1)+
             (resolved.error?'<span style="color:#ff7373"> · ⚠ Brak danych</span>':''),
             'mdi:solar-panel',fields,false);
         });
-        readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła, gdy dane są kompletne. W trybie automatycznym TEST wymaga włączenia fallbacku. Bilans używa nadal mocy AC — PV nie jest doliczane drugi raz.</p>';
+        readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła. Mapowanie MPPT/port DC jest jawne i opcjonalne. Odczyt PV oznacza moc wpływającą do falownika, nie jest produkcją na przewodzie do magazynu i nie zamyka bilansu DC bez konwersji.</p>';
         markup+=sect('inverter-data','2. Dane urządzenia','mdi:chart-line',readings,false);
 
         let ports='<p class="ss-note">Końcówki przewodów można dopasować do portów. Port AC i wejścia DC nie mogą dzielić jednej szyny.</p>';
@@ -6747,8 +6866,11 @@ const HASSStudioEditorLibrary=(()=>{
           if(f==='temperature')c.manual[f]=clamp(val,-40,150,25);
            if(f==='status')c.manual[f]=['auto','generating','standby','off','fault'].includes(val)?val:'auto';
            if(f==='alarm')c.manual[f]=val==='true';
+        }else if(k==='hybrid_enabled'){
+          c.hybrid={...(HASSStudioInverter.normalize({inverter:c}).hybrid||HASSStudioInverter.hybridDefaults()),
+            enabled:val==='true'};
         }else if(k.startsWith('pv_')){
-          const match=/^pv_(\d+)_(name|visible|required|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
+          const match=/^pv_(\d+)_(name|visible|required|port|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
           if(match&&Number(match[1])<12){
             const i=Number(match[1]);
             c.inputs=c.inputs||[];
@@ -6757,6 +6879,12 @@ const HASSStudioEditorLibrary=(()=>{
             if(fieldName==='name')q.name=val.slice(0,12);
             else if(fieldName==='visible')q.visible=val==='true';
             else if(fieldName==='required')q.required=val==='true';
+            else if(fieldName==='port'){
+              const hybrid=HASSStudioInverter.normalize({inverter:c}).hybrid||
+                HASSStudioInverter.hybridDefaults();
+              hybrid.pv_ports[i]=HASSStudioEnergyTopology.ident(val);
+              c.hybrid=hybrid;
+            }
             else if(fieldName.startsWith('entity_')){q.entities=q.entities||{};q.entities[fieldName.slice(7)]=HASSStudioDeviceParameters.inverter.entity(val);}
             else if(fieldName.startsWith('manual_')){
               const field=fieldName.slice(7),active=val.trim()!==''&&Number.isFinite(Number(val));
