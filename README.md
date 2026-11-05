@@ -14,7 +14,7 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 **Stage 07A.1-C.1 (0.4.32-dev):** a single building power entity and effective TEST value replace confusing measurement/remaining controls. Legacy individual/net configurations are preserved; no topology/balance or SVG behavior is changed.
 
-**Stage 07A.1-B.1 (0.4.32-dev):** infer measurement hierarchy on AC buses from cable graph dominance, not port identifiers. One upstream supply path permits automatic building ownership; bypassed/cyclic paths are rejected as ambiguous rather than double counted. Legacy `main` buses, ports, rendering and inspector remain unchanged.
+**Stage 07A.1-B.1 (0.4.31-dev):** infer measurement hierarchy on AC buses from cable graph dominance, not port identifiers. One upstream supply path permits automatic building ownership; bypassed/cyclic paths are rejected as ambiguous rather than double counted. Legacy `main` buses, ports, rendering and inspector remain unchanged.
 
 **Stage 07A.1-B (0.4.30-dev):** the AC topology solver consumes the building power snapshot, allocates load and generation behind the child port once, and validates individual, gross, and signed net measurements. EV loads, nested buildings, AC storage charge/discharge and child inverters have dedicated regression tests. Icons and editor controls are deferred to C; DC hybrid power conversion remains a separate stage.
 
