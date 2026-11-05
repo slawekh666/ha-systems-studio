@@ -48,9 +48,19 @@ const HASSStudioInverter=(()=>{
        alarm:raw.manual?.alarm===true},
     inputs:Array.from({length:count},(_,i)=>{
       const original=raw.inputs?.[i]||{},d=defaultInput(i);
-      return {name:String(original.name??d.name).slice(0,12),visible:original.visible!==false,
+      // Legacy saved numbers without flags remain active; new defaults are not.
+      const keys=['voltage','current','power'];
+      const manualEnabled=Object.fromEntries(keys.map(k=>[k,
+        typeof original.manual_enabled?.[k]==='boolean'?original.manual_enabled[k]:
+          Object.prototype.hasOwnProperty.call(original.manual||{},k)&&
+          original.manual[k]!==null&&original.manual[k]!==''&&
+          Number.isFinite(Number(original.manual[k]))]));
+      return {name:String(original.name??d.name).slice(0,12),
+        visible:original.visible!==false,required:original.required===true,
         entities:parameters.entities(parameters.pv,original.entities),
-        manual:Object.fromEntries(['voltage','current','power'].map(k=>[k,original.manual?.[k]===null?null:clamp(original.manual?.[k],0,50000,d.manual[k])]))};
+        manual:Object.fromEntries(keys.map(k=>[k,original.manual?.[k]===null?null:
+          clamp(original.manual?.[k],0,50000,d.manual[k])])),
+        manual_enabled:manualEnabled};
     })};
  };
  const data=(node,h)=>{
