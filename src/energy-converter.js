@@ -127,9 +127,20 @@ const HASSStudioEnergyConverter=(()=>{
         t.source==='missing'||t.status==='invalid')){
         fail('converter_pv_reading_missing');continue;
       }
-      // The physical PV MPPT circuit and DC battery circuit are independent
-      // terminals. Connecting them into one bus is not a converter shortcut.
-      if(batteryGroup&&mapped.some(t=>t.network_id===batteryGroup.id)){
+      // In the safety-critical converter path a disputed PV sensor cannot
+      // silently become a trusted power source, even though the PV inspector
+      // continues displaying the direct reading with its warning.
+      if(conf.pv_mode!=='none'&&mapped.some(t=>t.status==='warning')){
+        fail('converter_pv_reading_conflict');continue;
+      }
+      // Distinct physical functions need distinct logical DC buses, even when
+      // the PV terminal has no drawn external wire and network_id is null.
+      if(batteryGroup&&mapped.some(t=>{
+        const pvPort=ports.get(t.port_id);
+        return t.network_id===batteryGroup.id||pvPort&&
+          HASSStudioEnergyTopology.busKey(node.id,pvPort)===
+            HASSStudioEnergyTopology.busKey(node.id,batteryPort);
+      })){
         fail('converter_pv_battery_bus_overlap');continue;
       }
       const pv=conf.pv_mode==='none'?0:

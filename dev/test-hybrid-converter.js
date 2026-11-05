@@ -129,6 +129,20 @@ const discharge=makeInverter(1.8,{pv_mode:'none'});
 res=balance.resolve(makeLayout(discharge,battery(-2)),{states:{}});
 assert.equal(res.converters[0].status,'valid');near(res.converters[0].loss_kw,.2);
 assert.equal(res.networks.find(n=>n.medium==='dc').state,'balanced');
+// Physically shared DC buses must be rejected even if the PV input does not
+// have a separate drawn cable.
+const sameBus=makeInverter(1.4);
+sameBus.energy_ports.find(p=>p.id==='pv1').bus='battery';
+res=balance.resolve(makeLayout(sameBus),{states:{}});
+assert.equal(res.converters[0].reason,'converter_pv_battery_bus_overlap');
+assert.equal(res.networks.find(n=>n.medium==='dc').residual_kw,-1.5);
+// Direct PV power inconsistent with V×A must not be used to derive flows.
+const conflict=makeInverter(1.4);
+conflict.inverter.inputs[0].manual.power=100;
+conflict.inverter.inputs[0].manual_enabled.power=true;
+res=balance.resolve(makeLayout(conflict),{states:{}});
+assert.equal(res.converters[0].reason,'converter_pv_reading_conflict');
+assert.equal(res.networks.find(n=>n.medium==='dc').state,'unbalanced');
 const noBattery=makeInverter(3,{battery_port_id:'none'});
 res=balance.resolve(makeLayout(noBattery,null,[acWire]),{states:{}});
 assert.equal(res.converters[0].status,'valid');near(res.converters[0].loss_kw,.04);
