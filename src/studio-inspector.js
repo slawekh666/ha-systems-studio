@@ -112,10 +112,13 @@ const HASSStudioEditorInspector = (() => {
         readings+=field('Powiąż wejścia PV z portami DC (wersja testowa)',
           'inv_hybrid_enabled',c.hybrid?.enabled?'true':'false','text',
           [['true','Tak'],['false','Nie — zachowaj starszy model']]);
+        const dcMapping=HASSStudioInverter.dcTerminals(obj,editor._hass);
         const dcOptions=[['','Nie przypisano'],...HASSStudioEnergyTopology.ports(obj)
           .filter(p=>p.medium==='dc').map(p=>[p.id,(p.label||p.id)+' ('+p.id+')'])];
         c.inputs.forEach((input,i)=>{
           const resolved=pvResolved.inputs[i];
+          const mappingError=dcMapping.errors.find(e=>e.input_index===i);
+          const mappedTerminal=dcMapping.terminals.find(t=>t.input_index===i);
           const manualValue=key=>input.manual_enabled?.[key]===true?input.manual[key]:'';
           let fields=field('Nazwa wejścia','inv_pv_'+i+'_name',input.name)+
             field('Pokaż na ekranie falownika','inv_pv_'+i+'_visible',
@@ -135,6 +138,9 @@ const HASSStudioEditorInspector = (() => {
           const sourceName={measured:'HA — moc',simulated:'TEST — moc',
             calculated_ha:'Obliczone: HA V × A',calculated_test:'Obliczone: TEST V × A',
             missing:'Brak danych'}[resolved.power_source];
+          if(mappingError)
+            fields+='<div role="alert" style="border:1px solid #df4444;color:#ff7373;padding:8px">'+
+              'Błędne powiązanie DC: '+esc(mappingError.reason)+'</div>';
           if(resolved.error)
             fields+='<div class="ss-pv-reading-error" role="alert" style="border:1px solid #df4444;color:#ff7373;padding:10px;margin:8px 0">'+
               '<strong>Nie można obliczyć mocy '+esc(input.name)+'</strong><p>'+esc(resolved.error)+'</p></div>';
@@ -145,7 +151,9 @@ const HASSStudioEditorInspector = (() => {
             ' · '+esc(sourceName||'Brak danych')+'</p>'+
             (c.hybrid?.enabled&&c.hybrid.pv_ports[i]?
               '<p class="ss-note">MPPT → port DC: '+esc(c.hybrid.pv_ports[i])+
-              '. Pomiar mocy na wejściu falownika. Nie zasila bilansu magazynu DC bez modelu konwersji.</p>':'')+
+              '. Moc na wejściu falownika: '+
+              (mappedTerminal?.power_kw==null?'—':esc(mappedTerminal.power_kw.toFixed(3))+' kW')+
+              '. Bez modelu konwersji nie zasila bilansu magazynu DC.</p>':'')+
             '<p class="ss-note">TEST aktywuje się po wpisaniu wartości (również 0); puste pole go wyłącza. Bez mieszania HA z TEST przy obliczaniu V × A.</p>';
           readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1)+
             (resolved.error?'<span style="color:#ff7373"> · ⚠ Brak danych</span>':''),
