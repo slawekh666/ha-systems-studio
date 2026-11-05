@@ -66,9 +66,9 @@ assert.equal(cview.networks[0].diagnostic_reason,null);
 assert.equal(cview.networks[0].state,'unbalanced');
 assert(ctx.diag.render(contradictory,{states:{}},'pl').includes('Pomiary sprzeczne'));
 // Missing HA readings should still show the old missing-data status.
-const missingStore=storage(1.5);missingStore.energy_mode='ha';
-const missing=layout([inv,missingStore,grid],[
- wire('ac_wire','inverter','ac','grid','ac'),
+// DC-only inverter remains unknown by the B.2 fail-closed guard, even when
+// the battery reading itself is known. That is not a measured contradiction.
+const missing=layout([inv,storage(1.5)],[
  wire('dc_wire','inverter','battery','storage','dc')]);
 const missingView=ctx.diag.viewModel(missing,{states:{}});
 assert.equal(missingView.networks[0].diagnostic_reason,null);
