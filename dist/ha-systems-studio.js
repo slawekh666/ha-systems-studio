@@ -3873,9 +3873,20 @@ const HASSStudioEnergyConverter=(()=>{
         t.source==='missing'||t.status==='invalid')){
         fail('converter_pv_reading_missing');continue;
       }
-      // The physical PV MPPT circuit and DC battery circuit are independent
-      // terminals. Connecting them into one bus is not a converter shortcut.
-      if(batteryGroup&&mapped.some(t=>t.network_id===batteryGroup.id)){
+      // In the safety-critical converter path a disputed PV sensor cannot
+      // silently become a trusted power source, even though the PV inspector
+      // continues displaying the direct reading with its warning.
+      if(conf.pv_mode!=='none'&&mapped.some(t=>t.status==='warning')){
+        fail('converter_pv_reading_conflict');continue;
+      }
+      // Distinct physical functions need distinct logical DC buses, even when
+      // the PV terminal has no drawn external wire and network_id is null.
+      if(batteryGroup&&mapped.some(t=>{
+        const pvPort=ports.get(t.port_id);
+        return t.network_id===batteryGroup.id||pvPort&&
+          HASSStudioEnergyTopology.busKey(node.id,pvPort)===
+            HASSStudioEnergyTopology.busKey(node.id,batteryPort);
+      })){
         fail('converter_pv_battery_bus_overlap');continue;
       }
       const pv=conf.pv_mode==='none'?0:
@@ -4606,6 +4617,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
       converter_ac_meter_missing:'Brak jednoznacznego odczytu z portu AC falownika',
       converter_pv_mapping_missing:'Brak mapowania wejścia PV do portu DC',
       converter_pv_reading_missing:'Brak kompletnych odczytów mocy wejść PV',
+      converter_pv_reading_conflict:'Niezgodne odczyty mocy PV: pomiar bezpośredni różni się od V × A',
       converter_pv_battery_bus_overlap:'Wejścia PV i magazynu nie mogą współdzielić tej samej szyny DC',
       converter_battery_reading_ambiguous:'Magazyn DC nie ma kompletnego, jednoznacznego pomiaru',
       converter_missing_dc_observation:'Brak wymaganych obserwacji PV lub magazynu',
@@ -4686,6 +4698,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
       converter_ac_meter_missing:'Inverter AC participant not uniquely available',
       converter_pv_mapping_missing:'No mapped PV MPPT terminal',
       converter_pv_reading_missing:'Missing PV MPPT power data',
+      converter_pv_reading_conflict:'PV power readings conflict with V × A',
       converter_pv_battery_bus_overlap:'PV and battery DC buses must remain separate',
       converter_battery_reading_ambiguous:'Incomplete or ambiguous DC battery meter',
       converter_missing_dc_observation:'PV or battery observation missing',
