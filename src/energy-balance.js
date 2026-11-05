@@ -177,10 +177,9 @@ const HASSStudioEnergyBalance=(()=>{
   // read once, then the pure building power contract determines OWN consumption.
   // Descendant sources are NOT extra loads. A signed net meter is a boundary
   // reading; only the derived own load enters the shared AC network injection sum.
-  const adjustBuildings=(group,layout,topology,warnings,tolerance)=>{
+  const adjustBuildings=(group,layout,topology,nodes,warnings,tolerance)=>{
     const items=new Map(group.devices.map(d=>[d.node_id,d]));
-    const nodes=new Map((layout.nodes||[]).map(n=>[n.id,n]));
-    // Reuse the validated graph produced by resolve(). Do not rebuild it per network.
+    // Reuse one node index and the validated graph across all networks.
     const hierarchy=HASSStudioEnergyTopology.meterHierarchy(layout,group,topology);
     const children=new Map(),invalid=new Map();
     const fault=(id,reason)=>{
@@ -289,15 +288,17 @@ const HASSStudioEnergyBalance=(()=>{
     for(const g of grouped.values())for(const k of g.ports)keyGroup.set(k,g);
     const overrides=new Map(config.participants.map(p=>[p.node_id,p]));
     const allNodes=(Array.isArray(src.nodes)?src.nodes:[]);
+    const nodesById=new Map(allNodes.map(n=>[n.id,n]));
     for(const n of allNodes){
-      const role=HASSStudioEnergyTopology.node(n).role;
+      const descriptor=HASSStudioEnergyTopology.node(n);
+      const role=descriptor.role;
       if(!roles.includes(role))continue;
       const p=n.type==='power_grid'?
         participant({node_id:n.id,mode:'calculate'}):
         n.energy_mode!=null?participant({node_id:n.id}):
         overrides.get(n.id)||participant({node_id:n.id});
       if(p.mode==='off')continue;
-      const ports=HASSStudioEnergyTopology.ports(n);
+      const ports=descriptor.ports;
       let matches=ports.filter(port=>keyGroup.has(HASSStudioEnergyTopology.busKey(n.id,port)));
       if(p.port_id){
         matches=matches.filter(port=>port.id===p.port_id);
@@ -316,7 +317,7 @@ const HASSStudioEnergyBalance=(()=>{
     }
     const networks=[...grouped.values()].map(g=>{
       const entries=g.devices;
-      adjustBuildings(g,src,topology,warnings,config.tolerance_kw);
+      adjustBuildings(g,src,topology,nodesById,warnings,config.tolerance_kw);
       // Stage 07A: isolate the visual grid boundary, never actuate hardware.
       const boards=allNodes.filter(n=>n.type==='distribution_board'&&
         n.energy_grid_connected===false&&[...g.ports].some(k=>k.startsWith(n.id+':')));

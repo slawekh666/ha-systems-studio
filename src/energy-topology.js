@@ -41,11 +41,21 @@ const HASSStudioEnergyTopology=(()=>{
  const graph=layout=>{
    const nodes=new Map((layout?.nodes||[]).map(n=>[n.id,n]));
    const errors=[],edges=[],junctions=new Map();
+   // Per-graph, lazy index: repeated electrical endpoints share normalized ports.
+   const portsByNode=new Map();
+   const indexedPort=(n,id)=>{
+     let byId=portsByNode.get(n.id);
+     if(!byId){
+       byId=new Map(ports(n).map(p=>[p.id,p]));
+       portsByNode.set(n.id,byId);
+     }
+     return byId.get(id);
+   };
    const check=(ref,cid,side)=>{
      if(!ref.node_id&&!ref.port_id)return null;
      const n=nodes.get(ref.node_id);
      if(!n){errors.push({connection:cid,side,reason:'missing_node'});return null;}
-     const p=ports(n).find(x=>x.id===ref.port_id);
+     const p=indexedPort(n,ref.port_id);
      if(!p){errors.push({connection:cid,side,reason:'missing_port'});return null;}
      const key=busKey(ref.node_id,p);
      if(!junctions.has(key))junctions.set(key,{node_id:ref.node_id,port_id:p.id,medium:p.medium});
@@ -87,7 +97,15 @@ const HASSStudioEnergyTopology=(()=>{
      if(!cables.has(edge.id)||edge.medium!=='ac')continue;
      add(edge.from,edge.to);add(edge.to,edge.from);
    }
-   const keysFor=id=>[...adjacency.keys()].filter(k=>k.startsWith(id+':'));
+   // The validated endpoint IDs cannot contain ':'. Index bus keys once per group,
+   // retaining the adjacency insertion order used by root selection.
+   const keysByNode=new Map();
+   for(const key of adjacency.keys()){
+     const id=key.slice(0,key.indexOf(':'));
+     if(!keysByNode.has(id))keysByNode.set(id,[]);
+     keysByNode.get(id).push(key);
+   }
+   const keysFor=id=>keysByNode.get(id)||[];
    const connectedIds=type=>(layout.nodes||[])
      .filter(n=>n.type===type&&keysFor(n.id).length).map(n=>n.id);
    const grids=connectedIds('power_grid'),boards=connectedIds('distribution_board');
@@ -117,7 +135,28 @@ const HASSStudioEnergyTopology=(()=>{
    for(let i=0;i<queue.length;i++)for(const key of adjacency.get(queue[i])||[]){
      if(!distance.has(key)){distance.set(key,distance.get(queue[i])+1);queue.push(key);}
    }
-   const depth=id=>Math.min(...keysFor(id).map(k=>distance.get(k)??Infinity));
+   const depthCache=new Map();
+   const depth=id=>{
+     if(depthCache.has(id))return depthCache.get(id);
+     const value=Math.min(...keysFor(id).map(k=>distance.get(k)??Infinity));
+     depthCache.set(id,value);return value;
+   };
+   // The admissible forward reach depends on the candidate building, not
+   // the target. Reuse it for all descendants during this hierarchy solve.
+   const downstreamByParent=new Map();
+   const possibleDownstream=(parent,target)=>{
+     let reached=downstreamByParent.get(parent);
+     if(!reached){
+       const floor=depth(parent),queue=[...keysFor(parent)];
+       reached=new Set(queue);
+       for(let i=0;i<queue.length;i++)for(const next of adjacency.get(queue[i])||[]){
+         if(reached.has(next)||(distance.get(next)??-1)<floor)continue;
+         reached.add(next);queue.push(next);
+       }
+       downstreamByParent.set(parent,reached);
+     }
+     return keysFor(target).some(key=>reached.has(key));
+   };
    const owners=new Map(),ambiguous=new Map();
    if(roots.length){
      const removed=new Map(buildings.map(id=>[id,reach(id)]));
@@ -139,20 +178,6 @@ const HASSStudioEnergyTopology=(()=>{
        // even when a junction sits between the house and the child.
        // Do not count a sibling route that would travel backwards through
        // the upstream board: it has a strictly smaller root distance.
-       const possibleDownstream=(parent,target)=>{
-         const floor=depth(parent),dest=new Set(keysFor(target));
-         const seenDown=new Set(),queueDown=[];
-         for(const key of keysFor(parent)){seenDown.add(key);queueDown.push(key);}
-         for(let i=0;i<queueDown.length;i++){
-           const key=queueDown[i];
-           if(dest.has(key))return true;
-           for(const next of adjacency.get(key)||[]){
-             if(seenDown.has(next)||(distance.get(next)??-1)<floor)continue;
-             seenDown.add(next);queueDown.push(next);
-           }
-         }
-         return false;
-       };
        const bypassed=buildings.filter(parent=>parent!==target&&
          reachable(seen,parent)&&depth(parent)<=depth(target)&&
          possibleDownstream(parent,target));
