@@ -22,14 +22,14 @@ const registry={
  variantOptionsForNode:()=>[['modern','Nowoczesny']],
  categoryIcons:{}
 };
-const run=(count,manual,customRows=[])=>{
+const run=(count,manual,customRows=[],required=false)=>{
  const node={id:'inverter1',type:'inverter',variant:'modern',visual:'studio',
   label:'Falownik',x:0,y:0,scale:1,energy_mode:manual?'test':'ha',
   energy_fallback_enabled:false,inverter:{
    count,show_extra:true,panel_rows:customRows,
    entities:{ac_power:'sensor.ac',temperature:'sensor.temp'},
    inputs:Array.from({length:count},(_,i)=>({
-    name:'PV'+(i+1),entities:{voltage:'sensor.v'+(i+1),
+    name:'PV'+(i+1),required,entities:{voltage:'sensor.v'+(i+1),
      current:'sensor.a'+(i+1),power:'sensor.p'+(i+1)}
    }))
   }};
@@ -61,6 +61,10 @@ const run=(count,manual,customRows=[])=>{
  assert(html.includes('data-field="inv_pv_0_entity_voltage"'));
  assert(html.includes('data-field="inv_pv_'+(count-1)+'_entity_power"'));
  assert(html.includes('Napięcie PV1 (V)'));
+  assert(html.includes('data-field="inv_pv_0_required"'));
+  if(required){assert(html.includes('ss-pv-reading-error'));assert(html.includes('role="alert"'));}
+  else assert(!html.includes('ss-pv-reading-error'));
+  assert(html.includes('data-field="inv_pv_0_manual_power"')===manual);
  assert(html.includes('Prąd PV1 (A)'));
  assert(html.includes('Moc PV1 (W)'));
  assert(html.includes('sensor.ac'));
@@ -74,4 +78,6 @@ const run=(count,manual,customRows=[])=>{
 run(1,false);
 run(2,true,[{key:'custom',label:'Dziś',entity:'sensor.daily',unit:'kWh'}]);
 run(12,false);
+run(1,true,[],true);
+run(1,false,[],true);
 console.log('PASS: inverter inspector renders on selection with 1/2/12 PV inputs and HA/TEST configurations');
