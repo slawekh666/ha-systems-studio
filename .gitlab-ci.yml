@@ -19,6 +19,7 @@ validate_card:
     - node dev/test-inverter.js
     - node dev/test-inverter-svg-binding.js
     - node dev/test-inverter-readings.js
+    - node dev/test-pv-source-priority.js
     - node dev/test-device-parameters.js
     - node dev/test-inverter-inspector.js
     - node dev/test-ev-charger.js

@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.35-dev';
+const VERSION = '0.4.36-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2734,7 +2734,10 @@ const HASSStudioDeviceParameters=(()=>{
  const entity=x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x)?x:'';
  const entities=(definitions,raw)=>Object.fromEntries(Object.keys(definitions).map(k=>[k,entity(raw?.[k])]));
  const manualDefaults=definitions=>Object.fromEntries(Object.keys(definitions).map(k=>[k,definitions[k].testDefault]));
- const inputDefaults=i=>({name:'PV'+(i+1),visible:i<3,entities:entities(pv),manual:manualDefaults(pv)});
+ // Default examples are placeholders, not active TEST readings.
+ const inputDefaults=i=>({name:'PV'+(i+1),visible:i<3,required:false,
+   entities:entities(pv),manual:manualDefaults(pv),
+   manual_enabled:{voltage:false,current:false,power:false}});
  const inverter=Object.freeze({core,pv,entity,entities,manualDefaults,inputDefaults,
   coreKeys:Object.freeze(Object.keys(core)),pvKeys:Object.freeze(Object.keys(pv))});
  return Object.freeze({inverter});
@@ -2742,9 +2745,8 @@ const HASSStudioDeviceParameters=(()=>{
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioDeviceParameters;
 
 
-/* Stage 06: shared inverter HA/TEST readings, without service calls.
- * AC uses the existing signed HASSStudioHA.powerInput contract. Auxiliary
- * fields preserve the historical (different) fallback rules.
+/* Stage 07A.2-B.1: HA/TEST PV values, provenance and safe V×A fallback.
+ * No changes to existing inverter AC measurements or energy balance.
  */
 const HASSStudioInverterReadings=(()=>{
  const measured=(h,id,units,lo,hi)=>{
@@ -2767,33 +2769,83 @@ const HASSStudioInverterReadings=(()=>{
  };
  const power=(node,h,c)=>HASSStudioHA.powerInput(
    node,h,c.entities.ac_power,c.manual.ac_power,c.mode,true);
+ const pvMode=(node,c)=>{
+   if(['auto','ha','test'].includes(node?.energy_mode))return node.energy_mode;
+   if(node?.energy_fallback_enabled===true)return 'auto';
+   if(node?.energy_fallback_enabled===false)return 'ha';
+   return c.mode==='manual'?'test':'ha';
+ };
+ const pvInput=(node,h,c,q)=>{
+   const mode=pvMode(node,c),allowHA=mode!=='test',
+     allowTEST=mode==='test'||mode==='auto'&&node?.energy_fallback_enabled===true;
+   const live={
+     voltage:allowHA?measured(h,q.entities.voltage,['V',''],0,2000):null,
+     current:allowHA?measured(h,q.entities.current,['A',''],0,200):null
+   };
+   const raw=HASSStudioHA.reading(h,q.entities.power);
+   live.power=allowHA&&raw&&['W','kW'].includes(raw.unit)&&
+     raw.value>=0&&raw.value*(raw.unit==='kW'?1000:1)<=50000?
+       raw.value*(raw.unit==='kW'?1000:1):null;
+   const test={};
+   for(const key of ['voltage','current','power'])
+     test[key]=allowTEST&&q.manual_enabled?.[key]===true&&
+       typeof q.manual?.[key]==='number'&&Number.isFinite(q.manual[key])&&q.manual[key]>=0?
+       q.manual[key]:null;
+   const selected=key=>mode==='test'?{value:test[key],source:test[key]===null?'missing':'simulated'}:
+     live[key]!==null?{value:live[key],source:'measured'}:
+     allowTEST&&test[key]!==null?{value:test[key],source:'simulated'}:
+       {value:null,source:'missing'};
+   const voltage=selected('voltage'),current=selected('current');
+   const haComputed=live.voltage!==null&&live.current!==null?live.voltage*live.current:null;
+   const testComputed=test.voltage!==null&&test.current!==null?test.voltage*test.current:null;
+   const valid=v=>v!==null&&Number.isFinite(v)&&v>=0&&v<=50000;
+   // Direct P wins. Calculated P requires a complete pair with one provenance.
+   const candidates=mode==='test'?
+     [[test.power,'simulated',false],[testComputed,'calculated_test',true]]:
+     mode==='ha'?
+       [[live.power,'measured',false],[haComputed,'calculated_ha',true]]:
+       [[live.power,'measured',false],[test.power,'simulated',false],
+        [haComputed,'calculated_ha',true],[testComputed,'calculated_test',true]];
+   let watts=null,source='missing',calculated=false;
+   for(const [value,origin,derived] of candidates)
+     if(valid(value)){watts=value;source=origin;calculated=derived;break;}
+   // Sensor sampling can differ; this is a warning, not an automatic replacement.
+   let warning=null;
+   if(watts!==null&&!calculated){
+     const pair=source==='measured'?haComputed:testComputed;
+     if(valid(pair)&&Math.abs(watts-pair)>Math.max(100,Math.max(watts,pair)*.15))
+       warning='Moc bezpośrednia różni się od V × A ('+
+         Math.round(watts)+' W / '+Math.round(pair)+' W).';
+   }
+   let error=null;
+   if(watts===null&&q.required===true){
+     const missingHA=mode!=='test'?['voltage','current'].filter(k=>live[k]===null)
+       .map(k=>'HA '+(k==='voltage'?'V':'A')):[],
+       missingTest=allowTEST?['voltage','current'].filter(k=>test[k]===null)
+         .map(k=>'TEST '+(k==='voltage'?'V':'A')):[];
+     error='Brak wymaganej mocy PV. Nie można obliczyć V × A.'+
+       (missingHA.length||missingTest.length?' Brak poprawnych danych: '+
+         [...missingHA,...missingTest].join(', ')+'.':'');
+   }
+   return {...q,voltage:voltage.value,current:current.value,watts,calculated,
+     power_source:source,status:error?'invalid':watts===null?'missing':warning?'warning':'ok',
+     error,warning,
+     provenance:{voltage:voltage.source,current:current.source,
+       power:source,derived:calculated}};
+ };
  const resolve=(node,h,c)=>{
    const manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
    const ac=power(node,h,c);
    const temperature=choose(node,measured(h,c.entities.temperature,['°C','C',''],-40,150),c.manual.temperature);
    const alarm=choose(node,alarmState(h,c.entities.alarm),c.manual.alarm?'alarm':'ok');
    const status=alarmState(h,c.entities.status);
-   const provenance=[];
-   const inputs=c.inputs.map(q=>{
-     const voltage=choose(node,measured(h,q.entities.voltage,['V',''],0,2000),q.manual.voltage);
-     const current=choose(node,measured(h,q.entities.current,['A',''],0,200),q.manual.current);
-     const reading=HASSStudioHA.reading(h,q.entities.power);
-     const directLive=reading&&['W','kW'].includes(reading.unit)&&reading.value>=0?
-       reading.value*(reading.unit==='kW'?1000:1):null;
-     const direct=choose(node,directLive,q.manual.power);
-     const watts=direct.value!==null?direct.value:
-       voltage.value!==null&&current.value!==null?voltage.value*current.value:null;
-     const calculated=direct.value===null&&watts!==null;
-     provenance.push({voltage:voltage.source,current:current.source,
-       power:direct.source,derived:calculated});
-     return {...q,voltage:voltage.value,current:current.value,watts,calculated};
-   });
+   const inputs=c.inputs.map(q=>pvInput(node,h,c,q));
    return {power:ac.kw,temperature:temperature.value,alarm:alarm.value,
      statusAlarm:status,inputs,manual,
      sources:{power:ac.source,temperature:temperature.source,
-       alarm:alarm.source,inputs:provenance}};
+       alarm:alarm.source,inputs:inputs.map(q=>q.provenance)}};
  };
- return Object.freeze({measured,alarmState,choose,power,resolve});
+ return Object.freeze({measured,alarmState,choose,power,pvMode,pvInput,resolve});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverterReadings;
 
@@ -2848,9 +2900,19 @@ const HASSStudioInverter=(()=>{
        alarm:raw.manual?.alarm===true},
     inputs:Array.from({length:count},(_,i)=>{
       const original=raw.inputs?.[i]||{},d=defaultInput(i);
-      return {name:String(original.name??d.name).slice(0,12),visible:original.visible!==false,
+      // Legacy saved numbers without flags remain active; new defaults are not.
+      const keys=['voltage','current','power'];
+      const manualEnabled=Object.fromEntries(keys.map(k=>[k,
+        typeof original.manual_enabled?.[k]==='boolean'?original.manual_enabled[k]:
+          Object.prototype.hasOwnProperty.call(original.manual||{},k)&&
+          original.manual[k]!==null&&original.manual[k]!==''&&
+          Number.isFinite(Number(original.manual[k]))]));
+      return {name:String(original.name??d.name).slice(0,12),
+        visible:original.visible!==false,required:original.required===true,
         entities:parameters.entities(parameters.pv,original.entities),
-        manual:Object.fromEntries(['voltage','current','power'].map(k=>[k,original.manual?.[k]===null?null:clamp(original.manual?.[k],0,50000,d.manual[k])]))};
+        manual:Object.fromEntries(keys.map(k=>[k,original.manual?.[k]===null?null:
+          clamp(original.manual?.[k],0,50000,d.manual[k])])),
+        manual_enabled:manualEnabled};
     })};
  };
  const data=(node,h)=>{
@@ -5218,6 +5280,7 @@ const HASSStudioEditorInspector = (() => {
             'range',null,'min="40" max="150" step="5"');
         markup+=sect('inverter-basics','1. Podstawowe ustawienia i wygląd','mdi:tune-variant',basics,true);
 
+        const pvResolved=HASSStudioInverterReadings.resolve(obj,editor._hass,c);
         let readings=numeric(inverterFields.core.ac_power.label,'inv_entity_ac_power',
           c.entities.ac_power,'inv_manual_ac_power',c.manual.ac_power)+
           numeric(inverterFields.core.temperature.label,'inv_entity_temperature',
@@ -5231,19 +5294,36 @@ const HASSStudioEditorInspector = (() => {
               ['false','Brak alarmu'],['true','Alarm']]);
         readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
         c.inputs.forEach((input,i)=>{
+          const resolved=pvResolved.inputs[i];
+          const manualValue=key=>input.manual_enabled?.[key]===true?input.manual[key]:'';
           let fields=field('Nazwa wejścia','inv_pv_'+i+'_name',input.name)+
             field('Pokaż na ekranie falownika','inv_pv_'+i+'_visible',
               input.visible?'true':'false','text',[['true','Tak'],['false','Nie']])+
+            field('Wymagaj poprawnego odczytu mocy','inv_pv_'+i+'_required',
+              input.required?'true':'false','text',[['true','Tak'],['false','Nie']])+
             numeric(inverterFields.pv.voltage.label+' '+input.name+' ('+inverterFields.pv.voltage.unit+')','inv_pv_'+i+'_entity_voltage',
-              input.entities.voltage,'inv_pv_'+i+'_manual_voltage',input.manual.voltage)+
+              input.entities.voltage,'inv_pv_'+i+'_manual_voltage',manualValue('voltage'))+
             numeric(inverterFields.pv.current.label+' '+input.name+' ('+inverterFields.pv.current.unit+')','inv_pv_'+i+'_entity_current',
-              input.entities.current,'inv_pv_'+i+'_manual_current',input.manual.current)+
+              input.entities.current,'inv_pv_'+i+'_manual_current',manualValue('current'))+
             numeric(inverterFields.pv.power.label+' '+input.name+' ('+inverterFields.pv.power.unit+')','inv_pv_'+i+'_entity_power',
-              input.entities.power,'inv_pv_'+i+'_manual_power',input.manual.power);
-          readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1),
+              input.entities.power,'inv_pv_'+i+'_manual_power',manualValue('power'));
+          const sourceName={measured:'HA — moc',simulated:'TEST — moc',
+            calculated_ha:'Obliczone: HA V × A',calculated_test:'Obliczone: TEST V × A',
+            missing:'Brak danych'}[resolved.power_source];
+          if(resolved.error)
+            fields+='<div class="ss-pv-reading-error" role="alert" style="border:1px solid #df4444;color:#ff7373;padding:10px;margin:8px 0">'+
+              '<strong>Nie można obliczyć mocy '+esc(input.name)+'</strong><p>'+esc(resolved.error)+'</p></div>';
+          else if(resolved.warning)
+            fields+='<p class="ss-note" style="color:#f1bd65">'+esc(resolved.warning)+'</p>';
+          fields+='<p class="ss-note">Wynik '+esc(input.name)+': '+
+            (resolved.watts===null?'—':esc(resolved.watts.toFixed(2)+' W'))+
+            ' · '+esc(sourceName||'Brak danych')+'</p>'+
+            '<p class="ss-note">TEST aktywuje się po wpisaniu wartości (również 0); puste pole go wyłącza. Bez mieszania HA z TEST przy obliczaniu V × A.</p>';
+          readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1)+
+            (resolved.error?'<span style="color:#ff7373"> · ⚠ Brak danych</span>':''),
             'mdi:solar-panel',fields,false);
         });
-        readings+='<p class="ss-note">Bilans używa tylko mocy AC. Odczyty PV są informacyjne i nie są dodawane drugi raz.</p>';
+        readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła, gdy dane są kompletne. W trybie automatycznym TEST wymaga włączenia fallbacku. Bilans używa nadal mocy AC — PV nie jest doliczane drugi raz.</p>';
         markup+=sect('inverter-data','2. Dane urządzenia','mdi:chart-line',readings,false);
 
         let ports='<p class="ss-note">Końcówki przewodów można dopasować do portów. Port AC i wejścia DC nie mogą dzielić jednej szyny.</p>';
@@ -6668,7 +6748,7 @@ const HASSStudioEditorLibrary=(()=>{
            if(f==='status')c.manual[f]=['auto','generating','standby','off','fault'].includes(val)?val:'auto';
            if(f==='alarm')c.manual[f]=val==='true';
         }else if(k.startsWith('pv_')){
-          const match=/^pv_(\d+)_(name|visible|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
+          const match=/^pv_(\d+)_(name|visible|required|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
           if(match&&Number(match[1])<12){
             const i=Number(match[1]);
             c.inputs=c.inputs||[];
@@ -6676,10 +6756,13 @@ const HASSStudioEditorLibrary=(()=>{
             const q=c.inputs[i],fieldName=match[2];
             if(fieldName==='name')q.name=val.slice(0,12);
             else if(fieldName==='visible')q.visible=val==='true';
+            else if(fieldName==='required')q.required=val==='true';
             else if(fieldName.startsWith('entity_')){q.entities=q.entities||{};q.entities[fieldName.slice(7)]=HASSStudioDeviceParameters.inverter.entity(val);}
             else if(fieldName.startsWith('manual_')){
-              q.manual=q.manual||{};
-              q.manual[fieldName.slice(7)]=val===''?null:clamp(val,0,50000,0);
+              const field=fieldName.slice(7),active=val.trim()!==''&&Number.isFinite(Number(val));
+              q.manual=q.manual||{};q.manual_enabled=q.manual_enabled||{};
+              q.manual_enabled[field]=active;
+              q.manual[field]=active?clamp(val,0,50000,0):null;
             }
           }
         }else if(k.startsWith('row_')){

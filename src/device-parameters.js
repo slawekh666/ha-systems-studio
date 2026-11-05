@@ -28,7 +28,10 @@ const HASSStudioDeviceParameters=(()=>{
  const entity=x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x)?x:'';
  const entities=(definitions,raw)=>Object.fromEntries(Object.keys(definitions).map(k=>[k,entity(raw?.[k])]));
  const manualDefaults=definitions=>Object.fromEntries(Object.keys(definitions).map(k=>[k,definitions[k].testDefault]));
- const inputDefaults=i=>({name:'PV'+(i+1),visible:i<3,entities:entities(pv),manual:manualDefaults(pv)});
+ // Default examples are placeholders, not active TEST readings.
+ const inputDefaults=i=>({name:'PV'+(i+1),visible:i<3,required:false,
+   entities:entities(pv),manual:manualDefaults(pv),
+   manual_enabled:{voltage:false,current:false,power:false}});
  const inverter=Object.freeze({core,pv,entity,entities,manualDefaults,inputDefaults,
   coreKeys:Object.freeze(Object.keys(core)),pvKeys:Object.freeze(Object.keys(pv))});
  return Object.freeze({inverter});

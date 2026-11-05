@@ -96,6 +96,7 @@ const HASSStudioEditorInspector = (() => {
             'range',null,'min="40" max="150" step="5"');
         markup+=sect('inverter-basics','1. Podstawowe ustawienia i wygląd','mdi:tune-variant',basics,true);
 
+        const pvResolved=HASSStudioInverterReadings.resolve(obj,editor._hass,c);
         let readings=numeric(inverterFields.core.ac_power.label,'inv_entity_ac_power',
           c.entities.ac_power,'inv_manual_ac_power',c.manual.ac_power)+
           numeric(inverterFields.core.temperature.label,'inv_entity_temperature',
@@ -109,19 +110,36 @@ const HASSStudioEditorInspector = (() => {
               ['false','Brak alarmu'],['true','Alarm']]);
         readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
         c.inputs.forEach((input,i)=>{
+          const resolved=pvResolved.inputs[i];
+          const manualValue=key=>input.manual_enabled?.[key]===true?input.manual[key]:'';
           let fields=field('Nazwa wejścia','inv_pv_'+i+'_name',input.name)+
             field('Pokaż na ekranie falownika','inv_pv_'+i+'_visible',
               input.visible?'true':'false','text',[['true','Tak'],['false','Nie']])+
+            field('Wymagaj poprawnego odczytu mocy','inv_pv_'+i+'_required',
+              input.required?'true':'false','text',[['true','Tak'],['false','Nie']])+
             numeric(inverterFields.pv.voltage.label+' '+input.name+' ('+inverterFields.pv.voltage.unit+')','inv_pv_'+i+'_entity_voltage',
-              input.entities.voltage,'inv_pv_'+i+'_manual_voltage',input.manual.voltage)+
+              input.entities.voltage,'inv_pv_'+i+'_manual_voltage',manualValue('voltage'))+
             numeric(inverterFields.pv.current.label+' '+input.name+' ('+inverterFields.pv.current.unit+')','inv_pv_'+i+'_entity_current',
-              input.entities.current,'inv_pv_'+i+'_manual_current',input.manual.current)+
+              input.entities.current,'inv_pv_'+i+'_manual_current',manualValue('current'))+
             numeric(inverterFields.pv.power.label+' '+input.name+' ('+inverterFields.pv.power.unit+')','inv_pv_'+i+'_entity_power',
-              input.entities.power,'inv_pv_'+i+'_manual_power',input.manual.power);
-          readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1),
+              input.entities.power,'inv_pv_'+i+'_manual_power',manualValue('power'));
+          const sourceName={measured:'HA — moc',simulated:'TEST — moc',
+            calculated_ha:'Obliczone: HA V × A',calculated_test:'Obliczone: TEST V × A',
+            missing:'Brak danych'}[resolved.power_source];
+          if(resolved.error)
+            fields+='<div class="ss-pv-reading-error" role="alert" style="border:1px solid #df4444;color:#ff7373;padding:10px;margin:8px 0">'+
+              '<strong>Nie można obliczyć mocy '+esc(input.name)+'</strong><p>'+esc(resolved.error)+'</p></div>';
+          else if(resolved.warning)
+            fields+='<p class="ss-note" style="color:#f1bd65">'+esc(resolved.warning)+'</p>';
+          fields+='<p class="ss-note">Wynik '+esc(input.name)+': '+
+            (resolved.watts===null?'—':esc(resolved.watts.toFixed(2)+' W'))+
+            ' · '+esc(sourceName||'Brak danych')+'</p>'+
+            '<p class="ss-note">TEST aktywuje się po wpisaniu wartości (również 0); puste pole go wyłącza. Bez mieszania HA z TEST przy obliczaniu V × A.</p>';
+          readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1)+
+            (resolved.error?'<span style="color:#ff7373"> · ⚠ Brak danych</span>':''),
             'mdi:solar-panel',fields,false);
         });
-        readings+='<p class="ss-note">Bilans używa tylko mocy AC. Odczyty PV są informacyjne i nie są dodawane drugi raz.</p>';
+        readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła, gdy dane są kompletne. W trybie automatycznym TEST wymaga włączenia fallbacku. Bilans używa nadal mocy AC — PV nie jest doliczane drugi raz.</p>';
         markup+=sect('inverter-data','2. Dane urządzenia','mdi:chart-line',readings,false);
 
         let ports='<p class="ss-note">Końcówki przewodów można dopasować do portów. Port AC i wejścia DC nie mogą dzielić jednej szyny.</p>';
