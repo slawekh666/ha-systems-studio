@@ -124,6 +124,16 @@ const HASSStudioBuilding=(()=>{
   c[key]=clamp(value,old.measurement==='net'?-10000:0,10000,0);
   return c[key];
  };
+ // Per-building, explicit migration only; never rewrite older meters on load.
+ const convertToAggregate=node=>{
+  if(node?.type!=='building')return false;
+  const current=normalize(node);
+  if(current.measurement!=='individual')return false;
+  const previous=node.building&&typeof node.building==='object'?node.building:{};
+  node.building={...previous,measurement:'aggregate',
+   power_kw:manualPower(current),remaining_enabled:false};
+  return true;
+ };
  const numeric=(h,id,kind)=>{
   const x=HASSStudioHA.reading(h,id);
   if(!x||x.value<0)return null;
@@ -156,6 +166,6 @@ const HASSStudioBuilding=(()=>{
   graphic=HASSStudioSvg.namespaceIds(graphic+box,prefix);
   return '<svg width="150" height="150" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">'+graphic+'</svg>';
  };
- return Object.freeze({defaults,normalize,powerSnapshot,manualPower,setManualPower,data,geometry,render});
+ return Object.freeze({defaults,normalize,powerSnapshot,manualPower,setManualPower,convertToAggregate,data,geometry,render});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioBuilding;

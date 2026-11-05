@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.32-dev';
+const VERSION = '0.4.33-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -3219,6 +3219,16 @@ const HASSStudioBuilding=(()=>{
   c[key]=clamp(value,old.measurement==='net'?-10000:0,10000,0);
   return c[key];
  };
+ // Per-building, explicit migration only; never rewrite older meters on load.
+ const convertToAggregate=node=>{
+  if(node?.type!=='building')return false;
+  const current=normalize(node);
+  if(current.measurement!=='individual')return false;
+  const previous=node.building&&typeof node.building==='object'?node.building:{};
+  node.building={...previous,measurement:'aggregate',
+   power_kw:manualPower(current),remaining_enabled:false};
+  return true;
+ };
  const numeric=(h,id,kind)=>{
   const x=HASSStudioHA.reading(h,id);
   if(!x||x.value<0)return null;
@@ -3251,7 +3261,7 @@ const HASSStudioBuilding=(()=>{
   graphic=HASSStudioSvg.namespaceIds(graphic+box,prefix);
   return '<svg width="150" height="150" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">'+graphic+'</svg>';
  };
- return Object.freeze({defaults,normalize,powerSnapshot,manualPower,setManualPower,data,geometry,render});
+ return Object.freeze({defaults,normalize,powerSnapshot,manualPower,setManualPower,convertToAggregate,data,geometry,render});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioBuilding;
 
@@ -5295,9 +5305,14 @@ const HASSStudioEditorInspector = (() => {
           }else if(obj.type==='inverter')
             metric('Moc chwilowa falownika (kW)','inv_entity_ac_power',c.entities.ac_power,
               'inv_manual_ac_power',c.manual.ac_power);
-          else if(obj.type==='building')
+          else if(obj.type==='building'){
             metric('Pobór budynku (kW)','building_power_entity',c.power_entity,
-               'building_power_kw',HASSStudioBuilding.manualPower(c),'kW','Encja mocy (W/kW)');
+              'building_power_kw',HASSStudioBuilding.manualPower(c),'kW','Encja mocy (W/kW)');
+            if(c.measurement==='individual')
+              markup+='<div class="ss-metric-group"><p class="ss-note">Starsza konfiguracja: pomiar obejmuje tylko własny pobór budynku. Odbiorniki za nim są obecnie doliczane osobno.</p>'+
+                '<button type="button" data-convert-building-meter>Zmień na pomiar całkowity budynku</button>'+
+                '<p class="ss-note">Użyj tylko wtedy, gdy odczyt obejmuje odbiorniki za budynkiem. Zachowamy encję i aktywną wartość TEST, a bilans ponownie sprawdzi obciążenia. Zmianę można cofnąć.</p></div>';
+          }
           else if(obj.type==='energy_storage')
             metric('Moc magazynu (kW): dodatnia — ładowanie','storage_entity_power',c.entities.power,
               'storage_manual_power',c.manual.power);
@@ -5393,9 +5408,7 @@ const HASSStudioEditorInspector = (() => {
           
           markup+=field('Zużycie dzienne (Wh/kWh/MWh)','building_daily_entity',c.daily_entity,'search',null,'list="ss-entity-list"');
           // Old measurement modes survive in saved layouts; do not silently change their accounting.
-          if(c.measurement==='individual')
-            markup+='<p class="ss-note">Starsza konfiguracja: pomiar obejmuje wyłącznie własny pobór budynku. Odbiorniki podrzędne są doliczane oddzielnie. Zachowano dotychczasowe rozliczenie.</p>';
-          else if(c.measurement==='net')
+          if(c.measurement==='net')
             markup+='<p class="ss-note">Starsza konfiguracja: pomiar netto na granicy budynku. Wartość ujemna oznacza eksport. Zachowano dotychczasowe rozliczenie.</p>';
           else
             markup+='<p class="ss-note">Pobór budynku obejmuje odbiorniki przyporządkowane na podstawie połączeń AC. Ich poboru nie dodajemy ponownie. Gdy odbiorniki przekraczają pomiar, bilans zgłasza błąd.</p>';
@@ -6833,6 +6846,10 @@ const HASSStudioEditorLibrary=(()=>{
       const button=event.target.closest('button');
       if(!button||!selection)return;
       const model=get(),obj=selectedObject(model);if(!obj)return;
+      if(selection.type==='node'&&obj.type==='building'&&button.hasAttribute('data-convert-building-meter')){
+        if(HASSStudioBuilding.convertToAggregate(obj)){commit(model);render();}
+        return;
+      }
       if(button.dataset.action==='reset-tank-aspect' && obj.type==='tank'&&obj.variant==='modular'){
         obj.width_scale=1;obj.height_scale=1;obj.scale_mode='free';obj.aspect_locked=true;
         commit(model);render();return;

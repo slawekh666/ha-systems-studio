@@ -963,6 +963,10 @@
       const button=event.target.closest('button');
       if(!button||!selection)return;
       const model=get(),obj=selectedObject(model);if(!obj)return;
+      if(selection.type==='node'&&obj.type==='building'&&button.hasAttribute('data-convert-building-meter')){
+        if(HASSStudioBuilding.convertToAggregate(obj)){commit(model);render();}
+        return;
+      }
       if(button.dataset.action==='reset-tank-aspect' && obj.type==='tank'&&obj.variant==='modular'){
         obj.width_scale=1;obj.height_scale=1;obj.scale_mode='free';obj.aspect_locked=true;
         commit(model);render();return;

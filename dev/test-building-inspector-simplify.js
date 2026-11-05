@@ -45,6 +45,8 @@ const old={...base,energy_mode:'test',building:{measurement:'individual',remaini
 const before=JSON.stringify(old);
 html=render(old.building);
 assert(html.includes('Starsza konfiguracja'));
+assert(html.includes('data-convert-building-meter'));
+assert(!render(fresh).includes('data-convert-building-meter'));
 assert.match(html,/data-field="building_power_kw"[^>]*value="2.5"/);
 assert.equal(ctx.B.data(old,{states:{}}).power,2.5);
 assert.equal(JSON.stringify(old),before);
@@ -60,6 +62,7 @@ ctx.B.setManualPower(oldPlain,'5');
 assert.equal(oldPlain.building.power_kw,5);
 const oldNet={building:{measurement:'net',power_kw:-2}};
 assert(render(oldNet.building).includes('Wartość ujemna oznacza eksport'));
+assert(!render(oldNet.building).includes('data-convert-building-meter'));
 ctx.B.setManualPower(oldNet,'-3');
 assert.equal(oldNet.building.power_kw,-3);
 assert.equal(oldNet.building.measurement,'net');
