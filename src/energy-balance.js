@@ -392,6 +392,13 @@ const HASSStudioEnergyBalance=(()=>{
         mode:reading.mode,source:reading.source,injection_kw:reading.injection_kw,
         ...(reading.reason?{reason:reading.reason}:{})});
     }
+    // Converter constraints are deliberately distinct from topology edges.
+    // No change for legacy inverters or installations without an enabled
+    // versioned converter. Older standalone unit tests may not load this
+    // optional module when no converter is configured.
+    const converters=typeof HASSStudioEnergyConverter==='undefined'?[]:
+      HASSStudioEnergyConverter.integrate({nodes:allNodes,keyGroup,topology,
+        dc_terminals,warnings,tolerance_kw:config.tolerance_kw});
     const networks=[...grouped.values()].map(g=>{
       const entries=g.devices;
       adjustBuildings(g,src,topology,nodesById,warnings,config.tolerance_kw);
@@ -453,7 +460,8 @@ const HASSStudioEnergyBalance=(()=>{
         residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons,
         unaccounted_kw,export_cap_kw};
     });
-    return {enabled:true,config,networks,warnings,topology,dc_terminals,storage_terminals};
+    return {enabled:true,config,networks,warnings,topology,
+      dc_terminals,storage_terminals,converters};
   };
   return Object.freeze({MAX_ASSIGNMENTS,defaults,normalize,participant,haPower,injection,deviceReading,measure,totals,solve,resolve});
 })();
