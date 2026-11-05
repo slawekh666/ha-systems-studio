@@ -32,12 +32,11 @@ const HASSStudioInverter=(()=>{
  const hybridDefaults=()=>({schema_version:1,enabled:false,pv_ports:Array(MAX_INPUTS).fill('')});
  const converterDefaults=()=>({schema_version:1,enabled:false,
    ac_port_id:'',battery_port_id:'',pv_mode:'mapped',ac_mode:'auto',
-   efficiency_percent:null});
+   efficiency_percent:null,battery_efficiency_percent:null});
  const normalizeConverter=raw=>{
    const x=raw&&typeof raw==='object'?raw:{};
    const validPort=id=>typeof id==='string'&&/^[A-Za-z0-9_-]{1,32}$/.test(id)?id:'';
-   const ef=x.efficiency_percent;
-   const eta=ef!==null&&ef!==undefined&&ef!==''&&
+   const percent=ef=>ef!==null&&ef!==undefined&&ef!==''&&
      Number.isFinite(Number(ef))&&Number(ef)>0&&Number(ef)<=100?
      Number(ef):null;
    return {schema_version:1,enabled:x.schema_version===1&&x.enabled===true,
@@ -45,7 +44,8 @@ const HASSStudioInverter=(()=>{
      battery_port_id:validPort(x.battery_port_id),
      pv_mode:x.pv_mode==='none'?'none':'mapped',
      ac_mode:x.ac_mode==='calculate'?'calculate':'auto',
-     efficiency_percent:eta};
+     efficiency_percent:percent(x.efficiency_percent),
+     battery_efficiency_percent:percent(x.battery_efficiency_percent)};
  };
  const normalizeHybrid=raw=>{
    const c=raw&&typeof raw==='object'?raw:{};

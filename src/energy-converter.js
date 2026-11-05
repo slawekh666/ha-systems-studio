@@ -8,9 +8,13 @@ const HASSStudioEnergyConverter=(()=>{
   // Signed inverter boundary: PV<0 (absorption), DC battery>0 when charging,
   // AC>0 when exporting. Sum of injections + nonnegative loss = 0.
   const evaluate=({pv_kw,battery_kw,ac_kw,ac_source='missing',
-    ac_mode='auto',efficiency_percent=null,tolerance_kw=.05,rated_kw=null})=>{
+    ac_mode='auto',efficiency_percent=null,battery_efficiency_percent=null,
+    tolerance_kw=.05,rated_kw=null})=>{
     const eta=finite(efficiency_percent)&&efficiency_percent>0&&
       efficiency_percent<=100?efficiency_percent/100:null;
+    const etaBattery=finite(battery_efficiency_percent)&&
+      battery_efficiency_percent>0&&battery_efficiency_percent<=100?
+      battery_efficiency_percent/100:null;
     const valid=kw=>finite(kw)&&Math.abs(kw)<=10000;
     const inputValid=valid(pv_kw)&&pv_kw>=0&&valid(battery_kw);
     const direct=valid(ac_kw)?ac_kw:null;
@@ -22,12 +26,15 @@ const HASSStudioEnergyConverter=(()=>{
     if(ac===null){
       if(eta===null)return {status:'missing',reason:'converter_efficiency_or_ac_missing',
         pv_kw,battery_kw,ac_kw:null,ac_source:'missing',loss_kw:null,efficiency_observed:null};
-      // One aggregate, explicitly assumed efficiency for every incoming kW.
-      // If PV + battery discharge cannot cover battery charging, the AC
-      // terminal imports the shortfall. No implicit lossless DC/DC leg.
-      const incoming=pv_kw+Math.max(0,-battery_kw),charging=Math.max(0,battery_kw);
-      const candidate=round(eta*incoming-charging);
-      ac=candidate>=0?candidate:round(incoming-charging/eta);
+      // A DC-coupled battery requires a separate explicit DC/DC efficiency.
+      // Never assume 100% efficiency between battery and inverter.
+      if(battery_kw!==0&&etaBattery===null)
+        return {status:'missing',reason:'converter_battery_efficiency_missing',
+          pv_kw,battery_kw,ac_kw:null,ac_source:'missing',loss_kw:null,
+          efficiency_observed:null};
+      const inputDC=round(pv_kw+Math.max(0,-battery_kw)*(etaBattery??1)-
+        Math.max(0,battery_kw)/(etaBattery??1));
+      ac=inputDC>=0?round(inputDC*eta):round(inputDC/eta);
       source='estimated';
     }
     if(!valid(ac))return {status:'invalid',reason:'converter_invalid_ac_power',
@@ -47,6 +54,8 @@ const HASSStudioEnergyConverter=(()=>{
       pv_kw,battery_kw,ac_kw:ac===0?0:ac,ac_source:source,
       loss_kw:Math.max(0,loss),efficiency_observed:eff,
       efficiency_assumed:source==='estimated'?efficiency_percent:null,
+      battery_efficiency_assumed:source==='estimated'&&battery_kw!==0?
+        battery_efficiency_percent:null,
       pv_injection_kw:pv_kw===0?0:-pv_kw,
       battery_injection_kw:battery_kw===0?0:battery_kw,
       ac_injection_kw:ac===0?0:ac,
@@ -147,7 +156,8 @@ const HASSStudioEnergyConverter=(()=>{
       const chosen=conf.ac_mode==='calculate'?null:acEntry.injection_kw;
       const evaluation=evaluate({pv_kw:pv,battery_kw:battery,ac_kw:chosen,
         ac_source:acEntry.source,ac_mode:conf.ac_mode,
-        efficiency_percent:conf.efficiency_percent,tolerance_kw,
+        efficiency_percent:conf.efficiency_percent,
+        battery_efficiency_percent:conf.battery_efficiency_percent,tolerance_kw,
         rated_kw:c.rated_kw});
       const transfer={...base,...evaluation,ac_port_id:acPort.id,
         battery_port_id:batteryNone?'none':batteryPort.id,

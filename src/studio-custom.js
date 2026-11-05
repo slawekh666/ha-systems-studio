@@ -771,9 +771,9 @@
             converter[prop]=HASSStudioEnergyTopology.ident(val);
           else if(prop==='pv_mode')converter.pv_mode=val==='none'?'none':'mapped';
           else if(prop==='ac_mode')converter.ac_mode=val==='calculate'?'calculate':'auto';
-          else if(prop==='efficiency_percent'){
+          else if(prop==='efficiency_percent'||prop==='battery_efficiency_percent'){
             const n=Number(val);
-            converter.efficiency_percent=val.trim()===''||!Number.isFinite(n)||
+            converter[prop]=val.trim()===''||!Number.isFinite(n)||
               n<=0||n>100?null:n;
           }
           hybrid.converter={...converter,schema_version:1};

@@ -135,14 +135,19 @@ const HASSStudioEditorInspector = (() => {
             field('Moc AC falownika','inv_converter_ac_mode',cv.ac_mode,'text',
               [['auto','Odczyt AC (HA → TEST), oblicz gdy brak'],
                ['calculate','Wyliczaj z PV i magazynu (nie używaj odczytu AC)']])+
-            field('Sprawność konwersji (%) — opcjonalne założenie',
+            field('Sprawność toru DC/AC (%) — założenie do obliczeń',
               'inv_converter_efficiency_percent',cv.efficiency_percent??'','number',null,
+              'min="0.1" max="100" step="0.1"')+
+            field('Sprawność toru magazynu DC/DC (%) — założenie do obliczeń',
+              'inv_converter_battery_efficiency_percent',
+              cv.battery_efficiency_percent??'','number',null,
               'min="0.1" max="100" step="0.1"');
           converter+='<p class="ss-note">Konwerter NIE łączy fizycznie sieci AC i DC. '+
             'Moc AC z pomiaru ma pierwszeństwo w trybie automatycznym; brakująca moc '+
-            'może być oszacowana tylko z jawnie podanej sprawności i kompletnego pomiaru PV/magazynu. '+
-            'Nieprawidłowe pomiary lub niejednoznaczne połączenia pozostają nierozstrzygnięte. '+
-            'Pole sprawności jest założeniem, nie pomiarem.</p>';
+            'może być oszacowana tylko z jawnie podanej sprawności DC/AC i kompletnych odczytów. '+
+            'Przy ładowaniu/rozładowaniu magazynu wymagane jest także założenie DC/DC. '+
+            'Wpisz 100% tylko jeśli chcesz świadomie przyjąć model bezstratny dla danego toru. '+
+            'Sprzeczne pomiary pozostają nierozstrzygnięte. Sprawności to założenia, nie odczyty.</p>';
           readings+=sect('inverter-converter','Przekształtnik AC/DC — 07A.2-D',
             'mdi:transmission-tower',converter,false);
         }
