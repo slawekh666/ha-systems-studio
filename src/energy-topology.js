@@ -78,6 +78,84 @@ const HASSStudioEnergyTopology=(()=>{
  };
 
 
+ // Single connectivity index for BOTH AC and DC, sharing one validated
+ // graph and one union-find implementation. No cross-medium electrical edge,
+ // geometry inference, persistent cache, or mutation of the user's wiring.
+ const index=(layout,existingGraph=null)=>{
+   const topology=existingGraph||graph(layout),parent=new Map();
+   const find=key=>{
+     if(!parent.has(key))parent.set(key,key);
+     const p=parent.get(key);
+     if(p!==key)parent.set(key,find(p));
+     return parent.get(key);
+   };
+   for(const edge of topology.edges){
+     const a=find(edge.from),b=find(edge.to);
+     if(a!==b)parent.set(b,a);
+   }
+   // Keep the original resolver's network IDs and ordering.
+   const grouped=new Map();
+   for(const edge of topology.edges){
+     const root=find(edge.from);
+     if(!grouped.has(root))grouped.set(root,{
+       id:root,medium:edge.medium,connection_ids:[],ports:new Set(),devices:[]
+     });
+     const group=grouped.get(root);
+     group.connection_ids.push(edge.id);
+     group.ports.add(edge.from);group.ports.add(edge.to);
+   }
+   const keyGroup=new Map(),byMedium={ac:[],dc:[]},edgesByMedium={ac:[],dc:[]};
+   for(const edge of topology.edges)edgesByMedium[edge.medium].push(edge);
+   for(const group of grouped.values()){
+     byMedium[group.medium].push(group);
+     for(const key of group.ports)keyGroup.set(key,group);
+   }
+   // Direct device relationships are read-only graph observations.
+   // They are available for later PV/battery auto-discovery, but do not
+   // imply a converter or infer energy transfer across AC and DC.
+   const nodesById=new Map((layout?.nodes||[]).map(n=>[n.id,n])),
+     portsByNode=new Map(),linksByNode=new Map(),edgesById=new Map();
+   for(const edge of topology.edges){
+     if(!edgesById.has(edge.id))edgesById.set(edge.id,[]);
+     edgesById.get(edge.id).push(edge);
+   }
+   const getPort=(id,portId)=>{
+     const n=nodesById.get(id);
+     if(!n)return null;
+     if(!portsByNode.has(id))
+       portsByNode.set(id,new Map(ports(n).map(p=>[p.id,p])));
+     return portsByNode.get(id).get(portId)||null;
+   };
+   const add=(nodeId,link)=>{
+     if(!linksByNode.has(nodeId))linksByNode.set(nodeId,[]);
+     linksByNode.get(nodeId).push(link);
+   };
+   for(const cable of layout?.connections||[]){
+     if(cable.type!=='electric')continue;
+     const edges=edgesById.get(cable.id)||[];
+     // Duplicate IDs are inherently ambiguous: fail closed for discovery.
+     if(edges.length!==1)continue;
+     const start=end(cable.energy_start),finish=end(cable.energy_end),
+       a=getPort(start.node_id,start.port_id),
+       b=getPort(finish.node_id,finish.port_id);
+     if(!a||!b||a.medium!==b.medium)continue;
+     const from=busKey(start.node_id,a),to=busKey(finish.node_id,b),
+       edge=edges[0],group=keyGroup.get(from);
+     if(edge.from!==from||edge.to!==to||edge.medium!==a.medium||
+       !group||keyGroup.get(to)!==group)continue;
+     add(start.node_id,{connection_id:cable.id,medium:a.medium,
+       node_id:start.node_id,port_id:a.id,port_bus_key:from,
+       peer_node_id:finish.node_id,peer_type:nodesById.get(finish.node_id)?.type||'',
+       peer_port_id:b.id,peer_bus_key:to,network_id:group.id});
+     add(finish.node_id,{connection_id:cable.id,medium:b.medium,
+       node_id:finish.node_id,port_id:b.id,port_bus_key:to,
+       peer_node_id:start.node_id,peer_type:nodesById.get(start.node_id)?.type||'',
+       peer_port_id:a.id,peer_bus_key:from,network_id:group.id});
+   }
+   return {graph:topology,grouped,keyGroup,byMedium,edgesByMedium,
+     linksByNode,nodesById};
+ };
+
  // Automatically derive a building meter's downstream devices from the AC
  // cable graph. A building owns a device only if EVERY path from the selected
  // upstream boundary to that device passes through the building. This is a
@@ -248,7 +326,7 @@ const HASSStudioEnergyTopology=(()=>{
    }
    return best;
  };
- return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,busKey,defaultPorts,electricalType,node,end,connection,graph,
+ return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,busKey,defaultPorts,electricalType,node,end,connection,graph,index,
    geometry,anchor,locate,moveAttached,attach,nearest,meterHierarchy});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyTopology;
