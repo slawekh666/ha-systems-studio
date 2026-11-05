@@ -27,6 +27,17 @@ const HASSStudioInverter=(()=>{
      }));
  };
  const panelHeight=c=>Math.max(52,40+c.panel_rows.length*ROW_HEIGHT);
+ // Explicit, opt-in port bindings. Legacy inverter nodes without hybrid
+ // metadata retain their old AC-only accounting on normalization and saving.
+ const hybridDefaults=()=>({schema_version:1,enabled:false,pv_ports:Array(MAX_INPUTS).fill('')});
+ const normalizeHybrid=raw=>{
+   const c=raw&&typeof raw==='object'?raw:{};
+   return {schema_version:1,enabled:c.schema_version===1&&c.enabled===true,
+     pv_ports:Array.from({length:MAX_INPUTS},(_,i)=>{
+       const id=c.pv_ports?.[i];
+       return typeof id==='string'&&/^[A-Za-z0-9_-]{1,32}$/.test(id)?id:'';
+     })};
+ };
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
    rated_kw:10,production_threshold_w:10,positive_power:true,export_allowed:true,entities:parameters.entities(parameters.core),
@@ -61,7 +72,37 @@ const HASSStudioInverter=(()=>{
         manual:Object.fromEntries(keys.map(k=>[k,original.manual?.[k]===null?null:
           clamp(original.manual?.[k],0,50000,d.manual[k])])),
         manual_enabled:manualEnabled};
-    })};
+    }),...(raw.hybrid&&typeof raw.hybrid==='object'?{hybrid:normalizeHybrid(raw.hybrid)}:{})};
+ };
+ // An MPPT reading measures power entering the inverter on a separate PV
+ // circuit. It is NOT a battery-bus generator or an AC/DC converter transfer.
+ const dcTerminals=(node,h)=>{
+   const c=normalize(node);
+   if(node?.type!=='inverter'||c.hybrid?.enabled!==true)
+     return {enabled:false,terminals:[],errors:[]};
+   const terminals=[],errors=[],seen=new Set(),
+     byId=new Map(HASSStudioEnergyTopology.ports(node).map(p=>[p.id,p])),
+     inputs=HASSStudioInverterReadings.resolve(node,h,c).inputs;
+   for(let i=0;i<c.count;i++){
+     const portId=c.hybrid.pv_ports[i],input=c.inputs[i];
+     if(!portId){
+       if(input.required)errors.push({reason:'pv_dc_required_mapping_missing',input_index:i,port_id:''});
+       continue;
+     }
+     const report=reason=>errors.push({reason,input_index:i,port_id:portId});
+     if(seen.has(portId)){report('pv_dc_duplicate_mapping');continue;}
+     seen.add(portId);
+     const port=byId.get(portId);
+     if(!port){report('pv_dc_missing_port');continue;}
+     if(port.medium!=='dc'){report('pv_dc_wrong_medium');continue;}
+     const value=inputs[i],powerKw=value.watts===null?null:value.watts/1000;
+     terminals.push({node_id:node.id,port_id:portId,input_index:i,
+       input_name:input.name,medium:'dc',measurement_point:'inverter_mppt_input',
+       power_kw:powerKw,injection_kw:powerKw===null?null:-powerKw,
+       source:value.power_source,status:value.status,included_in_balance:false});
+     if(powerKw===null&&input.required)report('pv_dc_missing_measurement');
+   }
+   return {enabled:true,terminals,errors};
  };
  const data=(node,h)=>{
    const c=normalize(node),resolved=HASSStudioInverterReadings.resolve(node,h,c);
@@ -182,6 +223,6 @@ const HASSStudioInverter=(()=>{
    const bottom=c.show_extra?Math.max(300,65+panelHeight(c)*c.extra_scale+10):300;
    return '<svg width="'+(150+extraWidth/2)+'" height="'+(bottom/2)+'" viewBox="'+left+' 0 '+(300+extraWidth)+' '+bottom+'" preserveAspectRatio="xMinYMin meet">'+content+'</svg>';
  };
- return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,defaults,normalize,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
+ return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,hybridDefaults,normalizeHybrid,defaults,normalize,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverter;

@@ -51,12 +51,15 @@ const HASSStudioEnergyDiagnostics=(()=>{
     }
     const warnings=(balance.warnings||[]).map(w=>({
       reason:w.reason,node_id:w.node_id||null,connection_id:w.connection_id||null,
-      side:w.side||null
+      side:w.side||null,input_index:w.input_index??null,port_id:w.port_id||null
+    }));
+    const dcTerminals=(balance.dc_terminals||[]).map(t=>({
+      ...t,device_name:deviceName(t.node_id)
     }));
     for(const c of cables)if(!c.available&&!warnings.some(w=>w.connection_id===c.id&&w.reason===c.reason))
       warnings.push({reason:c.reason||'unresolved_flow',connection_id:c.id,node_id:null,side:null});
     return {options,enabled:balance.enabled===true,scenario:balance.config.scenario,
-      networks,cables,warnings,balanced:networks.filter(n=>n.state==='balanced').length,
+      networks,cables,warnings,dcTerminals,balanced:networks.filter(n=>n.state==='balanced').length,
       unresolved:networks.filter(n=>n.state!=='balanced').length};
   };
   const messages={
@@ -72,6 +75,15 @@ const HASSStudioEnergyDiagnostics=(()=>{
       missing_node:'Brak urządzenia',missing_port:'Brak portu',unconnected_device:'Urządzenie niepodłączone',
       ambiguous_device_network:'Urządzenie należy do wielu sieci',
       invalid_or_unconnected_port:'Nieprawidłowy lub niepodłączony port',
+      inverter_ac_reading_on_dc_network:'Nie wolno zaliczyć mocy AC falownika do sieci DC',
+      pv_dc_required_mapping_missing:'Wymagane wejście MPPT bez przypisanego portu DC',
+      pv_dc_duplicate_mapping:'Dwa wejścia MPPT przypisane do jednego portu DC',
+      pv_dc_missing_port:'Wskazany port PV nie istnieje',
+      pv_dc_wrong_medium:'Port MPPT musi mieć typ DC',
+      pv_dc_missing_measurement:'Brak odczytu mocy wejścia PV',
+      pv_dc_unconnected_port:'Przypisany port PV DC nie jest podłączony',
+      pv_dc_observations:'Obserwacje wejść PV DC — poza bilansem magazynu',
+      pv_dc_not_source:'PV wpływa do falownika. Bez modelu konwersji brak przepływu do magazynu DC',
       missing_measurements:'Brak wymaganych pomiarów',multiple_unknowns:'Wiele niewiadomych',
       aggregate_overlap:'Nakładające się pomiary zużycia',invalid_direction_or_power:'Błędna moc lub znak',
       building_child_exceeds_total:'Odbiorniki za budynkiem przekraczają jego pomiar całkowity',
@@ -84,7 +96,9 @@ const HASSStudioEnergyDiagnostics=(()=>{
       imbalance:'Niezgodny bilans',unresolved_flow:'Nieznany przepływ',
       unaccounted:'Moc nierozliczona',unaccounted_generation:'Brak zidentyfikowanego odbiornika lub przepływu',
       unaccounted_branch:'Nieustalony przepływ — moc nierozliczona',unaccounted_power:'Moc nierozliczona (nie strata)',
-      calculated:'Wyliczone',measured:'Pomiar HA',simulated:'Symulacja',missing:'Brak pomiaru',
+      calculated:'Wyliczone',calculated_ha:'Obliczono z HA V × A',
+      calculated_test:'Obliczono z TEST V × A',
+      measured:'Pomiar HA',simulated:'Symulacja',missing:'Brak pomiaru',
       invalid_source:'Niepoprawny odczyt',pending:'Do obliczenia',excluded:'Wyłączone',
       ha:'HA',simulation:'Symulacja',mixed:'Mieszane',unknown:'Nieznane',unavailable:'Niedostępne',
       generation:'Produkcja PV / źródeł',consumption:'Zużycie',grid_import:'Import',
@@ -109,6 +123,15 @@ const HASSStudioEnergyDiagnostics=(()=>{
       missing_node:'Missing device',missing_port:'Missing port',unconnected_device:'Disconnected device',
       ambiguous_device_network:'Device in multiple networks',
       invalid_or_unconnected_port:'Invalid or disconnected port',
+      inverter_ac_reading_on_dc_network:'Inverter AC power cannot supply a DC network',
+      pv_dc_required_mapping_missing:'Required MPPT input has no mapped DC port',
+      pv_dc_duplicate_mapping:'Two MPPT inputs are mapped to the same DC port',
+      pv_dc_missing_port:'Mapped PV port does not exist',
+      pv_dc_wrong_medium:'MPPT port must be DC',
+      pv_dc_missing_measurement:'PV input power reading is missing',
+      pv_dc_unconnected_port:'Mapped PV DC port is not connected',
+      pv_dc_observations:'PV DC input observations — excluded from battery balance',
+      pv_dc_not_source:'PV power enters the inverter; battery DC transfer requires a converter model',
       missing_measurements:'Missing measurements',multiple_unknowns:'Multiple unknowns',
       aggregate_overlap:'Overlapping load measurements',invalid_direction_or_power:'Invalid sign or power',
       building_child_exceeds_total:'Child loads exceed the building gross meter',
@@ -121,7 +144,9 @@ const HASSStudioEnergyDiagnostics=(()=>{
       imbalance:'Balance mismatch',unresolved_flow:'Unresolved flow',
       unaccounted:'Unaccounted power',unaccounted_generation:'Unidentified load or energy path',
       unaccounted_branch:'Unresolved flow — unaccounted power',unaccounted_power:'Unaccounted power (not a loss)',
-      calculated:'Calculated',measured:'HA measured',simulated:'Simulation',missing:'Missing',
+      calculated:'Calculated',calculated_ha:'Calculated from HA V × A',
+      calculated_test:'Calculated from TEST V × A',
+      measured:'HA measured',simulated:'Simulation',missing:'Missing',
       invalid_source:'Invalid',pending:'Calculation pending',excluded:'Excluded',
       ha:'HA',simulation:'Simulation',mixed:'Mixed',unknown:'Unknown',unavailable:'Unavailable',
       generation:'PV / source generation',consumption:'Consumption',grid_import:'Grid import',
@@ -196,14 +221,24 @@ const HASSStudioEnergyDiagnostics=(()=>{
       (view.warnings.length?'<ul>'+view.warnings.map(w=>{
         const cable=view.cables.find(c=>c.id===w.connection_id);
         const name=cable?.name||view.networks.flatMap(n=>n.devices)
-          .find(d=>d.node_id===w.node_id)?.name||'';
+          .find(d=>d.node_id===w.node_id)?.name||
+          view.dcTerminals.find(t=>t.node_id===w.node_id)?.device_name||'';
         const link=mode==='editor'&&(w.connection_id||w.node_id)?
           '<button type="button" data-energy-jump="'+escape(w.connection_id||w.node_id)+
           '" data-energy-jump-kind="'+(w.connection_id?'connection':'node')+'">'+
           escape(name||'Pokaż na schemacie')+'</button>':escape(name);
-        return '<li>'+escape(label(w.reason))+(link?' · '+link:'')+'</li>';
+        const input=w.input_index===null?'':' · MPPT '+(w.input_index+1);
+        const port=w.port_id?' · '+w.port_id:'';
+        return '<li>'+escape(label(w.reason)+input+port)+(link?' · '+link:'')+'</li>';
       }).join('')+'</ul>':
         '<p>'+escape(label('noWarnings'))+'</p>')+'</article>':'';
+    const pvReadouts=view.dcTerminals.length?
+      '<article><h5>'+escape(label('pv_dc_observations'))+'</h5>'+
+      table(view.dcTerminals.map(t=>[
+        t.device_name+' · '+t.input_name+' → '+t.port_id+
+          (t.connected?'':' (niepodłączony / disconnected)'),
+        fmt(t.power_kw)+' · '+label(t.source)]))+
+      '<p class="ss-diag-caption">'+escape(label('pv_dc_not_source'))+'</p></article>':'';
     const title=label('title')+' · '+view.balanced+'/'+view.networks.length;
     return '<details class="ss-energy-diagnostics ss-energy-diagnostics--'+
       (mode==='editor'?'editor':'viewer')+'" data-energy-status="'+
@@ -214,7 +249,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
       ' · '+view.unresolved+' '+escape(label('issueNetworks'))+'</p>'+
       '<p class="ss-diag-caption">'+escape(label('notMeasured'))+'</p>'+
       (!view.enabled?'<p>'+escape(label('off'))+'</p>':
-      (view.networks.length?networks:'<p>'+escape(label('noNetwork'))+'</p>')+detached+warningList)+
+      (view.networks.length?networks:'<p>'+escape(label('noNetwork'))+'</p>')+pvReadouts+detached+warningList)+
       '</div></details>';
   };
   return Object.freeze({defaults,normalize,viewModel,render,styles,escape,fmt});

@@ -758,8 +758,11 @@
           if(f==='temperature')c.manual[f]=clamp(val,-40,150,25);
            if(f==='status')c.manual[f]=['auto','generating','standby','off','fault'].includes(val)?val:'auto';
            if(f==='alarm')c.manual[f]=val==='true';
+        }else if(k==='hybrid_enabled'){
+          c.hybrid={...(HASSStudioInverter.normalize({inverter:c}).hybrid||HASSStudioInverter.hybridDefaults()),
+            enabled:val==='true'};
         }else if(k.startsWith('pv_')){
-          const match=/^pv_(\d+)_(name|visible|required|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
+          const match=/^pv_(\d+)_(name|visible|required|port|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
           if(match&&Number(match[1])<12){
             const i=Number(match[1]);
             c.inputs=c.inputs||[];
@@ -768,6 +771,12 @@
             if(fieldName==='name')q.name=val.slice(0,12);
             else if(fieldName==='visible')q.visible=val==='true';
             else if(fieldName==='required')q.required=val==='true';
+            else if(fieldName==='port'){
+              const hybrid=HASSStudioInverter.normalize({inverter:c}).hybrid||
+                HASSStudioInverter.hybridDefaults();
+              hybrid.pv_ports[i]=HASSStudioEnergyTopology.ident(val);
+              c.hybrid=hybrid;
+            }
             else if(fieldName.startsWith('entity_')){q.entities=q.entities||{};q.entities[fieldName.slice(7)]=HASSStudioDeviceParameters.inverter.entity(val);}
             else if(fieldName.startsWith('manual_')){
               const field=fieldName.slice(7),active=val.trim()!==''&&Number.isFinite(Number(val));
