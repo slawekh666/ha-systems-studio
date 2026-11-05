@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.38-dev';
+const VERSION = '0.4.39-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2599,18 +2599,27 @@ const HASSStudioEnergyStorage=(()=>{
   const FIELDS=['soc','power','soh','voltage','current','temperature','cell_min','cell_max','cell_delta','cycles','bms_alarm'];
   const DEFAULTS={mode:'live',display_scale:1,show_screen:true,min_soc:20,warning_margin:5,
     custom_alarm:false,alarm_soc:20,show_warning:true,show_alarm:true,charge_positive:true,
+    // Existing diagrams keep their electrical meaning until explicitly opted in.
+    coupling:'legacy',coupling_port_id:'',max_charge_kw:null,max_discharge_kw:null,
     animate_charge:true,temp_low_enabled:false,temp_low:0,temp_high_enabled:false,temp_high:50,
     cell_low_enabled:false,cell_low:2.8,cell_high_enabled:false,cell_high:3.65,
     delta_enabled:false,delta_max:100,offline_alarm:true};
   const clamp=(x,lo,hi,d)=>x!==''&&x!=null&&Number.isFinite(Number(x))?Math.max(lo,Math.min(hi,Number(x))):d;
   const cleanEntity=x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x)?x:'';
+  const cleanPort=x=>typeof x==='string'&&/^[A-Za-z0-9_-]{1,32}$/.test(x)?x:'';
+  const limit=x=>x===null||x===undefined||x===''?null:
+    Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=500?Number(x):null;
   const defaults=()=>({...DEFAULTS,entities:Object.fromEntries(FIELDS.map(k=>[k,''])),manual:{soc:75,power:1.5}});
   const normalize=node=>{
     const src=node?.energy_storage||node||{},d=defaults();
     const c={...d,...src,mode:src.mode==='manual'?'manual':'live',
       display_scale:HASSStudioReadoutScale.factor(src.display_scale),
       entities:Object.fromEntries(FIELDS.map(k=>[k,cleanEntity(src.entities?.[k])])),
-      manual:{soc:clamp(src.manual?.soc,0,100,75),power:clamp(src.manual?.power,-500,500,1.5)}};
+      manual:{soc:clamp(src.manual?.soc,0,100,75),power:clamp(src.manual?.power,-500,500,1.5)},
+      coupling:['ac','dc'].includes(src.coupling)?src.coupling:'legacy',
+      coupling_port_id:cleanPort(src.coupling_port_id),
+      max_charge_kw:limit(src.max_charge_kw),
+      max_discharge_kw:limit(src.max_discharge_kw)};
     for(const k of ['min_soc','alarm_soc'])c[k]=clamp(src[k],0,100,d[k]);
     c.warning_margin=clamp(src.warning_margin,0,30,d.warning_margin);
     for(const [k,lo,hi] of [['temp_low',-50,100],['temp_high',-50,150],
@@ -2671,6 +2680,41 @@ const HASSStudioEnergyStorage=(()=>{
       level:soc===null?0:soc<=0?0:Math.ceil(soc/25),
       state:alarms.length?'alarm':warnings.length?'warning':soc===null?'unknown':'normal'};
   };
+  // Observed power at the physical DC battery terminal. Positive injection
+  // supplies its DC bus; a negative injection means charging. This DOES NOT
+  // infer any energy transfer through the inverter's internal converter.
+  const dcTerminal=(node,h)=>{
+    const c=normalize(node);
+    if(node?.type!=='energy_storage'||c.coupling!=='dc')
+      return {enabled:false,terminal:null,issues:[]};
+    const observed=HASSStudioHA.powerInput(
+      node,h,c.entities.power,c.manual.power,c.mode,true);
+    const kw=observed.kw,injection=kw===null?null:
+      c.charge_positive?-kw:kw;
+    const test=node?.energy_mode==='test'||
+      (node?.energy_mode==null&&c.mode==='manual');
+    const soc=test?c.manual.soc:reading(h,c.entities.soc,['%','percent',''],0,100);
+    const bms=c.mode==='live'?binaryAlarm(h,c.entities.bms_alarm):null;
+    const issues=[];
+    if(injection!==null){
+      if(injection<0&&c.max_charge_kw!==null&&
+        -injection>c.max_charge_kw+1e-7)
+        issues.push('dc_storage_charge_limit_exceeded');
+      if(injection>0&&c.max_discharge_kw!==null&&
+        injection>c.max_discharge_kw+1e-7)
+        issues.push('dc_storage_discharge_limit_exceeded');
+      if(injection>0&&soc!==null&&soc<=c.min_soc)
+        issues.push('dc_storage_low_soc_discharge');
+    }
+    if(bms===true)issues.push('dc_storage_bms_alarm');
+    return {enabled:true,issues,terminal:{
+      node_id:node.id,port_id:c.coupling_port_id,medium:'dc',
+      measurement_point:'battery_dc_terminal',power_kw:kw,
+      injection_kw:injection,source:observed.source,soc,bms_alarm:bms,
+      status:kw===null?'missing':issues.length?'warning':'ok',
+      included_in_balance:false
+    }};
+  };
   const geometry=()=>({x:0,y:0,width:150,height:150,centerX:75,labelY:164,readingY:177});
   const formatPower=power=>power===null?'—':(power>0?'+':'')+(Math.abs(power)<10?power.toFixed(1):power.toFixed(0))+' kW';
   const render=(node,h)=>{
@@ -2699,7 +2743,7 @@ const HASSStudioEnergyStorage=(()=>{
     return '<svg x="0" y="0" width="150" height="150" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">'+
       HASSStudioSvg.namespaceIds(svg,prefix)+'</svg>';
   };
-  return Object.freeze({FIELDS,defaults,normalize,data,geometry,render,formatPower});
+  return Object.freeze({FIELDS,defaults,normalize,data,dcTerminal,geometry,render,formatPower});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyStorage;
 
@@ -3992,6 +4036,28 @@ const HASSStudioEnergyBalance=(()=>{
         dc_terminals.push({...terminal,network_id:network?.id||null,connected:!!network});
       }
     }
+    const storage_terminals=[];
+    for(const n of allNodes){
+      if(n.type!=='energy_storage')continue;
+      const battery=HASSStudioEnergyStorage.dcTerminal(n,hass);
+      if(!battery.enabled)continue;
+      const c=HASSStudioEnergyStorage.normalize(n);
+      const port=HASSStudioEnergyTopology.ports(n).find(q=>q.id===c.coupling_port_id);
+      const network=port?.medium==='dc'?
+        keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port)):null;
+      const terminal={...battery.terminal,network_id:network?.id||null,connected:!!network};
+      storage_terminals.push(terminal);
+      for(const reason of battery.issues)
+        warnings.push({reason,node_id:n.id,port_id:c.coupling_port_id});
+      if(!c.coupling_port_id)
+        warnings.push({reason:'dc_storage_port_required',node_id:n.id});
+      else if(!port)
+        warnings.push({reason:'dc_storage_port_missing',node_id:n.id,port_id:c.coupling_port_id});
+      else if(port.medium!=='dc')
+        warnings.push({reason:'dc_storage_port_wrong_medium',node_id:n.id,port_id:c.coupling_port_id});
+      else if(!network)
+        warnings.push({reason:'dc_storage_port_unconnected',node_id:n.id,port_id:c.coupling_port_id});
+    }
     for(const n of allNodes){
       const descriptor=HASSStudioEnergyTopology.node(n);
       const role=descriptor.role;
@@ -4003,7 +4069,33 @@ const HASSStudioEnergyBalance=(()=>{
       if(p.mode==='off')continue;
       const ports=descriptor.ports;
       let matches=ports.filter(port=>keyGroup.has(HASSStudioEnergyTopology.busKey(n.id,port)));
-      if(p.port_id){
+      const coupling=n.type==='energy_storage'?
+        HASSStudioEnergyStorage.normalize(n):null;
+      // Explicit battery coupling is authoritative. Do not silently select
+      // another attached AC/DC port if the selected port is unavailable.
+      if(coupling&&coupling.coupling!=='legacy'){
+        if(p.port_id&&p.port_id!==coupling.coupling_port_id)
+          warnings.push({reason:'storage_coupling_override_conflict',node_id:n.id,
+            port_id:p.port_id});
+        const selected=ports.find(q=>q.id===coupling.coupling_port_id);
+        const valid=!!selected&&selected.medium===coupling.coupling&&
+          matches.some(q=>q.id===selected.id)&&
+          (!p.port_id||p.port_id===selected.id);
+        if(!valid){
+          const attached=[...new Set(matches.map(port=>
+            keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port))))];
+          // A wrong or unconnected selection must not accidentally result
+          // in an apparently balanced network through some other port.
+          for(const group of attached)group.devices.push({
+            node_id:n.id,node_type:n.type,port_id:coupling.coupling_port_id,
+            role,measurement:null,mode:'device',source:'invalid',
+            injection_kw:null,reason:'invalid_storage_coupling'});
+          warnings.push({reason:'invalid_storage_coupling',node_id:n.id,
+            port_id:coupling.coupling_port_id});
+          continue;
+        }
+        matches=[selected];
+      }else if(p.port_id){
         matches=matches.filter(port=>port.id===p.port_id);
         if(!matches.length){warnings.push({reason:'invalid_or_unconnected_port',node_id:n.id});continue;}
       }else if(n.type==='inverter'&&matches.some(port=>port.medium==='ac'))
@@ -4088,7 +4180,7 @@ const HASSStudioEnergyBalance=(()=>{
         residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons,
         unaccounted_kw,export_cap_kw};
     });
-    return {enabled:true,config,networks,warnings,topology,dc_terminals};
+    return {enabled:true,config,networks,warnings,topology,dc_terminals,storage_terminals};
   };
   return Object.freeze({MAX_ASSIGNMENTS,defaults,normalize,participant,haPower,injection,deviceReading,measure,totals,solve,resolve});
 })();
@@ -4235,12 +4327,16 @@ const HASSStudioEnergyDiagnostics=(()=>{
     const dcTerminals=(balance.dc_terminals||[]).map(t=>({
       ...t,device_name:deviceName(t.node_id)
     }));
+    const storageTerminals=(balance.storage_terminals||[]).map(t=>({
+      ...t,device_name:deviceName(t.node_id)
+    }));
     for(const c of cables)if(!c.available&&!warnings.some(w=>w.connection_id===c.id&&w.reason===c.reason))
       warnings.push({reason:c.reason||'unresolved_flow',
         diagnostic_reason:c.diagnostic_reason||null,
         connection_id:c.id,node_id:null,side:null,input_index:null});
     return {options,enabled:balance.enabled===true,scenario:balance.config.scenario,
-      networks,cables,warnings,dcTerminals,balanced:networks.filter(n=>n.state==='balanced').length,
+      networks,cables,warnings,dcTerminals,storageTerminals,
+      balanced:networks.filter(n=>n.state==='balanced').length,
       unresolved:networks.filter(n=>n.state!=='balanced').length};
   };
   const messages={
@@ -4267,6 +4363,18 @@ const HASSStudioEnergyDiagnostics=(()=>{
       pv_dc_unconnected_port:'Przypisany port PV DC nie jest podłączony',
       pv_dc_observations:'Obserwacje wejść PV DC — poza bilansem magazynu',
       pv_dc_not_source:'PV wpływa do falownika. Bez modelu konwersji brak przepływu do magazynu DC',
+      storage_dc_observations:'Magazyny DC — przyłącza i odczyty',
+      storage_dc_not_source:'Moc magazynu to pomiar na jego zaciskach. Nie oznacza automatycznego przepływu PV przez falownik.',
+      dc_storage_port_required:'Magazyn DC wymaga wybrania portu',
+      dc_storage_port_missing:'Wskazany port magazynu DC nie istnieje',
+      dc_storage_port_wrong_medium:'Wybrany port magazynu ma niewłaściwy typ (wymagany DC)',
+      dc_storage_port_unconnected:'Wybrany port magazynu DC nie jest podłączony',
+      storage_coupling_override_conflict:'Konfiguracja bilansu wskazuje inny port niż przyłącze magazynu',
+      invalid_storage_coupling:'Nieprawidłowe przyłącze magazynu: sprawdź port i przewód',
+      dc_storage_charge_limit_exceeded:'Magazyn DC: moc ładowania przekracza ustawiony limit',
+      dc_storage_discharge_limit_exceeded:'Magazyn DC: moc rozładowania przekracza ustawiony limit',
+      dc_storage_low_soc_discharge:'Magazyn DC rozładowuje się poniżej minimalnego SOC',
+      dc_storage_bms_alarm:'Magazyn DC: alarm BMS',
       missing_measurements:'Brak wymaganych pomiarów',multiple_unknowns:'Wiele niewiadomych',
       aggregate_overlap:'Nakładające się pomiary zużycia',invalid_direction_or_power:'Błędna moc lub znak',
       building_child_exceeds_total:'Odbiorniki za budynkiem przekraczają jego pomiar całkowity',
@@ -4317,6 +4425,18 @@ const HASSStudioEnergyDiagnostics=(()=>{
       pv_dc_unconnected_port:'Mapped PV DC port is not connected',
       pv_dc_observations:'PV DC input observations — excluded from battery balance',
       pv_dc_not_source:'PV power enters the inverter; battery DC transfer requires a converter model',
+      storage_dc_observations:'DC batteries — ports and readings',
+      storage_dc_not_source:'Battery terminal power does not imply PV-to-battery transfer through an inverter.',
+      dc_storage_port_required:'DC battery needs a selected port',
+      dc_storage_port_missing:'Selected DC battery port does not exist',
+      dc_storage_port_wrong_medium:'Battery port has wrong medium (DC required)',
+      dc_storage_port_unconnected:'Selected DC battery port is not connected',
+      storage_coupling_override_conflict:'Balance override conflicts with selected battery port',
+      invalid_storage_coupling:'Invalid battery coupling — check port and cable',
+      dc_storage_charge_limit_exceeded:'DC battery charging exceeds configured limit',
+      dc_storage_discharge_limit_exceeded:'DC battery discharging exceeds configured limit',
+      dc_storage_low_soc_discharge:'DC battery discharging below minimum SOC',
+      dc_storage_bms_alarm:'DC battery BMS alarm',
       missing_measurements:'Missing measurements',multiple_unknowns:'Multiple unknowns',
       aggregate_overlap:'Overlapping load measurements',invalid_direction_or_power:'Invalid sign or power',
       building_child_exceeds_total:'Child loads exceed the building gross meter',
@@ -4429,6 +4549,14 @@ const HASSStudioEnergyDiagnostics=(()=>{
           (t.connected?'':' (niepodłączony / disconnected)'),
         fmt(t.power_kw)+' · '+label(t.source)]))+
       '<p class="ss-diag-caption">'+escape(label('pv_dc_not_source'))+'</p></article>':'';
+    const storageReadouts=view.storageTerminals.length?
+      '<article><h5>'+escape(label('storage_dc_observations'))+'</h5>'+
+      table(view.storageTerminals.map(t=>[
+        t.device_name+' → '+(t.port_id||'—')+
+          (t.connected?'':' (niepodłączony / disconnected)'),
+        fmt(t.injection_kw)+' · '+label(t.source)+
+          (t.soc===null?'':' · SOC '+t.soc.toFixed(1)+'%')]))+
+      '<p class="ss-diag-caption">'+escape(label('storage_dc_not_source'))+'</p></article>':'';
     const title=label('title')+' · '+view.balanced+'/'+view.networks.length;
     return '<details class="ss-energy-diagnostics ss-energy-diagnostics--'+
       (mode==='editor'?'editor':'viewer')+'" data-energy-status="'+
@@ -4439,7 +4567,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
       ' · '+view.unresolved+' '+escape(label('issueNetworks'))+'</p>'+
       '<p class="ss-diag-caption">'+escape(label('notMeasured'))+'</p>'+
       (!view.enabled?'<p>'+escape(label('off'))+'</p>':
-      (view.networks.length?networks:'<p>'+escape(label('noNetwork'))+'</p>')+pvReadouts+detached+warningList)+
+      (view.networks.length?networks:'<p>'+escape(label('noNetwork'))+'</p>')+
+      pvReadouts+storageReadouts+detached+warningList)+
       '</div></details>';
   };
   return Object.freeze({defaults,normalize,viewModel,render,styles,escape,fmt});
@@ -5585,8 +5714,8 @@ const HASSStudioEditorInspector = (() => {
                 '<p class="ss-note">Użyj tylko wtedy, gdy odczyt obejmuje odbiorniki za budynkiem. Zachowamy encję i aktywną wartość TEST, a bilans ponownie sprawdzi obciążenia. Zmianę można cofnąć.</p></div>';
           }
           else if(obj.type==='energy_storage')
-            metric('Moc magazynu (kW): dodatnia — ładowanie','storage_entity_power',c.entities.power,
-              'storage_manual_power',c.manual.power);
+            metric('Moc magazynu (kW): dodatnia — '+(c.charge_positive?'ładowanie':'rozładowanie'),
+              'storage_entity_power',c.entities.power,'storage_manual_power',c.manual.power);
           else if(obj.type==='ev_charger')
             metric('Moc pobierana przez ładowarkę (kW)','ev_entity_power',c.entities.power,
               'ev_manual_power',c.manual.power);
@@ -5764,6 +5893,30 @@ const HASSStudioEditorInspector = (() => {
           markup+=field('Skala ekranu (%)','storage_display_scale',Math.round(c.display_scale*100),'range',null,'min="40" max="150" step="5"');
           markup+=bool('show_screen','Pokaż ekran')+bool('animate_charge','Animacja podczas ładowania');
           markup+=bool('charge_positive','Dodatnia moc oznacza ładowanie');
+          markup+='<h4>Przyłącze magazynu (AC / DC)</h4>'+
+            field('Rodzaj przyłącza','storage_coupling',c.coupling,'text',[
+              ['legacy','Dotychczasowy — zgodnie z zapisanymi portami'],
+              ['ac','AC — wskazany port'],['dc','DC — wskazany port']]);
+          if(c.coupling!=='legacy'){
+            const ports=HASSStudioEnergyTopology.ports(obj);
+            const options=[['','Wybierz port '+c.coupling.toUpperCase()],...ports
+              .filter(port=>port.medium===c.coupling)
+              .map(port=>[port.id,(port.label||port.id)+' ('+port.id+')'])];
+            if(c.coupling_port_id&&!options.some(p=>p[0]===c.coupling_port_id))
+              options.push([c.coupling_port_id,'Nieprawidłowy port: '+c.coupling_port_id]);
+            markup+=field('Fizyczny port magazynu','storage_coupling_port_id',
+              c.coupling_port_id,'text',options);
+            markup+='<p class="ss-note">Wybór przyłącza nie zmienia typu portów ani przewodów. '+
+              'Jeśli portu '+c.coupling.toUpperCase()+' nie ma, dodaj go w ustawieniach zaawansowanych i podłącz przewód.</p>';
+          }
+          if(c.coupling==='dc'){
+            markup+=field('Limit ładowania DC (kW) — opcjonalny',
+              'storage_max_charge_kw',c.max_charge_kw??'','number',null,'min="0" max="500" step="0.01"')+
+              field('Limit rozładowania DC (kW) — opcjonalny',
+              'storage_max_discharge_kw',c.max_discharge_kw??'','number',null,'min="0" max="500" step="0.01"');
+            markup+='<p class="ss-note">Limity i alarm BMS generują wyłącznie ostrzeżenia — nie sterują ładowaniem '+
+              'ani nie korygują wartości pomiarów. Kierunek mocy wynika z ustawienia znaku powyżej.</p>';
+          }
           markup+='<h4>Rezerwa i ostrzeżenia (wyłącznie wizualne)</h4>';
           markup+=field('Minimalny poziom SOC (%)','storage_min_soc',c.min_soc,'number',null,'min="0" max="100" step="1"');
           markup+=field('Margines ostrzeżenia (p.p.)','storage_warning_margin',c.warning_margin,'number',null,'min="0" max="30" step="1"');
@@ -6974,6 +7127,14 @@ const HASSStudioEditorLibrary=(()=>{
           const name=k.slice(7);c.manual=c.manual||{};
           if(name==='soc')c.manual.soc=clamp(val,0,100,75);
           if(name==='power')c.manual.power=clamp(val,-500,500,1.5);
+        }else if(k==='coupling'){
+          const next=['ac','dc'].includes(val)?val:'legacy';
+          if(c.coupling!==next)c.coupling_port_id='';
+          c.coupling=next;
+        }else if(k==='coupling_port_id'){
+          c.coupling_port_id=HASSStudioEnergyTopology.ident(val);
+        }else if(k==='max_charge_kw'||k==='max_discharge_kw'){
+          c[k]=val.trim()===''?null:clamp(val,0,500,0);
         }else if(k==='display_scale')c.display_scale=clamp(val,40,150,100)/100;
         else if(k==='mode')c.mode=val==='manual'?'manual':'live';
         else if(['show_screen','animate_charge','charge_positive','custom_alarm','show_alarm',
