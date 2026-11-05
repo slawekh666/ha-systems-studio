@@ -62,7 +62,8 @@ assert.equal(idx.keyGroup.get('sofar:dc:pv'),pvGroup);
 assert(!idx.keyGroup.has('sofar:dc:no_port'));
 const links=idx.linksByNode.get('sofar');
 assert.equal(links.length,3);
-assert.deepEqual(links.map(x=>x.connection_id),['ac_grid','dc_battery','dc_pv']);
+assert.equal(JSON.stringify(links.map(x=>x.connection_id)),JSON.stringify(['ac_grid','dc_battery','dc_pv']),
+ 'Cross-realm VM array contents must match');
 const toBattery=links.find(x=>x.connection_id==='dc_battery');
 assert.equal(toBattery.medium,'dc');
 assert.equal(toBattery.port_id,'battery');
