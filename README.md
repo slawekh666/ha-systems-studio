@@ -4,13 +4,15 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 ## Current status
 
-**0.4.41-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
+**0.4.42-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
 
 **Update 0.4.15-dev:** the Custom editor now has a grouped equipment library with solid-fuel boiler and pellet boiler separated, device-family-specific graphic variants, a central device registry and shared read-only HA state/animation helpers. The modular tank and solar collector inspector edits one selected part at a time (by stable part ID), including selection from the tank graphic, while keeping legacy `studio_layout` identifiers and manual animation settings. Circuit grouping and additional SVG models remain deferred.
 
 **Important:** the card is still under Home Assistant browser acceptance testing. CI checks packaging, JavaScript syntax and selected logic, but cannot verify final SVG appearance and pointer behavior in HA.
 
-**0.4.41-dev test build:** legacy `pipes[]` / `edges[]` configurations are migrated only when `connections[]` is absent; when `connections[]` is present, even empty, older lists are ignored. The maintainer tests this build from the shared GitHub `main` and publishes only a pre-release until acceptance.
+**0.4.42-dev test build:** legacy `pipes[]` / `edges[]` configurations are migrated only when `connections[]` is absent; when `connections[]` is present, even empty, older lists are ignored. The maintainer tests this build from the shared GitHub `main` and publishes only a pre-release until acceptance.
+
+**Stage 07A.2-D.1-B (0.4.42-dev):** opt-in hybrid converters can infer uniquely connected AC and DC storage ports from the shared, validated graph. PV1–PV12 remain logical MPPT readings without mandatory external PV icons, and physical source matching is allowed only when unique. Existing explicit selections and legacy AC configurations are preserved; uncertain or duplicate connections remain unresolved. See [D.1-B notes](docs/REFRACTOR-050-STAGE-07A2D1B-HYBRID-AUTODISCOVERY.md).
 
 **Stage 07A.2-D.1-A (0.4.41-dev):** one validated, medium-isolated AC/DC topology index is now shared by the energy balance. It exposes read-only direct node/port/cable relationships for subsequent automatic PV and storage discovery, while preserving existing AC/DC network IDs, solver allocation, missing/invalid states and manual cable routing. It does not activate converter auto-discovery, change HA/TEST precedence or alter converter assumptions. See [D.1-A notes](docs/REFRACTOR-050-STAGE-07A2D1A-SHARED-TOPOLOGY.md).
 
