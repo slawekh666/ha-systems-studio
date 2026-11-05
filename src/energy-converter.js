@@ -62,7 +62,8 @@ const HASSStudioEnergyConverter=(()=>{
       provenance:{pv:'observed',battery:'calculated',ac:source,
         losses:source==='estimated'?'estimated':'calculated'}};
   };
-  const integrate=({nodes,keyGroup,topology,dc_terminals,warnings,tolerance_kw})=>{
+  const integrate=({nodes,keyGroup,topology,topologyIndex,autoStoragePorts,
+    dc_terminals,warnings,tolerance_kw})=>{
     const transfers=[],portCache=new Map(),getPorts=n=>{
       if(!portCache.has(n.id))portCache.set(n.id,new Map(
         HASSStudioEnergyTopology.ports(n).map(p=>[p.id,p])));
@@ -72,19 +73,28 @@ const HASSStudioEnergyConverter=(()=>{
     const candidates=nodes.filter(n=>n.type==='inverter').map(n=>({
       node:n,c:HASSStudioInverter.normalize(n)
     })).filter(x=>x.c.hybrid?.enabled===true&&active(x.c.hybrid.converter));
+    const discovered=new Map(candidates.map(({node})=>[node.id,
+      HASSStudioEnergyTopology.hybridAttachments(topologyIndex,node.id)]));
+    const bindings=new Map(candidates.map(({node,c})=>{
+      const conf=c.hybrid.converter,found=discovered.get(node.id);
+      return [node.id,{ac:conf.ac_port_id||found.ac_port_id,
+        battery:conf.battery_port_id||found.battery_port_id}];
+    }));
     const groupsByBattery=new Map();
     for(const x of candidates){
-      const conf=x.c.hybrid.converter,port=getPorts(x.node).get(conf.battery_port_id);
-      const group=conf.battery_port_id==='none'?null:netFor(x.node,port);
+      const portId=bindings.get(x.node.id).battery,
+        port=getPorts(x.node).get(portId);
+      const group=portId==='none'?null:netFor(x.node,port);
       if(group){
         if(!groupsByBattery.has(group.id))groupsByBattery.set(group.id,[]);
         groupsByBattery.get(group.id).push(x.node.id);
       }
     }
     for(const {node,c} of candidates){
-      const conf=c.hybrid.converter;
+      const conf=c.hybrid.converter,found=discovered.get(node.id),
+        binding=bindings.get(node.id);
       const base={converter_id:node.id,device_name:node.label||node.id,
-        ac_port_id:conf.ac_port_id,battery_port_id:conf.battery_port_id,
+        ac_port_id:binding.ac,battery_port_id:binding.battery,
         enabled:true,medium:'ac/dc',status:'missing',reason:null,
         pv_kw:null,battery_kw:null,ac_kw:null,loss_kw:null,
         ac_source:'missing',pv_source:'missing',battery_source:'missing',
@@ -93,12 +103,21 @@ const HASSStudioEnergyConverter=(()=>{
         transfers.push({...base,status:'missing',reason});
         warnings.push({reason,node_id:node.id});
       };
-      const ports=getPorts(node),acPort=ports.get(conf.ac_port_id),
+      const ports=getPorts(node),acPort=ports.get(binding.ac),
         acGroup=acPort?.medium==='ac'?netFor(node,acPort):null,
-        batteryNone=conf.battery_port_id==='none',
-        batteryPort=ports.get(conf.battery_port_id),
+        batteryNone=binding.battery==='none',
+        batteryPort=ports.get(binding.battery),
         batteryGroup=batteryNone?null:
           batteryPort?.medium==='dc'?netFor(node,batteryPort):null;
+      if(!conf.ac_port_id&&found.ac_ambiguous){
+        fail('converter_ambiguous_ac_ports');continue;
+      }
+      if(!conf.battery_port_id&&found.battery_ambiguous){
+        fail('converter_ambiguous_battery_ports');continue;
+      }
+      if(batteryNone&&found.storage_links.length){
+        fail('converter_battery_absence_conflicts_with_wire');continue;
+      }
       if(!acPort||acPort.medium!=='ac'||!acGroup){
         fail('converter_ac_port_missing');continue;
       }
@@ -156,7 +175,10 @@ const HASSStudioEnergyConverter=(()=>{
             d.injection_kw===null||d.source==='invalid')return false;
           const storage=nodes.find(n=>n.id===d.node_id);
           const cc=storage?HASSStudioEnergyStorage.normalize(storage):null;
-          return cc?.coupling==='dc'&&cc.coupling_port_id===d.port_id;
+          return cc&&(cc.coupling==='dc'&&
+            (cc.coupling_port_id||autoStoragePorts?.get(d.node_id))===d.port_id||
+            cc.coupling==='legacy'&&
+            autoStoragePorts?.get(d.node_id)===d.port_id);
         });
         if(!onlyStorage){
           fail('converter_battery_reading_ambiguous');continue;
