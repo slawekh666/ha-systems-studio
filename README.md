@@ -4,13 +4,15 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 ## Current status
 
-**0.4.37-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
+**0.4.38-dev (development, unreleased):** custom three-pane hydraulic diagram editor, with editable tanks, boilers, solar thermal collectors, pumps, valves, sensors and pipe routes. Includes Warmwasser-style equipment graphics, proportional device scaling, independent sensor-reading size, editable descriptions for sensors and pipe-mounted pumps/valves, and HA native entity history via `hass-more-info`. Boiler animation can use a burner entity or temperature threshold; collector sunlight is based on collector-to-tank temperature difference.
 
 **Update 0.4.15-dev:** the Custom editor now has a grouped equipment library with solid-fuel boiler and pellet boiler separated, device-family-specific graphic variants, a central device registry and shared read-only HA state/animation helpers. The modular tank and solar collector inspector edits one selected part at a time (by stable part ID), including selection from the tank graphic, while keeping legacy `studio_layout` identifiers and manual animation settings. Circuit grouping and additional SVG models remain deferred.
 
 **Important:** the card is still under Home Assistant browser acceptance testing. CI checks packaging, JavaScript syntax and selected logic, but cannot verify final SVG appearance and pointer behavior in HA.
 
-**0.4.37-dev test build:** legacy `pipes[]` / `edges[]` configurations are migrated only when `connections[]` is absent; when `connections[]` is present, even empty, older lists are ignored. The maintainer tests this build from the shared GitHub `main` and publishes only a pre-release until acceptance.
+**0.4.38-dev test build:** legacy `pipes[]` / `edges[]` configurations are migrated only when `connections[]` is absent; when `connections[]` is present, even empty, older lists are ignored. The maintainer tests this build from the shared GitHub `main` and publishes only a pre-release until acceptance.
+
+**Stage 07A.2-B.2.1 (0.4.38-dev):** diagnostic-only fix for invalid `MPPT NaN` warning labels and misleading DC storage charging errors before the converter model exists. Shows “Brak modelu konwersji DC” only for an unbalanced DC battery circuit with inverter connection and no measured supply; numerical balance states, residuals and animations are unchanged. Tests distinguish this case from genuine contradictory readings and insufficient data.
 
 **Stage 07A.2-B.2 (0.4.37-dev):** optional, explicit PV1–PV12-to-physical-DC-port mapping, inspected MPPT input power observations and validation warnings. Legacy AC readings must never be counted as DC production, even in DC-only or manually overridden circuits. No automatic PV-to-battery transfer, no DC/AC conversion, and no artificial DC balance correction. See [B.2 implementation notes](docs/REFRACTOR-050-STAGE-07A2B2-MPPT-PORTS.md).
 
