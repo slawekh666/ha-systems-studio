@@ -12,6 +12,8 @@ Custom Home Assistant dashboard card, **derived from [Warmwasser Schema Card](ht
 
 **0.4.35-dev test build:** legacy `pipes[]` / `edges[]` configurations are migrated only when `connections[]` is absent; when `connections[]` is present, even empty, older lists are ignored. The maintainer tests this build from the shared GitHub `main` and publishes only a pre-release until acceptance.
 
+**Stage 07A.2-A (design only, 0.4.35-dev unchanged):** [proposed hybrid AC/DC architecture](docs/ADR-07A2A-HYBRID-ACDC-ARCHITECTURE.md) and [staged implementation plan](docs/REFRACTOR-050-STAGE-07A2-PLAN.md). Defines per-port power contracts, compatibility, converter losses, EPS and export limits; pending explicit design approval. No runtime behavior changed.
+
 **Stage 07A.1-D.2-B (0.4.35-dev):** optimize indexes of electrical port endpoints, connected bus keys, device IDs, building depth and parent-specific reachability, scoped to each balance calculation. Preserve the AC topology, meter hierarchy, invalid-path detection, data semantics and editor behaviour; no persistent cache.
 
 **Stage 07A.1-D.2-A (0.4.34-dev):** reuse the single electrical topology graph built by the energy-balance resolver across every network's building measurement hierarchy. No global cache, measurement changes, wiring changes or UI changes. Regression tests assert a single graph construction for multiple AC networks and unchanged diagnostics.
