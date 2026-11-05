@@ -105,6 +105,11 @@ const HASSStudioEnergyConverter=(()=>{
         fail('converter_ac_meter_missing');continue;
       }
       const acEntry=acEntries[0];
+      // In explicit calculation mode an existing HA or TEST AC value must
+      // never reappear through the legacy balance if derivation fails.
+      if(conf.ac_mode==='calculate'){
+        acEntry.injection_kw=null;acEntry.source='missing';acEntry.mode='device';
+      }
       const mapped=dc_terminals.filter(t=>t.node_id===node.id);
       if(conf.pv_mode!=='none'&&!mapped.length){
         fail('converter_pv_mapping_missing');continue;
@@ -112,6 +117,11 @@ const HASSStudioEnergyConverter=(()=>{
       if(conf.pv_mode!=='none'&&mapped.some(t=>!Number.isFinite(t.power_kw)||
         t.source==='missing'||t.status==='invalid')){
         fail('converter_pv_reading_missing');continue;
+      }
+      // The physical PV MPPT circuit and DC battery circuit are independent
+      // terminals. Connecting them into one bus is not a converter shortcut.
+      if(batteryGroup&&mapped.some(t=>t.network_id===batteryGroup.id)){
+        fail('converter_pv_battery_bus_overlap');continue;
       }
       const pv=conf.pv_mode==='none'?0:
         round(mapped.reduce((s,t)=>s+t.power_kw,0));
@@ -147,13 +157,13 @@ const HASSStudioEnergyConverter=(()=>{
         battery_source:batterySource};
       transfers.push(transfer);
       if(evaluation.status==='invalid'){
-        warnings.push({reason:evaluation.reason,node_id:node.id});continue;
+        warnings.push({reason:evaluation.reason,node_id:node.id});
+        // Raw observed power is still visible. It must not be replaced
+        // by a made-up DC transfer, and the converter stays invalid.
+        continue;
       }
       if(evaluation.status==='missing'){
         warnings.push({reason:evaluation.reason,node_id:node.id});
-        if(conf.ac_mode==='calculate'){
-          acEntry.injection_kw=null;acEntry.source='missing';
-        }
         continue;
       }
       // Only a uniquely determined and loss-consistent conversion may provide
