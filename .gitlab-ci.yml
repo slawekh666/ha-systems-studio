@@ -31,6 +31,7 @@ validate_card:
     - node dev/test-building-topology.js
     - node dev/test-auto-meter-hierarchy.js
     - node dev/test-single-graph-balance.js
+    - node dev/test-topology-indexes.js
     - node dev/test-building-inspector-simplify.js
     - node dev/test-energy-07a.js
     - node dev/test-power-only.js
