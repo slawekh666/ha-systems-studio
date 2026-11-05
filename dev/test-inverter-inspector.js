@@ -62,7 +62,7 @@ const run=(count,manual,customRows=[],required=false)=>{
  assert(html.includes('data-field="inv_pv_'+(count-1)+'_entity_power"'));
  assert(html.includes('Napięcie PV1 (V)'));
   assert(html.includes('data-field="inv_pv_0_required"'));
-  if(required){assert(html.includes('ss-pv-reading-error'));assert(html.includes('role="alert"'));}
+  if(required){assert(html.includes('ss-pv-reading-error'));assert(html.includes('role="alert"'));assert(html.includes('⚠ Brak danych'));}
   else assert(!html.includes('ss-pv-reading-error'));
   assert(html.includes('data-field="inv_pv_0_manual_power"')===manual);
  assert(html.includes('Prąd PV1 (A)'));

@@ -135,7 +135,8 @@ const HASSStudioEditorInspector = (() => {
             (resolved.watts===null?'—':esc(resolved.watts.toFixed(2)+' W'))+
             ' · '+esc(sourceName||'Brak danych')+'</p>'+
             '<p class="ss-note">TEST aktywuje się po wpisaniu wartości (również 0); puste pole go wyłącza. Bez mieszania HA z TEST przy obliczaniu V × A.</p>';
-          readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1),
+          readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1)+
+            (resolved.error?'<span style="color:#ff7373"> · ⚠ Brak danych</span>':''),
             'mdi:solar-panel',fields,false);
         });
         readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła, gdy dane są kompletne. W trybie automatycznym TEST wymaga włączenia fallbacku. Bilans używa nadal mocy AC — PV nie jest doliczane drugi raz.</p>';
