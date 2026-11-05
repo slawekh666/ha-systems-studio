@@ -177,10 +177,10 @@ const HASSStudioEnergyBalance=(()=>{
   // read once, then the pure building power contract determines OWN consumption.
   // Descendant sources are NOT extra loads. A signed net meter is a boundary
   // reading; only the derived own load enters the shared AC network injection sum.
-  const adjustBuildings=(group,layout,warnings,tolerance)=>{
+  const adjustBuildings=(group,layout,topology,warnings,tolerance)=>{
     const items=new Map(group.devices.map(d=>[d.node_id,d]));
     const nodes=new Map((layout.nodes||[]).map(n=>[n.id,n]));
-    const topology=HASSStudioEnergyTopology.graph(layout);
+    // Reuse the validated graph produced by resolve(). Do not rebuild it per network.
     const hierarchy=HASSStudioEnergyTopology.meterHierarchy(layout,group,topology);
     const children=new Map(),invalid=new Map();
     const fault=(id,reason)=>{
@@ -316,7 +316,7 @@ const HASSStudioEnergyBalance=(()=>{
     }
     const networks=[...grouped.values()].map(g=>{
       const entries=g.devices;
-      adjustBuildings(g,src,warnings,config.tolerance_kw);
+      adjustBuildings(g,src,topology,warnings,config.tolerance_kw);
       // Stage 07A: isolate the visual grid boundary, never actuate hardware.
       const boards=allNodes.filter(n=>n.type==='distribution_board'&&
         n.energy_grid_connected===false&&[...g.ports].some(k=>k.startsWith(n.id+':')));
