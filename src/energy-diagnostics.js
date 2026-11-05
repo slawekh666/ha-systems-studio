@@ -27,10 +27,25 @@ const HASSStudioEnergyDiagnostics=(()=>{
     };
     const cableName=c=>c.label||(
       deviceName(c.energy_start?.node_id)+' → '+deviceName(c.energy_end?.node_id));
+    // A DC battery charging behind an inverter without an internal converter
+    // model has an unresolved transfer, not evidence of contradictory meters.
+    // This is presentation-only: preserve the numerical engine's raw state.
+    const inverterIds=new Set([...devices.values()].filter(n=>n.type==='inverter')
+      .map(n=>n.id));
+    const topologyEdges=new Map((balance.topology?.edges||[]).map(e=>[e.id,e]));
+    const needsConverter=n=>n.medium==='dc'&&n.state==='unbalanced'&&!!n.totals&&
+      n.totals.storage_charge_kw>balance.config.tolerance_kw&&
+      n.totals.supply_kw<=balance.config.tolerance_kw&&
+      n.connection_ids.some(id=>{
+        const edge=topologyEdges.get(id);
+        return edge?.medium==='dc'&&[edge.from,edge.to].some(key=>
+          inverterIds.has(key.slice(0,key.indexOf(':'))));
+      });
     const networkOf=new Map();
     const networks=(balance.networks||[]).map((n,i)=>{
       for(const id of n.connection_ids)networkOf.set(id,i);
       return {id:n.id,index:i+1,medium:n.medium,state:n.state,
+        diagnostic_reason:needsConverter(n)?'dc_converter_missing':null,
         reasons:[...n.reasons],residual_kw:n.residual_kw,totals:n.totals,
         unaccounted_kw:n.unaccounted_kw,export_cap_kw:n.export_cap_kw,
         devices:n.devices.map(d=>({ ...d,name:devices.get(d.node_id)?.label||
@@ -42,22 +57,30 @@ const HASSStudioEnergyDiagnostics=(()=>{
       if(c.type!=='electric')continue;
       const state=result.byConnection[c.id]||HASSStudioEnergyFlow.unavailable('unconnected_or_missing_endpoints');
       const mode=c.animation?.flow_power_mode||'off';
+      const owner=networks[networkOf.get(c.id)];
+      const diagnosticReason=state.reason==='unbalanced'&&owner?.diagnostic_reason||
+        null;
       const item={id:c.id,name:cableName(c),network:state.network,available:state.available,
         kw:state.kw,direction:state.direction,source:state.source,mode,
-        sources:state.sources||[],reason:state.reason};
+        sources:state.sources||[],reason:state.reason,diagnostic_reason:diagnosticReason};
       cables.push(item);
       const idx=networkOf.get(c.id);
       if(idx!==undefined)networks[idx].cables.push(item);
     }
     const warnings=(balance.warnings||[]).map(w=>({
       reason:w.reason,node_id:w.node_id||null,connection_id:w.connection_id||null,
-      side:w.side||null,input_index:w.input_index??null,port_id:w.port_id||null
+      side:w.side||null,
+      input_index:Number.isInteger(w.input_index)&&w.input_index>=0&&
+        w.input_index<12?w.input_index:null,
+      port_id:w.port_id||null
     }));
     const dcTerminals=(balance.dc_terminals||[]).map(t=>({
       ...t,device_name:deviceName(t.node_id)
     }));
     for(const c of cables)if(!c.available&&!warnings.some(w=>w.connection_id===c.id&&w.reason===c.reason))
-      warnings.push({reason:c.reason||'unresolved_flow',connection_id:c.id,node_id:null,side:null});
+      warnings.push({reason:c.reason||'unresolved_flow',
+        diagnostic_reason:c.diagnostic_reason||null,
+        connection_id:c.id,node_id:null,side:null,input_index:null});
     return {options,enabled:balance.enabled===true,scenario:balance.config.scenario,
       networks,cables,warnings,dcTerminals,balanced:networks.filter(n=>n.state==='balanced').length,
       unresolved:networks.filter(n=>n.state!=='balanced').length};
@@ -66,6 +89,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
     pl:{
       title:'Bilans energii',off:'Bilans wyłączony',noNetwork:'Brak podłączonych sieci elektrycznych',
       network:'Sieć',status:'Stan',balanced:'Bilans prawidłowy',unbalanced:'Pomiary sprzeczne',
+      dc_converter_missing:'Brak modelu konwersji DC',
+      dc_converter_explanation:'Magazyn ładuje się z obwodu falownika, ale przepływ przez jego wewnętrzny przekształtnik nie jest jeszcze modelowany. Różnica mocy pozostaje nierozliczona; nie jest dowodem sprzecznych pomiarów.',
       insufficient:'Brak danych',invalid:'Nieprawidłowe dane',no_devices:'Brak odbiorników / źródeł',
       role:'Urządzenie',power:'Moc netto',source:'Źródło',cables:'Przewody',
       warnings:'Ostrzeżenia',direction:'Kierunek',residual:'Różnica bilansu',
@@ -114,6 +139,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
     en:{
       title:'Energy balance',off:'Balance disabled',noNetwork:'No connected electrical networks',
       network:'Network',status:'Status',balanced:'Balanced',unbalanced:'Conflicting readings',
+      dc_converter_missing:'DC conversion model missing',
+      dc_converter_explanation:'The battery is charging on an inverter-connected circuit, but its internal converter transfer is not modeled yet. The residual is unaccounted power, not proof of conflicting measurements.',
       insufficient:'Missing data',invalid:'Invalid readings',no_devices:'No sources / loads',
       role:'Device',power:'Net power',source:'Source',cables:'Cables',
       warnings:'Warnings',direction:'Direction',residual:'Balance residual',
@@ -205,12 +232,15 @@ const HASSStudioEnergyDiagnostics=(()=>{
         table(n.cables.map(c=>[c.name,
           c.available?(c.mode==='off'?label('animation_disabled')+' · ':'')+
             fmt(c.kw)+' · '+label(c.direction==='none'?'zero':c.direction):
-            label(c.reason||'unresolved_flow')])):'';
-      const reason=n.reasons.length?'<p class="ss-diag-caption">'+
-        n.reasons.map(r=>escape(label(r))).join(' · ')+'</p>':'';
+            label(c.diagnostic_reason||c.reason||'unresolved_flow')])):'';
+      const reason=n.diagnostic_reason?
+        '<p class="ss-diag-caption">'+escape(label('dc_converter_explanation'))+'</p>':
+        n.reasons.length?'<p class="ss-diag-caption">'+
+          n.reasons.map(r=>escape(label(r))).join(' · ')+'</p>':'';
       return '<article data-network-index="'+n.index+'" data-state="'+escape(n.state)+'">'+
         '<h5>'+escape(label('network')+' '+n.index+' ('+String(n.medium||'?').toUpperCase()+')')+'</h5>'+
-        '<p '+ 'data-state="'+escape(n.state)+'">'+escape(label(n.state))+'</p>'+
+        '<p '+ 'data-state="'+escape(n.state)+'">'+
+          escape(label(n.diagnostic_reason||n.state))+'</p>'+
         reason+numbers+rows+cables+'</article>';
     }).join('');
     const loose=view.cables.filter(c=>!view.networks.some(n=>n.cables.includes(c)));
@@ -227,9 +257,11 @@ const HASSStudioEnergyDiagnostics=(()=>{
           '<button type="button" data-energy-jump="'+escape(w.connection_id||w.node_id)+
           '" data-energy-jump-kind="'+(w.connection_id?'connection':'node')+'">'+
           escape(name||'Pokaż na schemacie')+'</button>':escape(name);
-        const input=w.input_index===null?'':' · MPPT '+(w.input_index+1);
+        const input=Number.isInteger(w.input_index)&&w.input_index>=0&&
+          w.input_index<12?' · MPPT '+(w.input_index+1):'';
         const port=w.port_id?' · '+w.port_id:'';
-        return '<li>'+escape(label(w.reason)+input+port)+(link?' · '+link:'')+'</li>';
+        return '<li>'+escape(label(w.diagnostic_reason||w.reason)+input+port)+
+          (link?' · '+link:'')+'</li>';
       }).join('')+'</ul>':
         '<p>'+escape(label('noWarnings'))+'</p>')+'</article>':'';
     const pvReadouts=view.dcTerminals.length?
