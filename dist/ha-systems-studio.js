@@ -6050,8 +6050,11 @@ const HASSStudioEditorInspector = (() => {
             cv.enabled?'true':'false','text',
             [['false','Wyłączony — starszy bilans'],['true','Włączony — model hybrydowy']]);
           if(cv.enabled){
-            const index=HASSStudioEnergyTopology.index(model),
-              found=HASSStudioEnergyTopology.hybridAttachments(index,obj.id);
+            const index=typeof HASSStudioEnergyTopology.index==='function'?
+              HASSStudioEnergyTopology.index(model):null,
+              found=index&&typeof HASSStudioEnergyTopology.hybridAttachments==='function'?
+                HASSStudioEnergyTopology.hybridAttachments(index,obj.id):
+                {ac_port_id:'',battery_port_id:'',ac_ambiguous:false,battery_ambiguous:false};
             converter+='<p class="ss-note">Rozpoznawanie przewodów: AC '+esc(
               found.ac_ambiguous?'niejednoznaczne':found.ac_port_id||'brak')+
               ', magazyn DC '+esc(found.battery_ambiguous?'niejednoznaczny':
