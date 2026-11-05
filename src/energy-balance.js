@@ -280,12 +280,37 @@ const HASSStudioEnergyBalance=(()=>{
     const overrides=new Map(config.participants.map(p=>[p.node_id,p]));
     const allNodes=(Array.isArray(src.nodes)?src.nodes:[]);
     const nodesById=new Map(allNodes.map(n=>[n.id,n]));
+    // Hybrid-only, ephemeral battery attachments. Existing legacy AC layouts
+    // remain unchanged; dual feed and multiple inverters fail closed.
+    const autoStoragePorts=new Map(),storageCandidates=new Map();
+    for(const inverter of allNodes){
+      if(inverter.type!=='inverter')continue;
+      const hybrid=HASSStudioInverter.normalize(inverter).hybrid;
+      if(!hybrid?.enabled||!hybrid.converter?.enabled)continue;
+      const found=HASSStudioEnergyTopology.hybridAttachments(topologyIndex,inverter.id);
+      for(const link of found.storage_links){
+        if(!storageCandidates.has(link.peer_node_id))
+          storageCandidates.set(link.peer_node_id,[]);
+        storageCandidates.get(link.peer_node_id).push(link);
+      }
+    }
+    for(const [id,links] of storageCandidates){
+      const storage=nodesById.get(id),c=HASSStudioEnergyStorage.normalize(storage);
+      if(c.coupling==='ac'||c.coupling_port_id)continue;
+      const ports=new Set(links.map(l=>l.peer_port_id)),
+        inverters=new Set(links.map(l=>l.node_id));
+      const attached=HASSStudioEnergyTopology.ports(storage).filter(p=>
+        keyGroup.has(HASSStudioEnergyTopology.busKey(id,p)));
+      if(ports.size===1&&inverters.size===1&&attached.length===1&&
+        attached[0].medium==='dc'&&ports.has(attached[0].id))
+        autoStoragePorts.set(id,[...ports][0]);
+    }
     // MPPT observations describe DC power entering the inverter, not the
     // battery bus. Report them separately from participants and totals.
     const dc_terminals=[];
     for(const n of allNodes){
       if(n.type!=='inverter')continue;
-      const mapping=HASSStudioInverter.dcTerminals(n,hass);
+      const mapping=HASSStudioInverter.dcTerminals(n,hass,topologyIndex);
       if(!mapping.enabled)continue;
       for(const issue of mapping.errors)
         warnings.push({reason:issue.reason,node_id:n.id,
@@ -306,17 +331,19 @@ const HASSStudioEnergyBalance=(()=>{
     const storage_terminals=[];
     for(const n of allNodes){
       if(n.type!=='energy_storage')continue;
-      const battery=HASSStudioEnergyStorage.dcTerminal(n,hass);
+      const inferred=autoStoragePorts.get(n.id)||'';
+      const battery=HASSStudioEnergyStorage.dcTerminal(n,hass,inferred);
       if(!battery.enabled)continue;
-      const c=HASSStudioEnergyStorage.normalize(n);
-      const port=HASSStudioEnergyTopology.ports(n).find(q=>q.id===c.coupling_port_id);
+      const c=HASSStudioEnergyStorage.normalize(n),
+        portId=c.coupling_port_id||inferred;
+      const port=HASSStudioEnergyTopology.ports(n).find(q=>q.id===portId);
       const network=port?.medium==='dc'?
         keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port)):null;
       const terminal={...battery.terminal,network_id:network?.id||null,connected:!!network};
       storage_terminals.push(terminal);
       for(const reason of battery.issues)
-        warnings.push({reason,node_id:n.id,port_id:c.coupling_port_id});
-      if(!c.coupling_port_id)
+        warnings.push({reason,node_id:n.id,port_id:portId});
+      if(!portId)
         warnings.push({reason:'dc_storage_port_required',node_id:n.id});
       else if(!port)
         warnings.push({reason:'dc_storage_port_missing',node_id:n.id,port_id:c.coupling_port_id});
@@ -338,14 +365,17 @@ const HASSStudioEnergyBalance=(()=>{
       let matches=ports.filter(port=>keyGroup.has(HASSStudioEnergyTopology.busKey(n.id,port)));
       const coupling=n.type==='energy_storage'?
         HASSStudioEnergyStorage.normalize(n):null;
-      // Explicit battery coupling is authoritative. Do not silently select
-      // another attached AC/DC port if the selected port is unavailable.
-      if(coupling&&coupling.coupling!=='legacy'){
-        if(p.port_id&&p.port_id!==coupling.coupling_port_id)
+      // Explicit selection wins; otherwise one validated DC wire may
+      // identify an opt-in hybrid storage terminal without migration.
+      const inferredPort=autoStoragePorts.get(n.id)||'';
+      if(coupling&&(coupling.coupling!=='legacy'||inferredPort)){
+        const effectivePort=coupling.coupling_port_id||inferredPort;
+        if(p.port_id&&p.port_id!==effectivePort)
           warnings.push({reason:'storage_coupling_override_conflict',node_id:n.id,
             port_id:p.port_id});
-        const selected=ports.find(q=>q.id===coupling.coupling_port_id);
-        const valid=!!selected&&selected.medium===coupling.coupling&&
+        const selected=ports.find(q=>q.id===effectivePort);
+        const valid=!!selected&&selected.medium===
+          (coupling.coupling==='legacy'?'dc':coupling.coupling)&&
           matches.some(q=>q.id===selected.id)&&
           (!p.port_id||p.port_id===selected.id);
         if(!valid){
@@ -354,11 +384,11 @@ const HASSStudioEnergyBalance=(()=>{
           // A wrong or unconnected selection must not accidentally result
           // in an apparently balanced network through some other port.
           for(const group of attached)group.devices.push({
-            node_id:n.id,node_type:n.type,port_id:coupling.coupling_port_id,
+            node_id:n.id,node_type:n.type,port_id:effectivePort,
             role,measurement:null,mode:'device',source:'invalid',
             injection_kw:null,reason:'invalid_storage_coupling'});
           warnings.push({reason:'invalid_storage_coupling',node_id:n.id,
-            port_id:coupling.coupling_port_id});
+            port_id:effectivePort});
           continue;
         }
         matches=[selected];
@@ -392,7 +422,8 @@ const HASSStudioEnergyBalance=(()=>{
     // optional module when no converter is configured.
     const converters=typeof HASSStudioEnergyConverter==='undefined'?[]:
       HASSStudioEnergyConverter.integrate({nodes:allNodes,keyGroup,topology,
-        dc_terminals,warnings,tolerance_kw:config.tolerance_kw});
+        dc_terminals,warnings,tolerance_kw:config.tolerance_kw,
+        topologyIndex,autoStoragePorts});
     const networks=[...grouped.values()].map(g=>{
       const entries=g.devices;
       adjustBuildings(g,src,topology,nodesById,warnings,config.tolerance_kw);
