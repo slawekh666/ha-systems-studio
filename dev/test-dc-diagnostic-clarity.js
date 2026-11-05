@@ -25,15 +25,23 @@ const storage=power=>node('storage','energy_storage',[pt('dc')],{
 const board=node('board','distribution_board',[pt('a'),pt('b')]);
 const layout=(nodes,connections)=>ctx.layout.normalized({studio_layout:{
  nodes,connections,energy_balance:{enabled:true},energy_diagnostics:{enabled:true}}});
-const scenario=layout([inv,storage(1.5)],[wire('dc_wire','inverter','battery','storage','dc')]);
+// The real installation has an AC-connected inverter and a separate DC battery
+// branch. This makes the inverter participate on AC only; DC storage is known.
+const grid=node('grid','power_grid',[pt('ac','ac')],{energy_grid_auto:true});
+const scenario=layout([inv,storage(1.5),grid],[
+ wire('ac_wire','inverter','ac','grid','ac'),
+ wire('dc_wire','inverter','battery','storage','dc')]);
 const numericalBefore=JSON.stringify(ctx.balance.resolve(scenario,{states:{}}));
 const view=ctx.diag.viewModel(scenario,{states:{}});
-assert.equal(view.networks.length,1);
-assert.equal(view.networks[0].state,'unbalanced');
-assert.equal(view.networks[0].diagnostic_reason,'dc_converter_missing');
-assert.equal(view.networks[0].residual_kw,-1.5);
-assert.equal(view.cables[0].reason,'unbalanced');
-assert.equal(view.cables[0].diagnostic_reason,'dc_converter_missing');
+assert.equal(view.networks.length,2);
+const dc=view.networks.find(n=>n.medium==='dc');
+assert.equal(dc.state,'unbalanced');
+assert.equal(dc.diagnostic_reason,'dc_converter_missing');
+assert.equal(dc.residual_kw,-1.5);
+const dcWire=view.cables.find(c=>c.id==='dc_wire');
+assert.equal(dcWire.reason,'unbalanced');
+assert.equal(dcWire.diagnostic_reason,'dc_converter_missing');
+assert.equal(view.networks.find(n=>n.medium==='ac').diagnostic_reason,null);
 assert(view.warnings.some(w=>w.connection_id==='dc_wire'&&w.diagnostic_reason==='dc_converter_missing'));
 const pl=ctx.diag.render(scenario,{states:{}},'pl');
 assert(pl.includes('Brak modelu konwersji DC'));
@@ -46,17 +54,22 @@ const en=ctx.diag.render(scenario,{states:{}},'en');
 assert(en.includes('DC conversion model missing'));
 assert(!en.includes('MPPT NaN'));
 assert.equal(JSON.stringify(ctx.balance.resolve(scenario,{states:{}})),numericalBefore,'Rendering must not alter numerical results');
-// A known DC source but contradictory known values must remain genuinely unbalanced.
-const dcSource=node('source','power_grid',[pt('dc')],{
- energy_role:'source',energy_mode:'test',energy_grid_auto:false});
-const contradictory=layout([storage(1.5),dcSource],[wire('dc_wire','source','dc','storage','dc')]);
+// Known DC participants with an actual nonzero residual remain contradictory,
+// not "converter missing", when no inverter is involved.
+const discharging=node('discharging','energy_storage',[pt('dc')],{
+ label:'Discharging battery',energy_mode:'test',
+ energy_storage:{mode:'manual',manual:{soc:75,power:-0.5}}});
+const contradictory=layout([storage(1.5),discharging],[
+ wire('dc_wire','discharging','dc','storage','dc')]);
 const cview=ctx.diag.viewModel(contradictory,{states:{}});
 assert.equal(cview.networks[0].diagnostic_reason,null);
 assert.equal(cview.networks[0].state,'unbalanced');
 assert(ctx.diag.render(contradictory,{states:{}},'pl').includes('Pomiary sprzeczne'));
 // Missing HA readings should still show the old missing-data status.
 const missingStore=storage(1.5);missingStore.energy_mode='ha';
-const missing=layout([inv,missingStore],[wire('dc_wire','inverter','battery','storage','dc')]);
+const missing=layout([inv,missingStore,grid],[
+ wire('ac_wire','inverter','ac','grid','ac'),
+ wire('dc_wire','inverter','battery','storage','dc')]);
 const missingView=ctx.diag.viewModel(missing,{states:{}});
 assert.equal(missingView.networks[0].diagnostic_reason,null);
 assert.equal(missingView.networks[0].state,'insufficient');
