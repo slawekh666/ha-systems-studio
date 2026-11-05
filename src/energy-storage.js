@@ -93,7 +93,7 @@ const HASSStudioEnergyStorage=(()=>{
       return {enabled:false,terminal:null,issues:[]};
     const observed=HASSStudioHA.powerInput(
       node,h,c.entities.power,c.manual.power,c.mode,true);
-    const kw=observed.kw,injection=kw===null?null:
+    const kw=observed.kw,injection=kw===null?null:kw===0?0:
       c.charge_positive?-kw:kw;
     const test=node?.energy_mode==='test'||
       (node?.energy_mode==null&&c.mode==='manual');
