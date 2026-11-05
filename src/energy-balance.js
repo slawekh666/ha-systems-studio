@@ -271,28 +271,12 @@ const HASSStudioEnergyBalance=(()=>{
   const resolve=(layout,hass)=>{
     const src=layout?.studio_layout||layout||{},config=normalize(src.energy_balance);
     if(!config.enabled)return {enabled:false,config,networks:[],warnings:[],topology:null};
-    const topology=HASSStudioEnergyTopology.graph(src);
+    // The same validated, medium-partitioned index is authoritative for
+    // both AC and DC. Later device discovery uses its read-only endpoint links.
+    const topologyIndex=HASSStudioEnergyTopology.index(src);
+    const topology=topologyIndex.graph,
+      {grouped,keyGroup}=topologyIndex;
     const warnings=topology.errors.map(e=>({reason:e.reason,connection_id:e.connection,side:e.side||null}));
-    const parent=new Map();
-    const find=x=>{
-      if(!parent.has(x))parent.set(x,x);
-      const val=parent.get(x);
-      if(val!==x)parent.set(x,find(val));
-      return parent.get(x);
-    };
-    for(const e of topology.edges){
-      const a=find(e.from),b=find(e.to);
-      if(a!==b)parent.set(b,a);
-    }
-    const grouped=new Map();
-    for(const e of topology.edges){
-      const root=find(e.from);
-      if(!grouped.has(root))grouped.set(root,{id:root,medium:e.medium,connection_ids:[],ports:new Set(),devices:[]});
-      const group=grouped.get(root);
-      group.connection_ids.push(e.id);group.ports.add(e.from);group.ports.add(e.to);
-    }
-    const keyGroup=new Map();
-    for(const g of grouped.values())for(const k of g.ports)keyGroup.set(k,g);
     const overrides=new Map(config.participants.map(p=>[p.node_id,p]));
     const allNodes=(Array.isArray(src.nodes)?src.nodes:[]);
     const nodesById=new Map(allNodes.map(n=>[n.id,n]));
