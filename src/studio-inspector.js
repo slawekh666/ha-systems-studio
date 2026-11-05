@@ -109,7 +109,7 @@ const HASSStudioEditorInspector = (() => {
             'inv_manual_alarm',c.manual.alarm?'true':'false',[
               ['false','Brak alarmu'],['true','Alarm']]);
         readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
-        readings+=field('Powiąż wejścia PV z portami DC (wersja testowa)',
+        readings+=field('Włącz wejścia PV / MPPT (model hybrydowy)',
           'inv_hybrid_enabled',c.hybrid?.enabled?'true':'false','text',
           [['true','Tak'],['false','Nie — zachowaj starszy model']]);
         if(c.hybrid?.enabled){
@@ -125,11 +125,20 @@ const HASSStudioEditorInspector = (() => {
           let converter=field('Model przekształtnika AC/DC','inv_converter_enabled',
             cv.enabled?'true':'false','text',
             [['false','Wyłączony — starszy bilans'],['true','Włączony — model hybrydowy']]);
-          if(cv.enabled)converter+=
+          if(cv.enabled){
+            const index=HASSStudioEnergyTopology.index(model),
+              found=HASSStudioEnergyTopology.hybridAttachments(index,obj.id);
+            converter+='<p class="ss-note">Rozpoznawanie przewodów: AC '+esc(
+              found.ac_ambiguous?'niejednoznaczne':found.ac_port_id||'brak')+
+              ', magazyn DC '+esc(found.battery_ambiguous?'niejednoznaczny':
+              found.battery_port_id||'brak')+
+              '. Brak fizycznego PV nie blokuje logicznych odczytów MPPT.</p>';
+            converter+='<details class="ss-section-details">'+
+              '<summary>Zaawansowane: ręczne przypisanie portów (opcjonalne)</summary>'+
             field('Port AC przekształtnika','inv_converter_ac_port_id',
               cv.ac_port_id,'text',acChoices)+
             field('Port DC magazynu przy falowniku','inv_converter_battery_port_id',
-              cv.battery_port_id,'text',dcChoices)+
+              cv.battery_port_id,'text',dcChoices)+'</details>'+
             field('Źródło PV','inv_converter_pv_mode',cv.pv_mode,'text',
               [['mapped','Powiązane wejścia PV / MPPT'],['none','Brak PV — świadomie']])+
             field('Moc AC falownika','inv_converter_ac_mode',cv.ac_mode,'text',
@@ -142,6 +151,7 @@ const HASSStudioEditorInspector = (() => {
               'inv_converter_battery_efficiency_percent',
               cv.battery_efficiency_percent??'','number',null,
               'min="0.1" max="100" step="0.1"');
+          }
           converter+='<p class="ss-note">Konwerter NIE łączy fizycznie sieci AC i DC. '+
             'Moc AC z pomiaru ma pierwszeństwo w trybie automatycznym; brakująca moc '+
             'może być oszacowana tylko z jawnie podanej sprawności DC/AC i kompletnych odczytów. '+
@@ -164,10 +174,13 @@ const HASSStudioEditorInspector = (() => {
               input.visible?'true':'false','text',[['true','Tak'],['false','Nie']])+
             field('Wymagaj poprawnego odczytu mocy','inv_pv_'+i+'_required',
               input.required?'true':'false','text',[['true','Tak'],['false','Nie']])+
-            (c.hybrid?.enabled?field('Port DC dla '+input.name,'inv_pv_'+i+'_port',
+            (c.hybrid?.enabled?'<details class="ss-section-details">'+
+              '<summary>Zaawansowane: przypisanie fizycznego portu MPPT</summary>'+
+              field('Port DC dla '+input.name,'inv_pv_'+i+'_port',
               c.hybrid.pv_ports[i]||'','text',
               dcOptions.concat(c.hybrid.pv_ports[i]&&!dcOptions.some(x=>x[0]===c.hybrid.pv_ports[i])?
-                [[c.hybrid.pv_ports[i],'Nieistniejący port: '+c.hybrid.pv_ports[i]]]:[])):'')+
+                [[c.hybrid.pv_ports[i],'Nieistniejący port: '+c.hybrid.pv_ports[i]]]:[]))+
+              '</details>':'')+
             numeric(inverterFields.pv.voltage.label+' '+input.name+' ('+inverterFields.pv.voltage.unit+')','inv_pv_'+i+'_entity_voltage',
               input.entities.voltage,'inv_pv_'+i+'_manual_voltage',manualValue('voltage'))+
             numeric(inverterFields.pv.current.label+' '+input.name+' ('+inverterFields.pv.current.unit+')','inv_pv_'+i+'_entity_current',
@@ -495,9 +508,11 @@ const HASSStudioEditorInspector = (() => {
               .map(port=>[port.id,(port.label||port.id)+' ('+port.id+')'])];
             if(c.coupling_port_id&&!options.some(p=>p[0]===c.coupling_port_id))
               options.push([c.coupling_port_id,'Nieprawidłowy port: '+c.coupling_port_id]);
-            markup+=field('Fizyczny port magazynu','storage_coupling_port_id',
-              c.coupling_port_id,'text',options);
-            markup+='<p class="ss-note">Wybór przyłącza nie zmienia typu portów ani przewodów. '+
+            markup+='<details class="ss-section-details">'+
+              '<summary>Zaawansowane: nadpisz automatyczny port magazynu</summary>'+
+              field('Fizyczny port magazynu','storage_coupling_port_id',
+              c.coupling_port_id,'text',options)+'</details>';
+            markup+='<p class="ss-note">Jeśli połączenie DC jest jednoznaczne, port zostanie rozpoznany z przewodu. Wybór przyłącza nie zmienia typu portów ani przewodów. '+
               'Jeśli portu '+c.coupling.toUpperCase()+' nie ma, dodaj go w ustawieniach zaawansowanych i podłącz przewód.</p>';
           }
           if(c.coupling==='dc'){
