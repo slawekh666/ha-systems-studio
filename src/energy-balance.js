@@ -289,6 +289,26 @@ const HASSStudioEnergyBalance=(()=>{
     const overrides=new Map(config.participants.map(p=>[p.node_id,p]));
     const allNodes=(Array.isArray(src.nodes)?src.nodes:[]);
     const nodesById=new Map(allNodes.map(n=>[n.id,n]));
+    // MPPT observations describe DC power entering the inverter, not the
+    // battery bus. Report them separately from participants and totals.
+    const dc_terminals=[];
+    for(const n of allNodes){
+      if(n.type!=='inverter')continue;
+      const mapping=HASSStudioInverter.dcTerminals(n,hass);
+      if(!mapping.enabled)continue;
+      for(const issue of mapping.errors)
+        warnings.push({reason:issue.reason,node_id:n.id,
+          input_index:issue.input_index,port_id:issue.port_id});
+      const portsById=new Map(HASSStudioEnergyTopology.ports(n).map(p=>[p.id,p]));
+      for(const terminal of mapping.terminals){
+        const port=portsById.get(terminal.port_id);
+        const network=port?keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port)):null;
+        if(!network)
+          warnings.push({reason:'pv_dc_unconnected_port',node_id:n.id,
+            port_id:terminal.port_id,input_index:terminal.input_index});
+        dc_terminals.push({...terminal,network_id:network?.id||null,connected:!!network});
+      }
+    }
     for(const n of allNodes){
       const descriptor=HASSStudioEnergyTopology.node(n);
       const role=descriptor.role;
@@ -309,6 +329,15 @@ const HASSStudioEnergyBalance=(()=>{
       if(!unique.size){warnings.push({reason:'unconnected_device',node_id:n.id});continue;}
       if(unique.size!==1){warnings.push({reason:'ambiguous_device_network',node_id:n.id});continue;}
       const [group,port]=[...unique][0];
+      // Legacy inverter AC power must not be assigned to a DC-only network.
+      // An explicit participant override cannot bypass this safety guard.
+      if(n.type==='inverter'&&port.medium==='dc'){
+        warnings.push({reason:'inverter_ac_reading_on_dc_network',node_id:n.id,port_id:port.id});
+        group.devices.push({node_id:n.id,node_type:n.type,port_id:port.id,
+          role,measurement:null,mode:'device',source:'missing',injection_kw:null,
+          reason:'inverter_ac_reading_on_dc_network'});
+        continue;
+      }
       const reading=measure(n,role,p,hass,config.scenario);
       const measurement=n.type==='building'?HASSStudioBuilding.normalize(n).measurement:null;
       group.devices.push({node_id:n.id,node_type:n.type,port_id:port.id,role,measurement,
@@ -376,7 +405,7 @@ const HASSStudioEnergyBalance=(()=>{
         residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons,
         unaccounted_kw,export_cap_kw};
     });
-    return {enabled:true,config,networks,warnings,topology};
+    return {enabled:true,config,networks,warnings,topology,dc_terminals};
   };
   return Object.freeze({MAX_ASSIGNMENTS,defaults,normalize,participant,haPower,injection,deviceReading,measure,totals,solve,resolve});
 })();
