@@ -722,13 +722,10 @@
       else if(obj.type==='building'&&key.startsWith('building_')){
         const c=obj.building=obj.building||HASSStudioBuilding.defaults(),k=key.slice(9);
         if(k==='mode')c.mode=val==='manual'?'manual':'live';
-        else if(k==='measurement')c.measurement=val==='aggregate'?'aggregate':'individual';
-        else if(k==='remaining_enabled')c.remaining_enabled=val==='true';
-        else if(k==='remaining_kw')c.remaining_kw=clamp(val,0,10000,0);
         else if(['power_entity','daily_entity'].includes(k))c[k]=validEntity(val)?val:'';
         else if(['show_readout','window_glow'].includes(k))c[k]=val==='true';
         else if(k==='readout_scale')c[k]=clamp(val,40,150,100)/100;
-        else if(k==='power_kw'){c[k]=clamp(val,0,10000,0);obj.energy_test_configured=true;}
+        else if(k==='power_kw'){HASSStudioBuilding.setManualPower(obj,val);obj.energy_test_configured=true;}
         else if(k==='daily_kwh')c[k]=clamp(val,0,1000000,0);
       }else if(obj.type==='ev_charger'&&key.startsWith('ev_')){
         const e=obj.ev_charger=obj.ev_charger||HASSStudioEVCharger.defaults(),k=key.slice(3);

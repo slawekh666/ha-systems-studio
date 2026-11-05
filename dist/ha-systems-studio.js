@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.31-dev';
+const VERSION = '0.4.32-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -3211,6 +3211,14 @@ const HASSStudioBuilding=(()=>{
     field_sources:Object.freeze(field_sources)
   });
  };
+ // Preserve the effective manual value of legacy individual/remaining meters.
+ const manualPower=c=>c.measurement==='individual'&&c.remaining_enabled?c.remaining_kw:c.power_kw;
+ const setManualPower=(node,value)=>{
+  const c=node.building||(node.building=defaults()),old=normalize(node);
+  const key=old.measurement==='individual'&&old.remaining_enabled?'remaining_kw':'power_kw';
+  c[key]=clamp(value,old.measurement==='net'?-10000:0,10000,0);
+  return c[key];
+ };
  const numeric=(h,id,kind)=>{
   const x=HASSStudioHA.reading(h,id);
   if(!x||x.value<0)return null;
@@ -3220,7 +3228,7 @@ const HASSStudioBuilding=(()=>{
  const data=(node,h)=>{
   const c=normalize(node);
   const power=HASSStudioHA.powerInput(node,h,c.power_entity,
-    c.measurement==='individual'&&c.remaining_enabled?c.remaining_kw:c.power_kw,c.mode).kw;
+    manualPower(c),c.mode).kw;
   const daily=c.mode==='manual'?c.daily_kwh:numeric(h,c.daily_entity,'energy');
   return {c,power,daily,measurement:c.measurement};
  };
@@ -3243,7 +3251,7 @@ const HASSStudioBuilding=(()=>{
   graphic=HASSStudioSvg.namespaceIds(graphic+box,prefix);
   return '<svg width="150" height="150" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">'+graphic+'</svg>';
  };
- return Object.freeze({defaults,normalize,powerSnapshot,data,geometry,render});
+ return Object.freeze({defaults,normalize,powerSnapshot,manualPower,setManualPower,data,geometry,render});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioBuilding;
 
@@ -5266,9 +5274,9 @@ const HASSStudioEditorInspector = (() => {
           if(mode==='auto')markup+=field('Wartość testowa, gdy czujnik HA nie działa',
             'energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',
             [['true','Włączona'],['false','Wyłączona']]);
-          const metric=(title,entityKey,entity,testKey,testValue,unit='kW')=>{
+          const metric=(title,entityKey,entity,testKey,testValue,unit='kW',entityLabel='Czujnik Home Assistant')=>{
             markup+='<div class="ss-metric-group"><strong>'+esc(title)+'</strong>'+
-              field('Czujnik Home Assistant',entityKey,entity||'','search',null,'list="ss-entity-list"');
+              field(entityLabel,entityKey,entity||'','search',null,'list="ss-entity-list"');
             if(test)markup+='<div class="ss-metric-test">'+
               field(title+' — TEST',testKey,testValue??'','number',null,'step="0.01"')+'</div>';
             markup+='</div>';
@@ -5288,8 +5296,8 @@ const HASSStudioEditorInspector = (() => {
             metric('Moc chwilowa falownika (kW)','inv_entity_ac_power',c.entities.ac_power,
               'inv_manual_ac_power',c.manual.ac_power);
           else if(obj.type==='building')
-            metric('Moc chwilowa budynku (kW)','building_power_entity',c.power_entity,
-              'building_power_kw',c.power_kw);
+            metric('Pobór budynku (kW)','building_power_entity',c.power_entity,
+               'building_power_kw',HASSStudioBuilding.manualPower(c),'kW','Encja mocy (W/kW)');
           else if(obj.type==='energy_storage')
             metric('Moc magazynu (kW): dodatnia — ładowanie','storage_entity_power',c.entities.power,
               'storage_manual_power',c.manual.power);
@@ -5384,11 +5392,13 @@ const HASSStudioEditorInspector = (() => {
           
           
           markup+=field('Zużycie dzienne (Wh/kWh/MWh)','building_daily_entity',c.daily_entity,'search',null,'list="ss-entity-list"');
-          markup+=field('Typ pomiaru','building_measurement',c.measurement,'text',
-            [['individual','Pozostały pobór (bez głównego licznika)'],['aggregate','Łączny pobór domu wraz z odbiornikami za nim']]);
-          if(c.measurement==='individual')markup+=field('Ręczny pozostały pobór','building_remaining_enabled',c.remaining_enabled?'true':'false','text',[['true','Tak'],['false','Nie']])+
-            (c.remaining_enabled?field('Pozostały pobór testowy (kW)','building_remaining_kw',c.remaining_kw,'number',null,'min="0" step="0.01"'):'');
-          markup+='<p class="ss-note">Urządzenia podłączone do portu child automatycznie wydzielają swój pobór z całkowitego pomiaru budynku.</p>';
+          // Old measurement modes survive in saved layouts; do not silently change their accounting.
+          if(c.measurement==='individual')
+            markup+='<p class="ss-note">Starsza konfiguracja: pomiar obejmuje wyłącznie własny pobór budynku. Odbiorniki podrzędne są doliczane oddzielnie. Zachowano dotychczasowe rozliczenie.</p>';
+          else if(c.measurement==='net')
+            markup+='<p class="ss-note">Starsza konfiguracja: pomiar netto na granicy budynku. Wartość ujemna oznacza eksport. Zachowano dotychczasowe rozliczenie.</p>';
+          else
+            markup+='<p class="ss-note">Pobór budynku obejmuje odbiorniki przyporządkowane na podstawie połączeń AC. Ich poboru nie dodajemy ponownie. Gdy odbiorniki przekraczają pomiar, bilans zgłasza błąd.</p>';
           markup+=field('Pokaż odczyt','building_show_readout',c.show_readout?'true':'false','text',[['true','Tak'],['false','Nie']]);
           markup+=field('Skala odczytu (%)','building_readout_scale',Math.round(c.readout_scale*100),'range',null,'min="40" max="150" step="5"');
           markup+=field('Podświetlaj okna przy poborze','building_window_glow',c.window_glow?'true':'false','text',[['true','Tak'],['false','Nie']]);
@@ -6582,13 +6592,10 @@ const HASSStudioEditorLibrary=(()=>{
       else if(obj.type==='building'&&key.startsWith('building_')){
         const c=obj.building=obj.building||HASSStudioBuilding.defaults(),k=key.slice(9);
         if(k==='mode')c.mode=val==='manual'?'manual':'live';
-        else if(k==='measurement')c.measurement=val==='aggregate'?'aggregate':'individual';
-        else if(k==='remaining_enabled')c.remaining_enabled=val==='true';
-        else if(k==='remaining_kw')c.remaining_kw=clamp(val,0,10000,0);
         else if(['power_entity','daily_entity'].includes(k))c[k]=validEntity(val)?val:'';
         else if(['show_readout','window_glow'].includes(k))c[k]=val==='true';
         else if(k==='readout_scale')c[k]=clamp(val,40,150,100)/100;
-        else if(k==='power_kw'){c[k]=clamp(val,0,10000,0);obj.energy_test_configured=true;}
+        else if(k==='power_kw'){HASSStudioBuilding.setManualPower(obj,val);obj.energy_test_configured=true;}
         else if(k==='daily_kwh')c[k]=clamp(val,0,1000000,0);
       }else if(obj.type==='ev_charger'&&key.startsWith('ev_')){
         const e=obj.ev_charger=obj.ev_charger||HASSStudioEVCharger.defaults(),k=key.slice(3);

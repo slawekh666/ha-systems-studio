@@ -188,9 +188,9 @@ const HASSStudioEditorInspector = (() => {
           if(mode==='auto')markup+=field('Wartość testowa, gdy czujnik HA nie działa',
             'energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',
             [['true','Włączona'],['false','Wyłączona']]);
-          const metric=(title,entityKey,entity,testKey,testValue,unit='kW')=>{
+          const metric=(title,entityKey,entity,testKey,testValue,unit='kW',entityLabel='Czujnik Home Assistant')=>{
             markup+='<div class="ss-metric-group"><strong>'+esc(title)+'</strong>'+
-              field('Czujnik Home Assistant',entityKey,entity||'','search',null,'list="ss-entity-list"');
+              field(entityLabel,entityKey,entity||'','search',null,'list="ss-entity-list"');
             if(test)markup+='<div class="ss-metric-test">'+
               field(title+' — TEST',testKey,testValue??'','number',null,'step="0.01"')+'</div>';
             markup+='</div>';
@@ -210,8 +210,8 @@ const HASSStudioEditorInspector = (() => {
             metric('Moc chwilowa falownika (kW)','inv_entity_ac_power',c.entities.ac_power,
               'inv_manual_ac_power',c.manual.ac_power);
           else if(obj.type==='building')
-            metric('Moc chwilowa budynku (kW)','building_power_entity',c.power_entity,
-              'building_power_kw',c.power_kw);
+            metric('Pobór budynku (kW)','building_power_entity',c.power_entity,
+               'building_power_kw',HASSStudioBuilding.manualPower(c),'kW','Encja mocy (W/kW)');
           else if(obj.type==='energy_storage')
             metric('Moc magazynu (kW): dodatnia — ładowanie','storage_entity_power',c.entities.power,
               'storage_manual_power',c.manual.power);
@@ -306,11 +306,13 @@ const HASSStudioEditorInspector = (() => {
           
           
           markup+=field('Zużycie dzienne (Wh/kWh/MWh)','building_daily_entity',c.daily_entity,'search',null,'list="ss-entity-list"');
-          markup+=field('Typ pomiaru','building_measurement',c.measurement,'text',
-            [['individual','Pozostały pobór (bez głównego licznika)'],['aggregate','Łączny pobór domu wraz z odbiornikami za nim']]);
-          if(c.measurement==='individual')markup+=field('Ręczny pozostały pobór','building_remaining_enabled',c.remaining_enabled?'true':'false','text',[['true','Tak'],['false','Nie']])+
-            (c.remaining_enabled?field('Pozostały pobór testowy (kW)','building_remaining_kw',c.remaining_kw,'number',null,'min="0" step="0.01"'):'');
-          markup+='<p class="ss-note">Urządzenia podłączone do portu child automatycznie wydzielają swój pobór z całkowitego pomiaru budynku.</p>';
+          // Old measurement modes survive in saved layouts; do not silently change their accounting.
+          if(c.measurement==='individual')
+            markup+='<p class="ss-note">Starsza konfiguracja: pomiar obejmuje wyłącznie własny pobór budynku. Odbiorniki podrzędne są doliczane oddzielnie. Zachowano dotychczasowe rozliczenie.</p>';
+          else if(c.measurement==='net')
+            markup+='<p class="ss-note">Starsza konfiguracja: pomiar netto na granicy budynku. Wartość ujemna oznacza eksport. Zachowano dotychczasowe rozliczenie.</p>';
+          else
+            markup+='<p class="ss-note">Pobór budynku obejmuje odbiorniki przyporządkowane na podstawie połączeń AC. Ich poboru nie dodajemy ponownie. Gdy odbiorniki przekraczają pomiar, bilans zgłasza błąd.</p>';
           markup+=field('Pokaż odczyt','building_show_readout',c.show_readout?'true':'false','text',[['true','Tak'],['false','Nie']]);
           markup+=field('Skala odczytu (%)','building_readout_scale',Math.round(c.readout_scale*100),'range',null,'min="40" max="150" step="5"');
           markup+=field('Podświetlaj okna przy poborze','building_window_glow',c.window_glow?'true':'false','text',[['true','Tak'],['false','Nie']]);

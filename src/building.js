@@ -116,6 +116,14 @@ const HASSStudioBuilding=(()=>{
     field_sources:Object.freeze(field_sources)
   });
  };
+ // Preserve the effective manual value of legacy individual/remaining meters.
+ const manualPower=c=>c.measurement==='individual'&&c.remaining_enabled?c.remaining_kw:c.power_kw;
+ const setManualPower=(node,value)=>{
+  const c=node.building||(node.building=defaults()),old=normalize(node);
+  const key=old.measurement==='individual'&&old.remaining_enabled?'remaining_kw':'power_kw';
+  c[key]=clamp(value,old.measurement==='net'?-10000:0,10000,0);
+  return c[key];
+ };
  const numeric=(h,id,kind)=>{
   const x=HASSStudioHA.reading(h,id);
   if(!x||x.value<0)return null;
@@ -125,7 +133,7 @@ const HASSStudioBuilding=(()=>{
  const data=(node,h)=>{
   const c=normalize(node);
   const power=HASSStudioHA.powerInput(node,h,c.power_entity,
-    c.measurement==='individual'&&c.remaining_enabled?c.remaining_kw:c.power_kw,c.mode).kw;
+    manualPower(c),c.mode).kw;
   const daily=c.mode==='manual'?c.daily_kwh:numeric(h,c.daily_entity,'energy');
   return {c,power,daily,measurement:c.measurement};
  };
@@ -148,6 +156,6 @@ const HASSStudioBuilding=(()=>{
   graphic=HASSStudioSvg.namespaceIds(graphic+box,prefix);
   return '<svg width="150" height="150" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">'+graphic+'</svg>';
  };
- return Object.freeze({defaults,normalize,powerSnapshot,data,geometry,render});
+ return Object.freeze({defaults,normalize,powerSnapshot,manualPower,setManualPower,data,geometry,render});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioBuilding;
