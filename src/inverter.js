@@ -95,29 +95,48 @@ const HASSStudioInverter=(()=>{
  };
  // An MPPT reading measures power entering the inverter on a separate PV
  // circuit. It is NOT a battery-bus generator or an AC/DC converter transfer.
- const dcTerminals=(node,h)=>{
+ const dcTerminals=(node,h,topologyIndex=null)=>{
    const c=normalize(node);
    if(node?.type!=='inverter'||c.hybrid?.enabled!==true)
      return {enabled:false,terminals:[],errors:[]};
    const terminals=[],errors=[],seen=new Set(),
      byId=new Map(HASSStudioEnergyTopology.ports(node).map(p=>[p.id,p])),
-     inputs=HASSStudioInverterReadings.resolve(node,h,c).inputs;
+     inputs=HASSStudioInverterReadings.resolve(node,h,c).inputs,
+     converter=c.hybrid.converter?.enabled===true,
+     connected=converter&&topologyIndex?
+       HASSStudioEnergyTopology.hybridAttachments(topologyIndex,node.id):null,
+     explicit=new Set(c.hybrid.pv_ports.filter(Boolean)),
+     unbound=inputs.map((v,i)=>({i,v})).filter(({i,v})=>
+       !c.hybrid.pv_ports[i]&&(c.inputs[i].required||v.watts!==null)),
+     physical=connected?.pv_port_ids.filter(id=>!explicit.has(id))||[];
+   // Match physical DC PV branches only when the correspondence is unique.
+   // Otherwise the MPPT remains unresolved, not guessed by drawing order.
+   const inferred=physical.length===1&&unbound.length===1?
+     new Map([[unbound[0].i,physical[0]]]):new Map();
    for(let i=0;i<c.count;i++){
-     const portId=c.hybrid.pv_ports[i],input=c.inputs[i];
-     if(!portId){
+     const input=c.inputs[i],value=inputs[i],
+       portId=c.hybrid.pv_ports[i]||inferred.get(i)||'';
+     if(!portId&&!converter){
        if(input.required)errors.push({reason:'pv_dc_required_mapping_missing',input_index:i,port_id:''});
        continue;
      }
+     if(!portId&&converter&&!input.required&&value.watts===null)continue;
      const report=reason=>errors.push({reason,input_index:i,port_id:portId});
-     if(seen.has(portId)){report('pv_dc_duplicate_mapping');continue;}
-     seen.add(portId);
-     const port=byId.get(portId);
-     if(!port){report('pv_dc_missing_port');continue;}
-     if(port.medium!=='dc'){report('pv_dc_wrong_medium');continue;}
-     const value=inputs[i],powerKw=value.watts===null?null:value.watts/1000;
+     if(!portId&&physical.length&&!inferred.size){
+       report('pv_dc_ambiguous_physical_source');continue;
+     }
+     if(portId){
+       if(seen.has(portId)){report('pv_dc_duplicate_mapping');continue;}
+       seen.add(portId);
+       const port=byId.get(portId);
+       if(!port){report('pv_dc_missing_port');continue;}
+       if(port.medium!=='dc'){report('pv_dc_wrong_medium');continue;}
+     }
+     const powerKw=value.watts===null?null:value.watts/1000;
      terminals.push({node_id:node.id,port_id:portId,input_index:i,
        input_name:input.name,medium:'dc',measurement_point:'inverter_mppt_input',
-       power_kw:powerKw,injection_kw:powerKw===null?null:-powerKw,
+       logical:!portId,power_kw:powerKw,
+       injection_kw:powerKw===null?null:-powerKw,
        source:value.power_source,status:value.status,included_in_balance:false});
      if(powerKw===null&&input.required)report('pv_dc_missing_measurement');
    }
