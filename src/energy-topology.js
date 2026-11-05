@@ -19,6 +19,10 @@ const HASSStudioEnergyTopology=(()=>{
    if(n.type==='distribution_board')return [ac('left1',0,32),ac('left2',0,68),ac('right1',100,32),ac('right2',100,68)];
    if(n.type==='inverter')return [ac('ac',100,55),{id:'pv1',label:'PV1',medium:'dc',bus:'pv1',x:0,y:30},{id:'pv2',label:'PV2',medium:'dc',bus:'pv2',x:0,y:70}];
    if(n.type==='power_grid')return [ac('ac',100,50)];
+   // New storage offers both physical media. Existing saved energy_ports
+   // remain unchanged and retain their original AC wiring.
+   if(n.type==='energy_storage')return [ac('ac',0,50),
+     {id:'dc',label:'DC',medium:'dc',bus:'battery',x:100,y:50}];
    return [ac('ac',n.type==='pump'?50:0,50)];
  };
  const ports=n=>(Array.isArray(n?.energy_ports)?n.energy_ports:defaultPorts(n)).slice(0,MAX_PORTS)
@@ -156,6 +160,29 @@ const HASSStudioEnergyTopology=(()=>{
      linksByNode,nodesById};
  };
 
+ // Classify only direct, validated electrical links. The index suppresses
+ // invalid and duplicate cable IDs, so neither can authorize auto binding.
+ // This function is pure and does not persist a device/port mapping.
+ const hybridAttachments=(idx,nodeId)=>{
+   const links=idx.linksByNode.get(nodeId)||[],nodes=idx.nodesById;
+   const ac=new Set(),battery=new Set(),pv=new Set(),storage_links=[];
+   for(const link of links){
+     if(link.medium==='ac'){ac.add(link.port_id);continue;}
+     if(link.medium!=='dc')continue;
+     const peer=nodes.get(link.peer_node_id);
+     if(peer?.type==='energy_storage'){
+       battery.add(link.port_id);storage_links.push(link);
+     }else if(peer&&(peer.type==='pv_source'||
+       peer.energy_role==='source'&&peer.type!=='inverter'))
+       pv.add(link.port_id);
+   }
+   const unique=set=>set.size===1?[...set][0]:'';
+   return {ac_port_id:unique(ac),battery_port_id:unique(battery),
+     pv_port_ids:[...pv],storage_links,
+     ac_ambiguous:ac.size>1,battery_ambiguous:battery.size>1,
+     pv_ambiguous:pv.size>1};
+ };
+ 
  // Automatically derive a building meter's downstream devices from the AC
  // cable graph. A building owns a device only if EVERY path from the selected
  // upstream boundary to that device passes through the building. This is a
@@ -326,7 +353,7 @@ const HASSStudioEnergyTopology=(()=>{
    }
    return best;
  };
- return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,busKey,defaultPorts,electricalType,node,end,connection,graph,index,
+ return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,busKey,defaultPorts,electricalType,node,end,connection,graph,index,hybridAttachments,
    geometry,anchor,locate,moveAttached,attach,nearest,meterHierarchy});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyTopology;
