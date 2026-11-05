@@ -109,6 +109,11 @@ const HASSStudioEditorInspector = (() => {
             'inv_manual_alarm',c.manual.alarm?'true':'false',[
               ['false','Brak alarmu'],['true','Alarm']]);
         readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
+        readings+=field('Powiąż wejścia PV z portami DC (wersja testowa)',
+          'inv_hybrid_enabled',c.hybrid?.enabled?'true':'false','text',
+          [['true','Tak'],['false','Nie — zachowaj starszy model']]);
+        const dcOptions=[['','Nie przypisano'],...HASSStudioEnergyTopology.ports(obj)
+          .filter(p=>p.medium==='dc').map(p=>[p.id,(p.label||p.id)+' ('+p.id+')'])];
         c.inputs.forEach((input,i)=>{
           const resolved=pvResolved.inputs[i];
           const manualValue=key=>input.manual_enabled?.[key]===true?input.manual[key]:'';
@@ -117,6 +122,10 @@ const HASSStudioEditorInspector = (() => {
               input.visible?'true':'false','text',[['true','Tak'],['false','Nie']])+
             field('Wymagaj poprawnego odczytu mocy','inv_pv_'+i+'_required',
               input.required?'true':'false','text',[['true','Tak'],['false','Nie']])+
+            (c.hybrid?.enabled?field('Port DC dla '+input.name,'inv_pv_'+i+'_port',
+              c.hybrid.pv_ports[i]||'','text',
+              dcOptions.concat(c.hybrid.pv_ports[i]&&!dcOptions.some(x=>x[0]===c.hybrid.pv_ports[i])?
+                [[c.hybrid.pv_ports[i],'Nieistniejący port: '+c.hybrid.pv_ports[i]]]:[])):'')+
             numeric(inverterFields.pv.voltage.label+' '+input.name+' ('+inverterFields.pv.voltage.unit+')','inv_pv_'+i+'_entity_voltage',
               input.entities.voltage,'inv_pv_'+i+'_manual_voltage',manualValue('voltage'))+
             numeric(inverterFields.pv.current.label+' '+input.name+' ('+inverterFields.pv.current.unit+')','inv_pv_'+i+'_entity_current',
@@ -134,12 +143,15 @@ const HASSStudioEditorInspector = (() => {
           fields+='<p class="ss-note">Wynik '+esc(input.name)+': '+
             (resolved.watts===null?'—':esc(resolved.watts.toFixed(2)+' W'))+
             ' · '+esc(sourceName||'Brak danych')+'</p>'+
+            (c.hybrid?.enabled&&c.hybrid.pv_ports[i]?
+              '<p class="ss-note">MPPT → port DC: '+esc(c.hybrid.pv_ports[i])+
+              '. Pomiar mocy na wejściu falownika. Nie zasila bilansu magazynu DC bez modelu konwersji.</p>':'')+
             '<p class="ss-note">TEST aktywuje się po wpisaniu wartości (również 0); puste pole go wyłącza. Bez mieszania HA z TEST przy obliczaniu V × A.</p>';
           readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1)+
             (resolved.error?'<span style="color:#ff7373"> · ⚠ Brak danych</span>':''),
             'mdi:solar-panel',fields,false);
         });
-        readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła, gdy dane są kompletne. W trybie automatycznym TEST wymaga włączenia fallbacku. Bilans używa nadal mocy AC — PV nie jest doliczane drugi raz.</p>';
+        readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła. Mapowanie MPPT/port DC jest jawne i opcjonalne. Odczyt PV oznacza moc wpływającą do falownika, nie jest produkcją na przewodzie do magazynu i nie zamyka bilansu DC bez konwersji.</p>';
         markup+=sect('inverter-data','2. Dane urządzenia','mdi:chart-line',readings,false);
 
         let ports='<p class="ss-note">Końcówki przewodów można dopasować do portów. Port AC i wejścia DC nie mogą dzielić jednej szyny.</p>';
