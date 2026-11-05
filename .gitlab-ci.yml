@@ -24,6 +24,7 @@ validate_card:
     - node dev/test-dc-diagnostic-clarity.js
     - node dev/test-storage-dc-coupling.js
     - node dev/test-hybrid-converter.js
+    - node dev/test-shared-acdc-topology.js
     - node dev/test-device-parameters.js
     - node dev/test-inverter-inspector.js
     - node dev/test-ev-charger.js
