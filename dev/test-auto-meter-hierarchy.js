@@ -96,6 +96,7 @@ x=solve([{...pv,inverter:{manual:{ac_power:10}}},house('home',10),ev],upstreamOn
 assert.equal(net.state,'balanced');approx(net.totals.consumption_kw,10);
 console.log('J: single inverter supply without grid or board can root a tree PASS');
 const {layout,flow}=context;
+vm.runInContext('this.building=HASSStudioBuilding;',context);
 // C.2: an old untyped building defaults to individual and only changes by explicit action.
 const legacy=house('home',3,'individual');
 delete legacy.building.measurement;
