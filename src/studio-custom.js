@@ -820,6 +820,14 @@
           const name=k.slice(7);c.manual=c.manual||{};
           if(name==='soc')c.manual.soc=clamp(val,0,100,75);
           if(name==='power')c.manual.power=clamp(val,-500,500,1.5);
+        }else if(k==='coupling'){
+          const next=['ac','dc'].includes(val)?val:'legacy';
+          if(c.coupling!==next)c.coupling_port_id='';
+          c.coupling=next;
+        }else if(k==='coupling_port_id'){
+          c.coupling_port_id=HASSStudioEnergyTopology.ident(val);
+        }else if(k==='max_charge_kw'||k==='max_discharge_kw'){
+          c[k]=val.trim()===''?null:clamp(val,0,500,0);
         }else if(k==='display_scale')c.display_scale=clamp(val,40,150,100)/100;
         else if(k==='mode')c.mode=val==='manual'?'manual':'live';
         else if(['show_screen','animate_charge','charge_positive','custom_alarm','show_alarm',
