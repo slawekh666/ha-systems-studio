@@ -3,18 +3,27 @@ const HASSStudioEnergyStorage=(()=>{
   const FIELDS=['soc','power','soh','voltage','current','temperature','cell_min','cell_max','cell_delta','cycles','bms_alarm'];
   const DEFAULTS={mode:'live',display_scale:1,show_screen:true,min_soc:20,warning_margin:5,
     custom_alarm:false,alarm_soc:20,show_warning:true,show_alarm:true,charge_positive:true,
+    // Existing diagrams keep their electrical meaning until explicitly opted in.
+    coupling:'legacy',coupling_port_id:'',max_charge_kw:null,max_discharge_kw:null,
     animate_charge:true,temp_low_enabled:false,temp_low:0,temp_high_enabled:false,temp_high:50,
     cell_low_enabled:false,cell_low:2.8,cell_high_enabled:false,cell_high:3.65,
     delta_enabled:false,delta_max:100,offline_alarm:true};
   const clamp=(x,lo,hi,d)=>x!==''&&x!=null&&Number.isFinite(Number(x))?Math.max(lo,Math.min(hi,Number(x))):d;
   const cleanEntity=x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x)?x:'';
+  const cleanPort=x=>typeof x==='string'&&/^[A-Za-z0-9_-]{1,32}$/.test(x)?x:'';
+  const limit=x=>x===null||x===undefined||x===''?null:
+    Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=500?Number(x):null;
   const defaults=()=>({...DEFAULTS,entities:Object.fromEntries(FIELDS.map(k=>[k,''])),manual:{soc:75,power:1.5}});
   const normalize=node=>{
     const src=node?.energy_storage||node||{},d=defaults();
     const c={...d,...src,mode:src.mode==='manual'?'manual':'live',
       display_scale:HASSStudioReadoutScale.factor(src.display_scale),
       entities:Object.fromEntries(FIELDS.map(k=>[k,cleanEntity(src.entities?.[k])])),
-      manual:{soc:clamp(src.manual?.soc,0,100,75),power:clamp(src.manual?.power,-500,500,1.5)}};
+      manual:{soc:clamp(src.manual?.soc,0,100,75),power:clamp(src.manual?.power,-500,500,1.5)},
+      coupling:['ac','dc'].includes(src.coupling)?src.coupling:'legacy',
+      coupling_port_id:cleanPort(src.coupling_port_id),
+      max_charge_kw:limit(src.max_charge_kw),
+      max_discharge_kw:limit(src.max_discharge_kw)};
     for(const k of ['min_soc','alarm_soc'])c[k]=clamp(src[k],0,100,d[k]);
     c.warning_margin=clamp(src.warning_margin,0,30,d.warning_margin);
     for(const [k,lo,hi] of [['temp_low',-50,100],['temp_high',-50,150],
@@ -75,6 +84,41 @@ const HASSStudioEnergyStorage=(()=>{
       level:soc===null?0:soc<=0?0:Math.ceil(soc/25),
       state:alarms.length?'alarm':warnings.length?'warning':soc===null?'unknown':'normal'};
   };
+  // Observed power at the physical DC battery terminal. Positive injection
+  // supplies its DC bus; a negative injection means charging. This DOES NOT
+  // infer any energy transfer through the inverter's internal converter.
+  const dcTerminal=(node,h)=>{
+    const c=normalize(node);
+    if(node?.type!=='energy_storage'||c.coupling!=='dc')
+      return {enabled:false,terminal:null,issues:[]};
+    const observed=HASSStudioHA.powerInput(
+      node,h,c.entities.power,c.manual.power,c.mode,true);
+    const kw=observed.kw,injection=kw===null?null:kw===0?0:
+      c.charge_positive?-kw:kw;
+    const test=node?.energy_mode==='test'||
+      (node?.energy_mode==null&&c.mode==='manual');
+    const soc=test?c.manual.soc:reading(h,c.entities.soc,['%','percent',''],0,100);
+    const bms=c.mode==='live'?binaryAlarm(h,c.entities.bms_alarm):null;
+    const issues=[];
+    if(injection!==null){
+      if(injection<0&&c.max_charge_kw!==null&&
+        -injection>c.max_charge_kw+1e-7)
+        issues.push('dc_storage_charge_limit_exceeded');
+      if(injection>0&&c.max_discharge_kw!==null&&
+        injection>c.max_discharge_kw+1e-7)
+        issues.push('dc_storage_discharge_limit_exceeded');
+      if(injection>0&&soc!==null&&soc<=c.min_soc)
+        issues.push('dc_storage_low_soc_discharge');
+    }
+    if(bms===true)issues.push('dc_storage_bms_alarm');
+    return {enabled:true,issues,terminal:{
+      node_id:node.id,port_id:c.coupling_port_id,medium:'dc',
+      measurement_point:'battery_dc_terminal',power_kw:kw,
+      injection_kw:injection,source:observed.source,soc,bms_alarm:bms,
+      status:kw===null?'missing':issues.length?'warning':'ok',
+      included_in_balance:false
+    }};
+  };
   const geometry=()=>({x:0,y:0,width:150,height:150,centerX:75,labelY:164,readingY:177});
   const formatPower=power=>power===null?'—':(power>0?'+':'')+(Math.abs(power)<10?power.toFixed(1):power.toFixed(0))+' kW';
   const render=(node,h)=>{
@@ -103,6 +147,6 @@ const HASSStudioEnergyStorage=(()=>{
     return '<svg x="0" y="0" width="150" height="150" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">'+
       HASSStudioSvg.namespaceIds(svg,prefix)+'</svg>';
   };
-  return Object.freeze({FIELDS,defaults,normalize,data,geometry,render,formatPower});
+  return Object.freeze({FIELDS,defaults,normalize,data,dcTerminal,geometry,render,formatPower});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyStorage;

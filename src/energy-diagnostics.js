@@ -77,12 +77,16 @@ const HASSStudioEnergyDiagnostics=(()=>{
     const dcTerminals=(balance.dc_terminals||[]).map(t=>({
       ...t,device_name:deviceName(t.node_id)
     }));
+    const storageTerminals=(balance.storage_terminals||[]).map(t=>({
+      ...t,device_name:deviceName(t.node_id)
+    }));
     for(const c of cables)if(!c.available&&!warnings.some(w=>w.connection_id===c.id&&w.reason===c.reason))
       warnings.push({reason:c.reason||'unresolved_flow',
         diagnostic_reason:c.diagnostic_reason||null,
         connection_id:c.id,node_id:null,side:null,input_index:null});
     return {options,enabled:balance.enabled===true,scenario:balance.config.scenario,
-      networks,cables,warnings,dcTerminals,balanced:networks.filter(n=>n.state==='balanced').length,
+      networks,cables,warnings,dcTerminals,storageTerminals,
+      balanced:networks.filter(n=>n.state==='balanced').length,
       unresolved:networks.filter(n=>n.state!=='balanced').length};
   };
   const messages={
@@ -109,6 +113,18 @@ const HASSStudioEnergyDiagnostics=(()=>{
       pv_dc_unconnected_port:'Przypisany port PV DC nie jest podłączony',
       pv_dc_observations:'Obserwacje wejść PV DC — poza bilansem magazynu',
       pv_dc_not_source:'PV wpływa do falownika. Bez modelu konwersji brak przepływu do magazynu DC',
+      storage_dc_observations:'Magazyny DC — przyłącza i odczyty',
+      storage_dc_not_source:'Moc magazynu to pomiar na jego zaciskach. Nie oznacza automatycznego przepływu PV przez falownik.',
+      dc_storage_port_required:'Magazyn DC wymaga wybrania portu',
+      dc_storage_port_missing:'Wskazany port magazynu DC nie istnieje',
+      dc_storage_port_wrong_medium:'Wybrany port magazynu ma niewłaściwy typ (wymagany DC)',
+      dc_storage_port_unconnected:'Wybrany port magazynu DC nie jest podłączony',
+      storage_coupling_override_conflict:'Konfiguracja bilansu wskazuje inny port niż przyłącze magazynu',
+      invalid_storage_coupling:'Nieprawidłowe przyłącze magazynu: sprawdź port i przewód',
+      dc_storage_charge_limit_exceeded:'Magazyn DC: moc ładowania przekracza ustawiony limit',
+      dc_storage_discharge_limit_exceeded:'Magazyn DC: moc rozładowania przekracza ustawiony limit',
+      dc_storage_low_soc_discharge:'Magazyn DC rozładowuje się poniżej minimalnego SOC',
+      dc_storage_bms_alarm:'Magazyn DC: alarm BMS',
       missing_measurements:'Brak wymaganych pomiarów',multiple_unknowns:'Wiele niewiadomych',
       aggregate_overlap:'Nakładające się pomiary zużycia',invalid_direction_or_power:'Błędna moc lub znak',
       building_child_exceeds_total:'Odbiorniki za budynkiem przekraczają jego pomiar całkowity',
@@ -159,6 +175,18 @@ const HASSStudioEnergyDiagnostics=(()=>{
       pv_dc_unconnected_port:'Mapped PV DC port is not connected',
       pv_dc_observations:'PV DC input observations — excluded from battery balance',
       pv_dc_not_source:'PV power enters the inverter; battery DC transfer requires a converter model',
+      storage_dc_observations:'DC batteries — ports and readings',
+      storage_dc_not_source:'Battery terminal power does not imply PV-to-battery transfer through an inverter.',
+      dc_storage_port_required:'DC battery needs a selected port',
+      dc_storage_port_missing:'Selected DC battery port does not exist',
+      dc_storage_port_wrong_medium:'Battery port has wrong medium (DC required)',
+      dc_storage_port_unconnected:'Selected DC battery port is not connected',
+      storage_coupling_override_conflict:'Balance override conflicts with selected battery port',
+      invalid_storage_coupling:'Invalid battery coupling — check port and cable',
+      dc_storage_charge_limit_exceeded:'DC battery charging exceeds configured limit',
+      dc_storage_discharge_limit_exceeded:'DC battery discharging exceeds configured limit',
+      dc_storage_low_soc_discharge:'DC battery discharging below minimum SOC',
+      dc_storage_bms_alarm:'DC battery BMS alarm',
       missing_measurements:'Missing measurements',multiple_unknowns:'Multiple unknowns',
       aggregate_overlap:'Overlapping load measurements',invalid_direction_or_power:'Invalid sign or power',
       building_child_exceeds_total:'Child loads exceed the building gross meter',
@@ -271,6 +299,14 @@ const HASSStudioEnergyDiagnostics=(()=>{
           (t.connected?'':' (niepodłączony / disconnected)'),
         fmt(t.power_kw)+' · '+label(t.source)]))+
       '<p class="ss-diag-caption">'+escape(label('pv_dc_not_source'))+'</p></article>':'';
+    const storageReadouts=view.storageTerminals.length?
+      '<article><h5>'+escape(label('storage_dc_observations'))+'</h5>'+
+      table(view.storageTerminals.map(t=>[
+        t.device_name+' → '+(t.port_id||'—')+
+          (t.connected?'':' (niepodłączony / disconnected)'),
+        fmt(t.injection_kw)+' · '+label(t.source)+
+          (t.soc===null?'':' · SOC '+t.soc.toFixed(1)+'%')]))+
+      '<p class="ss-diag-caption">'+escape(label('storage_dc_not_source'))+'</p></article>':'';
     const title=label('title')+' · '+view.balanced+'/'+view.networks.length;
     return '<details class="ss-energy-diagnostics ss-energy-diagnostics--'+
       (mode==='editor'?'editor':'viewer')+'" data-energy-status="'+
@@ -281,7 +317,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
       ' · '+view.unresolved+' '+escape(label('issueNetworks'))+'</p>'+
       '<p class="ss-diag-caption">'+escape(label('notMeasured'))+'</p>'+
       (!view.enabled?'<p>'+escape(label('off'))+'</p>':
-      (view.networks.length?networks:'<p>'+escape(label('noNetwork'))+'</p>')+pvReadouts+detached+warningList)+
+      (view.networks.length?networks:'<p>'+escape(label('noNetwork'))+'</p>')+
+      pvReadouts+storageReadouts+detached+warningList)+
       '</div></details>';
   };
   return Object.freeze({defaults,normalize,viewModel,render,styles,escape,fmt});

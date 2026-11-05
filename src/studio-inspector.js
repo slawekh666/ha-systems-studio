@@ -264,8 +264,8 @@ const HASSStudioEditorInspector = (() => {
                 '<p class="ss-note">Użyj tylko wtedy, gdy odczyt obejmuje odbiorniki za budynkiem. Zachowamy encję i aktywną wartość TEST, a bilans ponownie sprawdzi obciążenia. Zmianę można cofnąć.</p></div>';
           }
           else if(obj.type==='energy_storage')
-            metric('Moc magazynu (kW): dodatnia — ładowanie','storage_entity_power',c.entities.power,
-              'storage_manual_power',c.manual.power);
+            metric('Moc magazynu (kW): dodatnia — '+(c.charge_positive?'ładowanie':'rozładowanie'),
+              'storage_entity_power',c.entities.power,'storage_manual_power',c.manual.power);
           else if(obj.type==='ev_charger')
             metric('Moc pobierana przez ładowarkę (kW)','ev_entity_power',c.entities.power,
               'ev_manual_power',c.manual.power);
@@ -443,6 +443,30 @@ const HASSStudioEditorInspector = (() => {
           markup+=field('Skala ekranu (%)','storage_display_scale',Math.round(c.display_scale*100),'range',null,'min="40" max="150" step="5"');
           markup+=bool('show_screen','Pokaż ekran')+bool('animate_charge','Animacja podczas ładowania');
           markup+=bool('charge_positive','Dodatnia moc oznacza ładowanie');
+          markup+='<h4>Przyłącze magazynu (AC / DC)</h4>'+
+            field('Rodzaj przyłącza','storage_coupling',c.coupling,'text',[
+              ['legacy','Dotychczasowy — zgodnie z zapisanymi portami'],
+              ['ac','AC — wskazany port'],['dc','DC — wskazany port']]);
+          if(c.coupling!=='legacy'){
+            const ports=HASSStudioEnergyTopology.ports(obj);
+            const options=[['','Wybierz port '+c.coupling.toUpperCase()],...ports
+              .filter(port=>port.medium===c.coupling)
+              .map(port=>[port.id,(port.label||port.id)+' ('+port.id+')'])];
+            if(c.coupling_port_id&&!options.some(p=>p[0]===c.coupling_port_id))
+              options.push([c.coupling_port_id,'Nieprawidłowy port: '+c.coupling_port_id]);
+            markup+=field('Fizyczny port magazynu','storage_coupling_port_id',
+              c.coupling_port_id,'text',options);
+            markup+='<p class="ss-note">Wybór przyłącza nie zmienia typu portów ani przewodów. '+
+              'Jeśli portu '+c.coupling.toUpperCase()+' nie ma, dodaj go w ustawieniach zaawansowanych i podłącz przewód.</p>';
+          }
+          if(c.coupling==='dc'){
+            markup+=field('Limit ładowania DC (kW) — opcjonalny',
+              'storage_max_charge_kw',c.max_charge_kw??'','number',null,'min="0" max="500" step="0.01"')+
+              field('Limit rozładowania DC (kW) — opcjonalny',
+              'storage_max_discharge_kw',c.max_discharge_kw??'','number',null,'min="0" max="500" step="0.01"');
+            markup+='<p class="ss-note">Limity i alarm BMS generują wyłącznie ostrzeżenia — nie sterują ładowaniem '+
+              'ani nie korygują wartości pomiarów. Kierunek mocy wynika z ustawienia znaku powyżej.</p>';
+          }
           markup+='<h4>Rezerwa i ostrzeżenia (wyłącznie wizualne)</h4>';
           markup+=field('Minimalny poziom SOC (%)','storage_min_soc',c.min_soc,'number',null,'min="0" max="100" step="1"');
           markup+=field('Margines ostrzeżenia (p.p.)','storage_warning_margin',c.warning_margin,'number',null,'min="0" max="30" step="1"');

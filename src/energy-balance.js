@@ -309,6 +309,28 @@ const HASSStudioEnergyBalance=(()=>{
         dc_terminals.push({...terminal,network_id:network?.id||null,connected:!!network});
       }
     }
+    const storage_terminals=[];
+    for(const n of allNodes){
+      if(n.type!=='energy_storage')continue;
+      const battery=HASSStudioEnergyStorage.dcTerminal(n,hass);
+      if(!battery.enabled)continue;
+      const c=HASSStudioEnergyStorage.normalize(n);
+      const port=HASSStudioEnergyTopology.ports(n).find(q=>q.id===c.coupling_port_id);
+      const network=port?.medium==='dc'?
+        keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port)):null;
+      const terminal={...battery.terminal,network_id:network?.id||null,connected:!!network};
+      storage_terminals.push(terminal);
+      for(const reason of battery.issues)
+        warnings.push({reason,node_id:n.id,port_id:c.coupling_port_id});
+      if(!c.coupling_port_id)
+        warnings.push({reason:'dc_storage_port_required',node_id:n.id});
+      else if(!port)
+        warnings.push({reason:'dc_storage_port_missing',node_id:n.id,port_id:c.coupling_port_id});
+      else if(port.medium!=='dc')
+        warnings.push({reason:'dc_storage_port_wrong_medium',node_id:n.id,port_id:c.coupling_port_id});
+      else if(!network)
+        warnings.push({reason:'dc_storage_port_unconnected',node_id:n.id,port_id:c.coupling_port_id});
+    }
     for(const n of allNodes){
       const descriptor=HASSStudioEnergyTopology.node(n);
       const role=descriptor.role;
@@ -320,7 +342,33 @@ const HASSStudioEnergyBalance=(()=>{
       if(p.mode==='off')continue;
       const ports=descriptor.ports;
       let matches=ports.filter(port=>keyGroup.has(HASSStudioEnergyTopology.busKey(n.id,port)));
-      if(p.port_id){
+      const coupling=n.type==='energy_storage'?
+        HASSStudioEnergyStorage.normalize(n):null;
+      // Explicit battery coupling is authoritative. Do not silently select
+      // another attached AC/DC port if the selected port is unavailable.
+      if(coupling&&coupling.coupling!=='legacy'){
+        if(p.port_id&&p.port_id!==coupling.coupling_port_id)
+          warnings.push({reason:'storage_coupling_override_conflict',node_id:n.id,
+            port_id:p.port_id});
+        const selected=ports.find(q=>q.id===coupling.coupling_port_id);
+        const valid=!!selected&&selected.medium===coupling.coupling&&
+          matches.some(q=>q.id===selected.id)&&
+          (!p.port_id||p.port_id===selected.id);
+        if(!valid){
+          const attached=[...new Set(matches.map(port=>
+            keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port))))];
+          // A wrong or unconnected selection must not accidentally result
+          // in an apparently balanced network through some other port.
+          for(const group of attached)group.devices.push({
+            node_id:n.id,node_type:n.type,port_id:coupling.coupling_port_id,
+            role,measurement:null,mode:'device',source:'invalid',
+            injection_kw:null,reason:'invalid_storage_coupling'});
+          warnings.push({reason:'invalid_storage_coupling',node_id:n.id,
+            port_id:coupling.coupling_port_id});
+          continue;
+        }
+        matches=[selected];
+      }else if(p.port_id){
         matches=matches.filter(port=>port.id===p.port_id);
         if(!matches.length){warnings.push({reason:'invalid_or_unconnected_port',node_id:n.id});continue;}
       }else if(n.type==='inverter'&&matches.some(port=>port.medium==='ac'))
@@ -405,7 +453,7 @@ const HASSStudioEnergyBalance=(()=>{
         residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons,
         unaccounted_kw,export_cap_kw};
     });
-    return {enabled:true,config,networks,warnings,topology,dc_terminals};
+    return {enabled:true,config,networks,warnings,topology,dc_terminals,storage_terminals};
   };
   return Object.freeze({MAX_ASSIGNMENTS,defaults,normalize,participant,haPower,injection,deviceReading,measure,totals,solve,resolve});
 })();
