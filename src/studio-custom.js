@@ -759,7 +759,7 @@
            if(f==='status')c.manual[f]=['auto','generating','standby','off','fault'].includes(val)?val:'auto';
            if(f==='alarm')c.manual[f]=val==='true';
         }else if(k.startsWith('pv_')){
-          const match=/^pv_(\d+)_(name|visible|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
+          const match=/^pv_(\d+)_(name|visible|required|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
           if(match&&Number(match[1])<12){
             const i=Number(match[1]);
             c.inputs=c.inputs||[];
@@ -767,10 +767,13 @@
             const q=c.inputs[i],fieldName=match[2];
             if(fieldName==='name')q.name=val.slice(0,12);
             else if(fieldName==='visible')q.visible=val==='true';
+            else if(fieldName==='required')q.required=val==='true';
             else if(fieldName.startsWith('entity_')){q.entities=q.entities||{};q.entities[fieldName.slice(7)]=HASSStudioDeviceParameters.inverter.entity(val);}
             else if(fieldName.startsWith('manual_')){
-              q.manual=q.manual||{};
-              q.manual[fieldName.slice(7)]=val===''?null:clamp(val,0,50000,0);
+              const field=fieldName.slice(7),active=val.trim()!==''&&Number.isFinite(Number(val));
+              q.manual=q.manual||{};q.manual_enabled=q.manual_enabled||{};
+              q.manual_enabled[field]=active;
+              q.manual[field]=active?clamp(val,0,50000,0):null;
             }
           }
         }else if(k.startsWith('row_')){
