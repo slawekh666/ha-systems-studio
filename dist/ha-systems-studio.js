@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.39-dev';
+const VERSION = '0.4.40-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2926,13 +2926,32 @@ const HASSStudioInverter=(()=>{
  // Explicit, opt-in port bindings. Legacy inverter nodes without hybrid
  // metadata retain their old AC-only accounting on normalization and saving.
  const hybridDefaults=()=>({schema_version:1,enabled:false,pv_ports:Array(MAX_INPUTS).fill('')});
+ const converterDefaults=()=>({schema_version:1,enabled:false,
+   ac_port_id:'',battery_port_id:'',pv_mode:'mapped',ac_mode:'auto',
+   efficiency_percent:null,battery_efficiency_percent:null});
+ const normalizeConverter=raw=>{
+   const x=raw&&typeof raw==='object'?raw:{};
+   const validPort=id=>typeof id==='string'&&/^[A-Za-z0-9_-]{1,32}$/.test(id)?id:'';
+   const percent=ef=>ef!==null&&ef!==undefined&&ef!==''&&
+     Number.isFinite(Number(ef))&&Number(ef)>0&&Number(ef)<=100?
+     Number(ef):null;
+   return {schema_version:1,enabled:x.schema_version===1&&x.enabled===true,
+     ac_port_id:validPort(x.ac_port_id),
+     battery_port_id:validPort(x.battery_port_id),
+     pv_mode:x.pv_mode==='none'?'none':'mapped',
+     ac_mode:x.ac_mode==='calculate'?'calculate':'auto',
+     efficiency_percent:percent(x.efficiency_percent),
+     battery_efficiency_percent:percent(x.battery_efficiency_percent)};
+ };
  const normalizeHybrid=raw=>{
    const c=raw&&typeof raw==='object'?raw:{};
    return {schema_version:1,enabled:c.schema_version===1&&c.enabled===true,
      pv_ports:Array.from({length:MAX_INPUTS},(_,i)=>{
        const id=c.pv_ports?.[i];
        return typeof id==='string'&&/^[A-Za-z0-9_-]{1,32}$/.test(id)?id:'';
-     })};
+     }),
+     ...(c.converter&&typeof c.converter==='object'?
+       {converter:normalizeConverter(c.converter)}:{})};
  };
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
@@ -3119,7 +3138,7 @@ const HASSStudioInverter=(()=>{
    const bottom=c.show_extra?Math.max(300,65+panelHeight(c)*c.extra_scale+10):300;
    return '<svg width="'+(150+extraWidth/2)+'" height="'+(bottom/2)+'" viewBox="'+left+' 0 '+(300+extraWidth)+' '+bottom+'" preserveAspectRatio="xMinYMin meet">'+content+'</svg>';
  };
- return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,hybridDefaults,normalizeHybrid,defaults,normalize,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
+ return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,hybridDefaults,converterDefaults,normalizeConverter,normalizeHybrid,defaults,normalize,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverter;
 
@@ -3725,6 +3744,218 @@ const HASSStudioEnergyTopology=(()=>{
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyTopology;
 
 
+/* Stage 07A.2-D — opt-in, read-only hybrid inverter energy conservation.
+ * Converter links are constraints, NEVER electrical graph edges or HA controls.
+ */
+const HASSStudioEnergyConverter=(()=>{
+  const round=v=>Math.round(v*1e6)/1e6;
+  const finite=v=>typeof v==='number'&&Number.isFinite(v);
+  const active=(c)=>c?.enabled===true&&c.schema_version===1;
+  // Signed inverter boundary: PV<0 (absorption), DC battery>0 when charging,
+  // AC>0 when exporting. Sum of injections + nonnegative loss = 0.
+  const evaluate=({pv_kw,battery_kw,ac_kw,ac_source='missing',
+    ac_mode='auto',efficiency_percent=null,battery_efficiency_percent=null,
+    tolerance_kw=.05,rated_kw=null})=>{
+    const eta=finite(efficiency_percent)&&efficiency_percent>0&&
+      efficiency_percent<=100?efficiency_percent/100:null;
+    const etaBattery=finite(battery_efficiency_percent)&&
+      battery_efficiency_percent>0&&battery_efficiency_percent<=100?
+      battery_efficiency_percent/100:null;
+    const valid=kw=>finite(kw)&&Math.abs(kw)<=10000;
+    const inputValid=valid(pv_kw)&&pv_kw>=0&&valid(battery_kw);
+    const direct=valid(ac_kw)?ac_kw:null;
+    if(!inputValid)return {status:'missing',reason:'converter_missing_dc_observation',
+      pv_kw:valid(pv_kw)?pv_kw:null,battery_kw:valid(battery_kw)?battery_kw:null,
+      ac_kw:ac_mode==='calculate'?null:direct,ac_source,loss_kw:null,efficiency_observed:null};
+    let ac=ac_mode==='calculate'?null:direct;
+    let source=ac===null?'missing':ac_source;
+    if(ac===null){
+      if(eta===null)return {status:'missing',reason:'converter_efficiency_or_ac_missing',
+        pv_kw,battery_kw,ac_kw:null,ac_source:'missing',loss_kw:null,efficiency_observed:null};
+      // A DC-coupled battery requires a separate explicit DC/DC efficiency.
+      // Never assume 100% efficiency between battery and inverter.
+      if(battery_kw!==0&&etaBattery===null)
+        return {status:'missing',reason:'converter_battery_efficiency_missing',
+          pv_kw,battery_kw,ac_kw:null,ac_source:'missing',loss_kw:null,
+          efficiency_observed:null};
+      const inputDC=round(pv_kw+Math.max(0,-battery_kw)*(etaBattery??1)-
+        Math.max(0,battery_kw)/(etaBattery??1));
+      ac=inputDC>=0?round(inputDC*eta):round(inputDC/eta);
+      source='estimated';
+    }
+    if(!valid(ac))return {status:'invalid',reason:'converter_invalid_ac_power',
+      pv_kw,battery_kw,ac_kw:null,ac_source:'invalid',loss_kw:null,efficiency_observed:null};
+    if(finite(rated_kw)&&rated_kw>0&&Math.abs(ac)>rated_kw+tolerance_kw)
+      return {status:'invalid',reason:'converter_ac_over_rating',
+        pv_kw,battery_kw,ac_kw:ac,ac_source:source,loss_kw:null,efficiency_observed:null};
+    const loss=round(pv_kw-ac-battery_kw);
+    const input=round(pv_kw+Math.max(0,-ac)+Math.max(0,-battery_kw));
+    const output=round(Math.max(0,ac)+Math.max(0,battery_kw));
+    if(loss< -tolerance_kw)
+      return {status:'invalid',reason:'converter_negative_losses',pv_kw,battery_kw,
+        ac_kw:ac,ac_source:source,loss_kw:loss,efficiency_observed:
+        input>0?round(100*output/input):null};
+    const eff=input>0?round(100*output/input):input===0&&output===0?null:0;
+    return {status:source==='estimated'?'estimated':'valid',reason:null,
+      pv_kw,battery_kw,ac_kw:ac===0?0:ac,ac_source:source,
+      loss_kw:Math.max(0,loss),efficiency_observed:eff,
+      efficiency_assumed:source==='estimated'?efficiency_percent:null,
+      battery_efficiency_assumed:source==='estimated'&&battery_kw!==0?
+        battery_efficiency_percent:null,
+      pv_injection_kw:pv_kw===0?0:-pv_kw,
+      battery_injection_kw:battery_kw===0?0:battery_kw,
+      ac_injection_kw:ac===0?0:ac,
+      provenance:{pv:'observed',battery:'calculated',ac:source,
+        losses:source==='estimated'?'estimated':'calculated'}};
+  };
+  const integrate=({nodes,keyGroup,topology,dc_terminals,warnings,tolerance_kw})=>{
+    const transfers=[],portCache=new Map(),getPorts=n=>{
+      if(!portCache.has(n.id))portCache.set(n.id,new Map(
+        HASSStudioEnergyTopology.ports(n).map(p=>[p.id,p])));
+      return portCache.get(n.id);
+    };
+    const netFor=(n,p)=>p?keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,p)):null;
+    const candidates=nodes.filter(n=>n.type==='inverter').map(n=>({
+      node:n,c:HASSStudioInverter.normalize(n)
+    })).filter(x=>x.c.hybrid?.enabled===true&&active(x.c.hybrid.converter));
+    const groupsByBattery=new Map();
+    for(const x of candidates){
+      const conf=x.c.hybrid.converter,port=getPorts(x.node).get(conf.battery_port_id);
+      const group=conf.battery_port_id==='none'?null:netFor(x.node,port);
+      if(group){
+        if(!groupsByBattery.has(group.id))groupsByBattery.set(group.id,[]);
+        groupsByBattery.get(group.id).push(x.node.id);
+      }
+    }
+    for(const {node,c} of candidates){
+      const conf=c.hybrid.converter;
+      const base={converter_id:node.id,device_name:node.label||node.id,
+        ac_port_id:conf.ac_port_id,battery_port_id:conf.battery_port_id,
+        enabled:true,medium:'ac/dc',status:'missing',reason:null,
+        pv_kw:null,battery_kw:null,ac_kw:null,loss_kw:null,
+        ac_source:'missing',pv_source:'missing',battery_source:'missing',
+        ac_network_id:null,battery_network_id:null};
+      const fail=reason=>{
+        transfers.push({...base,status:'missing',reason});
+        warnings.push({reason,node_id:node.id});
+      };
+      const ports=getPorts(node),acPort=ports.get(conf.ac_port_id),
+        acGroup=acPort?.medium==='ac'?netFor(node,acPort):null,
+        batteryNone=conf.battery_port_id==='none',
+        batteryPort=ports.get(conf.battery_port_id),
+        batteryGroup=batteryNone?null:
+          batteryPort?.medium==='dc'?netFor(node,batteryPort):null;
+      if(!acPort||acPort.medium!=='ac'||!acGroup){
+        fail('converter_ac_port_missing');continue;
+      }
+      if(!batteryNone&&(!batteryPort||batteryPort.medium!=='dc'||!batteryGroup)){
+        fail('converter_battery_port_missing');continue;
+      }
+      if(batteryGroup&&groupsByBattery.get(batteryGroup.id).length>1){
+        fail('converter_ambiguous_battery_network');continue;
+      }
+      const acEntries=acGroup.devices.filter(d=>d.node_id===node.id&&
+        d.port_id===acPort.id&&d.node_type==='inverter');
+      if(acEntries.length!==1){
+        fail('converter_ac_meter_missing');continue;
+      }
+      const acEntry=acEntries[0];
+      // In explicit calculation mode an existing HA or TEST AC value must
+      // never reappear through the legacy balance if derivation fails.
+      if(conf.ac_mode==='calculate'){
+        acEntry.injection_kw=null;acEntry.source='missing';acEntry.mode='device';
+      }
+      const mapped=dc_terminals.filter(t=>t.node_id===node.id);
+      if(conf.pv_mode!=='none'&&!mapped.length){
+        fail('converter_pv_mapping_missing');continue;
+      }
+      if(conf.pv_mode!=='none'&&mapped.some(t=>!Number.isFinite(t.power_kw)||
+        t.source==='missing'||t.status==='invalid')){
+        fail('converter_pv_reading_missing');continue;
+      }
+      // In the safety-critical converter path a disputed PV sensor cannot
+      // silently become a trusted power source, even though the PV inspector
+      // continues displaying the direct reading with its warning.
+      if(conf.pv_mode!=='none'&&mapped.some(t=>t.status==='warning')){
+        fail('converter_pv_reading_conflict');continue;
+      }
+      // Distinct physical functions need distinct logical DC buses, even when
+      // the PV terminal has no drawn external wire and network_id is null.
+      if(batteryGroup&&mapped.some(t=>{
+        const pvPort=ports.get(t.port_id);
+        return t.network_id===batteryGroup.id||pvPort&&
+          HASSStudioEnergyTopology.busKey(node.id,pvPort)===
+            HASSStudioEnergyTopology.busKey(node.id,batteryPort);
+      })){
+        fail('converter_pv_battery_bus_overlap');continue;
+      }
+      const pv=conf.pv_mode==='none'?0:
+        round(mapped.reduce((s,t)=>s+t.power_kw,0));
+      // Battery boundary inferred from *independent* storage meter(s).
+      // Allow only a fully observed, storage-only DC circuit. Any other
+      // participant or unknown branch needs a richer converter network model.
+      let battery=0,batterySource='explicit_absence';
+      if(!batteryNone){
+        const participants=batteryGroup.devices.filter(d=>d.node_id!==node.id);
+        const onlyStorage=participants.length>0&&participants.every(d=>{
+          if(d.node_type!=='energy_storage'||d.role!=='storage'||d.mode==='off'||
+            d.injection_kw===null||d.source==='invalid')return false;
+          const storage=nodes.find(n=>n.id===d.node_id);
+          const cc=storage?HASSStudioEnergyStorage.normalize(storage):null;
+          return cc?.coupling==='dc'&&cc.coupling_port_id===d.port_id;
+        });
+        if(!onlyStorage){
+          fail('converter_battery_reading_ambiguous');continue;
+        }
+        battery=round(-participants.reduce((s,d)=>s+d.injection_kw,0));
+        batterySource=[...new Set(participants.map(d=>d.source))].join('+');
+      }
+      const chosen=conf.ac_mode==='calculate'?null:acEntry.injection_kw;
+      const evaluation=evaluate({pv_kw:pv,battery_kw:battery,ac_kw:chosen,
+        ac_source:acEntry.source,ac_mode:conf.ac_mode,
+        efficiency_percent:conf.efficiency_percent,
+        battery_efficiency_percent:conf.battery_efficiency_percent,tolerance_kw,
+        rated_kw:c.rated_kw});
+      const transfer={...base,...evaluation,ac_port_id:acPort.id,
+        battery_port_id:batteryNone?'none':batteryPort.id,
+        ac_network_id:acGroup.id,battery_network_id:batteryGroup?.id||null,
+        pv_source:conf.pv_mode==='none'?'explicit_absence':
+          [...new Set(mapped.map(t=>t.source))].join('+'),
+        battery_source:batterySource};
+      transfers.push(transfer);
+      if(evaluation.status==='invalid'){
+        warnings.push({reason:evaluation.reason,node_id:node.id});
+        // Raw observed power is still visible. It must not be replaced
+        // by a made-up DC transfer, and the converter stays invalid.
+        continue;
+      }
+      if(evaluation.status==='missing'){
+        warnings.push({reason:evaluation.reason,node_id:node.id});
+        continue;
+      }
+      // Only a uniquely determined and loss-consistent conversion may provide
+      // a calculated DC boundary injection; no virtual graph edge is created.
+      if(conf.ac_mode==='calculate'||chosen===null){
+        acEntry.injection_kw=evaluation.ac_injection_kw;
+        acEntry.source=evaluation.ac_source;
+        acEntry.mode='device';
+      }
+      if(batteryGroup){
+        batteryGroup.devices.push({
+          node_id:node.id,node_type:'inverter_converter',
+          port_id:batteryPort.id,role:'converter',mode:'device',
+          source:'calculated',injection_kw:evaluation.battery_injection_kw,
+          measurement:'inverter_dc_battery_boundary'
+        });
+      }
+    }
+    return transfers;
+  };
+  return Object.freeze({evaluate,integrate});
+})();
+if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyConverter;
+
+
 /* Read-only, topology-aware instantaneous active-power balance for HA Systems Studio.
  * Measurements (kW) are signed injections: positive supplies a network, negative
  * consumes from it. No power-flow routing, HA service calls or fabricated readings.
@@ -3859,7 +4090,14 @@ const HASSStudioEnergyBalance=(()=>{
     if(kw!==null&&p.reverse_sign)kw=-kw;
     if(kw!==null&&(!Number.isFinite(kw)||Math.abs(kw)>10000))
       return {mode:p.mode,source:'invalid',injection_kw:null,reason:'invalid_power'};
-    if(kw!==null&&!(n.type==='building'&&HASSStudioBuilding.normalize(n).measurement==='net')&&!validDirection(kw,role))
+    // A converter-enabled inverter can import AC for DC battery charging.
+    // Legacy AC-only inverters preserve their original source-direction rule.
+    const hybridInverter=n.type==='inverter'&&
+      HASSStudioInverter.normalize(n).hybrid?.enabled===true&&
+      HASSStudioInverter.normalize(n).hybrid?.converter?.enabled===true;
+    if(kw!==null&&!hybridInverter&&
+      !(n.type==='building'&&HASSStudioBuilding.normalize(n).measurement==='net')&&
+      !validDirection(kw,role))
       return {mode:p.mode,source:'invalid',injection_kw:null,reason:'invalid_direction'};
     return {mode:p.mode,source,injection_kw:kw===null?null:round(kw)};
   };
@@ -4030,7 +4268,10 @@ const HASSStudioEnergyBalance=(()=>{
       for(const terminal of mapping.terminals){
         const port=portsById.get(terminal.port_id);
         const network=port?keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port)):null;
-        if(!network)
+        // An inverter's own MPPT meter can observe an installed PV string
+        // even when no separate PV-array icon/cable is drawn on the diagram.
+        // Legacy B.2 mode retains its original unconnected-port warning.
+        if(!network&&!HASSStudioInverter.normalize(n).hybrid?.converter?.enabled)
           warnings.push({reason:'pv_dc_unconnected_port',node_id:n.id,
             port_id:terminal.port_id,input_index:terminal.input_index});
         dc_terminals.push({...terminal,network_id:network?.id||null,connected:!!network});
@@ -4119,6 +4360,13 @@ const HASSStudioEnergyBalance=(()=>{
         mode:reading.mode,source:reading.source,injection_kw:reading.injection_kw,
         ...(reading.reason?{reason:reading.reason}:{})});
     }
+    // Converter constraints are deliberately distinct from topology edges.
+    // No change for legacy inverters or installations without an enabled
+    // versioned converter. Older standalone unit tests may not load this
+    // optional module when no converter is configured.
+    const converters=typeof HASSStudioEnergyConverter==='undefined'?[]:
+      HASSStudioEnergyConverter.integrate({nodes:allNodes,keyGroup,topology,
+        dc_terminals,warnings,tolerance_kw:config.tolerance_kw});
     const networks=[...grouped.values()].map(g=>{
       const entries=g.devices;
       adjustBuildings(g,src,topology,nodesById,warnings,config.tolerance_kw);
@@ -4175,12 +4423,16 @@ const HASSStudioEnergyBalance=(()=>{
         warnings.push({reason:'unaccounted_generation',network_id:g.id});
       if(boards.length&&result.state==='unbalanced')
         warnings.push({reason:'grid_disconnected_imbalance',network_id:g.id});
+      const converterTransfer=round(entries.filter(e=>e.role==='converter'&&
+        e.injection_kw!==null).reduce((sum,e)=>sum+e.injection_kw,0));
       return {id:g.id,medium:g.medium,connection_ids:g.connection_ids,
-        port_keys:[...g.ports],devices:entries,state:result.state,
+        port_keys:[...g.ports],devices:entries,
+        converter_transfer_kw:converterTransfer||null,state:result.state,
         residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons,
         unaccounted_kw,export_cap_kw};
     });
-    return {enabled:true,config,networks,warnings,topology,dc_terminals,storage_terminals};
+    return {enabled:true,config,networks,warnings,topology,
+      dc_terminals,storage_terminals,converters};
   };
   return Object.freeze({MAX_ASSIGNMENTS,defaults,normalize,participant,haPower,injection,deviceReading,measure,totals,solve,resolve});
 })();
@@ -4291,12 +4543,19 @@ const HASSStudioEnergyDiagnostics=(()=>{
         return edge?.medium==='dc'&&[edge.from,edge.to].some(key=>
           inverterIds.has(key.slice(0,key.indexOf(':'))));
       });
+    const converterByBattery=new Map((balance.converters||[])
+      .filter(c=>c.battery_network_id)
+      .map(c=>[c.battery_network_id,c]));
     const networkOf=new Map();
     const networks=(balance.networks||[]).map((n,i)=>{
       for(const id of n.connection_ids)networkOf.set(id,i);
+      const converter=converterByBattery.get(n.id);
       return {id:n.id,index:i+1,medium:n.medium,state:n.state,
-        diagnostic_reason:needsConverter(n)?'dc_converter_missing':null,
+        diagnostic_reason:converter?.status==='invalid'?converter.reason:
+          converter?.status==='missing'?converter.reason:
+          needsConverter(n)?'dc_converter_missing':null,
         reasons:[...n.reasons],residual_kw:n.residual_kw,totals:n.totals,
+        converter_transfer_kw:n.converter_transfer_kw??null,
         unaccounted_kw:n.unaccounted_kw,export_cap_kw:n.export_cap_kw,
         devices:n.devices.map(d=>({ ...d,name:devices.get(d.node_id)?.label||
           devices.get(d.node_id)?.id||d.node_id })),
@@ -4336,6 +4595,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
         connection_id:c.id,node_id:null,side:null,input_index:null});
     return {options,enabled:balance.enabled===true,scenario:balance.config.scenario,
       networks,cables,warnings,dcTerminals,storageTerminals,
+      converters:(balance.converters||[]).map(c=>({...c,
+        device_name:deviceName(c.converter_id)})),
       balanced:networks.filter(n=>n.state==='balanced').length,
       unresolved:networks.filter(n=>n.state!=='balanced').length};
   };
@@ -4345,6 +4606,25 @@ const HASSStudioEnergyDiagnostics=(()=>{
       network:'Sieć',status:'Stan',balanced:'Bilans prawidłowy',unbalanced:'Pomiary sprzeczne',
       dc_converter_missing:'Brak modelu konwersji DC',
       dc_converter_explanation:'Magazyn ładuje się z obwodu falownika, ale przepływ przez jego wewnętrzny przekształtnik nie jest jeszcze modelowany. Różnica mocy pozostaje nierozliczona; nie jest dowodem sprzecznych pomiarów.',
+      converter_title:'Przekształtniki AC/DC — bilans i straty',
+      converter_transfer:'Transfer do magistrali magazynu DC',
+      converter_note:'Transfer wewnętrzny nie jest fizycznym przewodem. HA/TEST to pomiary lub symulacje; wyliczona moc ze sprawności jest oszacowaniem.',
+      converter_status_valid:'Zgodne pomiary',converter_status_estimated:'Wartość oszacowana',
+      converter_status_missing:'Brak wymaganych danych',converter_status_invalid:'Sprzeczne dane',
+      converter_ac_port_missing:'Brak poprawnego połączenia portu AC przekształtnika',
+      converter_battery_port_missing:'Brak poprawnego połączenia portu magazynu DC',
+      converter_ambiguous_battery_network:'Wiele przekształtników przypisano do tej samej sieci DC magazynu',
+      converter_ac_meter_missing:'Brak jednoznacznego odczytu z portu AC falownika',
+      converter_pv_mapping_missing:'Brak mapowania wejścia PV do portu DC',
+      converter_pv_reading_missing:'Brak kompletnych odczytów mocy wejść PV',
+      converter_pv_reading_conflict:'Niezgodne odczyty mocy PV: pomiar bezpośredni różni się od V × A',
+      converter_pv_battery_bus_overlap:'Wejścia PV i magazynu nie mogą współdzielić tej samej szyny DC',
+      converter_battery_reading_ambiguous:'Magazyn DC nie ma kompletnego, jednoznacznego pomiaru',
+      converter_missing_dc_observation:'Brak wymaganych obserwacji PV lub magazynu',
+      converter_efficiency_or_ac_missing:'Brakuje odczytu AC lub jawnie podanej sprawności',
+      converter_invalid_ac_power:'Nieprawidłowa moc AC przekształtnika',
+      converter_ac_over_rating:'Moc AC przekracza moc znamionową falownika',
+      converter_negative_losses:'Sprzeczne pomiary — energia wyjściowa przewyższa wejściową',
       insufficient:'Brak danych',invalid:'Nieprawidłowe dane',no_devices:'Brak odbiorników / źródeł',
       role:'Urządzenie',power:'Moc netto',source:'Źródło',cables:'Przewody',
       warnings:'Ostrzeżenia',direction:'Kierunek',residual:'Różnica bilansu',
@@ -4407,6 +4687,25 @@ const HASSStudioEnergyDiagnostics=(()=>{
       network:'Network',status:'Status',balanced:'Balanced',unbalanced:'Conflicting readings',
       dc_converter_missing:'DC conversion model missing',
       dc_converter_explanation:'The battery is charging on an inverter-connected circuit, but its internal converter transfer is not modeled yet. The residual is unaccounted power, not proof of conflicting measurements.',
+      converter_title:'AC/DC converters — energy and losses',
+      converter_transfer:'Converter transfer to DC battery bus',
+      converter_note:'Internal conversion is not a physical wire. HA/TEST readings are measured/simulated; calculated power from assumed efficiency is estimated.',
+      converter_status_valid:'Measurements consistent',converter_status_estimated:'Estimated',
+      converter_status_missing:'Required observations missing',converter_status_invalid:'Conflicting measurements',
+      converter_ac_port_missing:'Converter AC port disconnected or invalid',
+      converter_battery_port_missing:'Battery DC port disconnected or invalid',
+      converter_ambiguous_battery_network:'Multiple converters on the same battery DC network',
+      converter_ac_meter_missing:'Inverter AC participant not uniquely available',
+      converter_pv_mapping_missing:'No mapped PV MPPT terminal',
+      converter_pv_reading_missing:'Missing PV MPPT power data',
+      converter_pv_reading_conflict:'PV power readings conflict with V × A',
+      converter_pv_battery_bus_overlap:'PV and battery DC buses must remain separate',
+      converter_battery_reading_ambiguous:'Incomplete or ambiguous DC battery meter',
+      converter_missing_dc_observation:'PV or battery observation missing',
+      converter_efficiency_or_ac_missing:'Missing AC reading or configured efficiency',
+      converter_invalid_ac_power:'Invalid converter AC power',
+      converter_ac_over_rating:'AC converter power exceeds inverter rating',
+      converter_negative_losses:'Conflicting readings: output exceeds input',
       insufficient:'Missing data',invalid:'Invalid readings',no_devices:'No sources / loads',
       role:'Device',power:'Net power',source:'Source',cables:'Cables',
       warnings:'Warnings',direction:'Direction',residual:'Balance residual',
@@ -4499,6 +4798,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
         [label('storage_charge'),fmt(n.totals.storage_charge_kw)],
         [label('storage_discharge'),fmt(n.totals.storage_discharge_kw)],
         ...(n.unaccounted_kw!==null?[[label('unaccounted_power'),fmt(n.unaccounted_kw)]]:[]),
+        ...(n.converter_transfer_kw!==null?[[label('converter_transfer'),fmt(n.converter_transfer_kw)]]:[]),
          [label('residual'),fmt(n.residual_kw)]
       ]):'<p>'+escape(label('noData'))+'</p>';
       const rows=o.show_devices?'<h5>'+escape(label('role'))+'</h5>'+
@@ -4511,7 +4811,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
           c.available?(c.mode==='off'?label('animation_disabled')+' · ':'')+
             fmt(c.kw)+' · '+label(c.direction==='none'?'zero':c.direction):
             label(c.diagnostic_reason||c.reason||'unresolved_flow')])):'';
-      const reason=n.diagnostic_reason?
+      const reason=n.diagnostic_reason==='dc_converter_missing'?
         '<p class="ss-diag-caption">'+escape(label('dc_converter_explanation'))+'</p>':
         n.reasons.length?'<p class="ss-diag-caption">'+
           n.reasons.map(r=>escape(label(r))).join(' · ')+'</p>':'';
@@ -4557,6 +4857,18 @@ const HASSStudioEnergyDiagnostics=(()=>{
         fmt(t.injection_kw)+' · '+label(t.source)+
           (t.soc===null?'':' · SOC '+t.soc.toFixed(1)+'%')]))+
       '<p class="ss-diag-caption">'+escape(label('storage_dc_not_source'))+'</p></article>':'';
+    const converterReadouts=view.converters.length?
+      '<article><h5>'+escape(label('converter_title'))+'</h5>'+
+      table(view.converters.flatMap(c=>[
+        [c.device_name+' · '+label('status'),
+          label('converter_status_'+c.status)+(c.reason?' · '+label(c.reason):'')],
+        [c.device_name+' · PV (DC)',fmt(c.pv_kw)],
+        [c.device_name+' · Magazyn (DC)',fmt(c.battery_kw)],
+        [c.device_name+' · AC',fmt(c.ac_kw)+' · '+label(c.ac_source)],
+        [c.device_name+' · Straty',fmt(c.loss_kw)],
+        ...(c.efficiency_observed===null?[]:[[c.device_name+' · Sprawność wynikowa',
+          c.efficiency_observed.toFixed(2)+'%']])
+      ]))+'<p class="ss-diag-caption">'+escape(label('converter_note'))+'</p></article>':'';
     const title=label('title')+' · '+view.balanced+'/'+view.networks.length;
     return '<details class="ss-energy-diagnostics ss-energy-diagnostics--'+
       (mode==='editor'?'editor':'viewer')+'" data-energy-status="'+
@@ -4568,7 +4880,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
       '<p class="ss-diag-caption">'+escape(label('notMeasured'))+'</p>'+
       (!view.enabled?'<p>'+escape(label('off'))+'</p>':
       (view.networks.length?networks:'<p>'+escape(label('noNetwork'))+'</p>')+
-      pvReadouts+storageReadouts+detached+warningList)+
+      pvReadouts+storageReadouts+converterReadouts+detached+warningList)+
       '</div></details>';
   };
   return Object.freeze({defaults,normalize,viewModel,render,styles,escape,fmt});
@@ -5562,6 +5874,45 @@ const HASSStudioEditorInspector = (() => {
         readings+=field('Powiąż wejścia PV z portami DC (wersja testowa)',
           'inv_hybrid_enabled',c.hybrid?.enabled?'true':'false','text',
           [['true','Tak'],['false','Nie — zachowaj starszy model']]);
+        if(c.hybrid?.enabled){
+          const cv=c.hybrid.converter||HASSStudioInverter.converterDefaults();
+          const ports=HASSStudioEnergyTopology.ports(obj);
+          const choices=medium=>[['','Nie przypisano'],...ports
+            .filter(p=>p.medium===medium).map(p=>[p.id,(p.label||p.id)+' ('+p.id+')'])];
+          const acChoices=choices('ac'),dcChoices=choices('dc');
+          dcChoices.push(['none','Brak magazynu DC (świadomie)']);
+          for(const [list,value] of [[acChoices,cv.ac_port_id],[dcChoices,cv.battery_port_id]])
+            if(value&&!list.some(q=>q[0]===value))
+              list.push([value,'Nieprawidłowy port: '+value]);
+          let converter=field('Model przekształtnika AC/DC','inv_converter_enabled',
+            cv.enabled?'true':'false','text',
+            [['false','Wyłączony — starszy bilans'],['true','Włączony — model hybrydowy']]);
+          if(cv.enabled)converter+=
+            field('Port AC przekształtnika','inv_converter_ac_port_id',
+              cv.ac_port_id,'text',acChoices)+
+            field('Port DC magazynu przy falowniku','inv_converter_battery_port_id',
+              cv.battery_port_id,'text',dcChoices)+
+            field('Źródło PV','inv_converter_pv_mode',cv.pv_mode,'text',
+              [['mapped','Powiązane wejścia PV / MPPT'],['none','Brak PV — świadomie']])+
+            field('Moc AC falownika','inv_converter_ac_mode',cv.ac_mode,'text',
+              [['auto','Odczyt AC (HA → TEST), oblicz gdy brak'],
+               ['calculate','Wyliczaj z PV i magazynu (nie używaj odczytu AC)']])+
+            field('Sprawność toru DC/AC (%) — założenie do obliczeń',
+              'inv_converter_efficiency_percent',cv.efficiency_percent??'','number',null,
+              'min="0.1" max="100" step="0.1"')+
+            field('Sprawność toru magazynu DC/DC (%) — założenie do obliczeń',
+              'inv_converter_battery_efficiency_percent',
+              cv.battery_efficiency_percent??'','number',null,
+              'min="0.1" max="100" step="0.1"');
+          converter+='<p class="ss-note">Konwerter NIE łączy fizycznie sieci AC i DC. '+
+            'Moc AC z pomiaru ma pierwszeństwo w trybie automatycznym; brakująca moc '+
+            'może być oszacowana tylko z jawnie podanej sprawności DC/AC i kompletnych odczytów. '+
+            'Przy ładowaniu/rozładowaniu magazynu wymagane jest także założenie DC/DC. '+
+            'Wpisz 100% tylko jeśli chcesz świadomie przyjąć model bezstratny dla danego toru. '+
+            'Sprzeczne pomiary pozostają nierozstrzygnięte. Sprawności to założenia, nie odczyty.</p>';
+          readings+=sect('inverter-converter','Przekształtnik AC/DC — 07A.2-D',
+            'mdi:transmission-tower',converter,false);
+        }
         const dcMapping=HASSStudioInverter.dcTerminals(obj,editor._hass);
         const dcOptions=[['','Nie przypisano'],...HASSStudioEnergyTopology.ports(obj)
           .filter(p=>p.medium==='dc').map(p=>[p.id,(p.label||p.id)+' ('+p.id+')'])];
@@ -5611,13 +5962,15 @@ const HASSStudioEditorInspector = (() => {
               '<p class="ss-note">MPPT → port DC: '+esc(c.hybrid.pv_ports[i])+
               '. Moc na wejściu falownika: '+
               (mappedTerminal?.power_kw==null?'—':esc(mappedTerminal.power_kw.toFixed(3))+' kW')+
-              '. Bez modelu konwersji nie zasila bilansu magazynu DC.</p>':'')+
+              '. Ten odczyt jest wejściem przekształtnika, a nie bezpośrednim źródłem magistrali magazynu DC.</p>':'')+
             '<p class="ss-note">TEST aktywuje się po wpisaniu wartości (również 0); puste pole go wyłącza. Bez mieszania HA z TEST przy obliczaniu V × A.</p>';
           readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1)+
             (resolved.error?'<span style="color:#ff7373"> · ⚠ Brak danych</span>':''),
             'mdi:solar-panel',fields,false);
         });
-        readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła. Mapowanie MPPT/port DC jest jawne i opcjonalne. Odczyt PV oznacza moc wpływającą do falownika, nie jest produkcją na przewodzie do magazynu i nie zamyka bilansu DC bez konwersji.</p>';
+        readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła. '+
+          'Moc na wejściu MPPT nie jest osobnym zasilaniem magazynu DC; '+
+          'do jego rozliczenia wymagany jest jawnie skonfigurowany przekształtnik.</p>';
         markup+=sect('inverter-data','2. Dane urządzenia','mdi:chart-line',readings,false);
 
         let ports='<p class="ss-note">Końcówki przewodów można dopasować do portów. Port AC i wejścia DC nie mogą dzielić jednej szyny.</p>';
@@ -7068,6 +7421,23 @@ const HASSStudioEditorLibrary=(()=>{
         }else if(k==='hybrid_enabled'){
           c.hybrid={...(HASSStudioInverter.normalize({inverter:c}).hybrid||HASSStudioInverter.hybridDefaults()),
             enabled:val==='true'};
+        }else if(k.startsWith('converter_')){
+          const hybrid=HASSStudioInverter.normalize({inverter:c}).hybrid||
+            HASSStudioInverter.hybridDefaults();
+          const converter=hybrid.converter||HASSStudioInverter.converterDefaults(),
+            prop=k.slice('converter_'.length);
+          if(prop==='enabled')converter.enabled=val==='true';
+          else if(prop==='ac_port_id'||prop==='battery_port_id')
+            converter[prop]=HASSStudioEnergyTopology.ident(val);
+          else if(prop==='pv_mode')converter.pv_mode=val==='none'?'none':'mapped';
+          else if(prop==='ac_mode')converter.ac_mode=val==='calculate'?'calculate':'auto';
+          else if(prop==='efficiency_percent'||prop==='battery_efficiency_percent'){
+            const n=Number(val);
+            converter[prop]=val.trim()===''||!Number.isFinite(n)||
+              n<=0||n>100?null:n;
+          }
+          hybrid.converter={...converter,schema_version:1};
+          c.hybrid=hybrid;
         }else if(k.startsWith('pv_')){
           const match=/^pv_(\d+)_(name|visible|required|port|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
           if(match&&Number(match[1])<12){

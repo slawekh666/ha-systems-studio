@@ -22,11 +22,15 @@ const registry={
  variantOptionsForNode:()=>[['modern','Nowoczesny']],
  categoryIcons:{}
 };
-const run=(count,manual,customRows=[],required=false)=>{
+const run=(count,manual,customRows=[],required=false,converter=false)=>{
  const node={id:'inverter1',type:'inverter',variant:'modern',visual:'studio',
   label:'Falownik',x:0,y:0,scale:1,energy_mode:manual?'test':'ha',
   energy_fallback_enabled:false,inverter:{
    count,show_extra:true,panel_rows:customRows,
+   ...(converter?{hybrid:{schema_version:1,enabled:true,
+     pv_ports:['pv1'],converter:{schema_version:1,enabled:true,
+     ac_port_id:'ac',battery_port_id:'bat',pv_mode:'mapped',ac_mode:'calculate',
+     efficiency_percent:96,battery_efficiency_percent:100}}}:{}),
    entities:{ac_power:'sensor.ac',temperature:'sensor.temp'},
    inputs:Array.from({length:count},(_,i)=>({
     name:'PV'+(i+1),required,entities:{voltage:'sensor.v'+(i+1),
@@ -61,6 +65,13 @@ const run=(count,manual,customRows=[],required=false)=>{
  assert(html.includes('data-field="inv_pv_0_entity_voltage"'));
  assert(html.includes('data-field="inv_pv_'+(count-1)+'_entity_power"'));
  assert(html.includes('Napięcie PV1 (V)'));
+ if(converter){
+   for(const field of ['inv_converter_enabled','inv_converter_ac_port_id',
+     'inv_converter_battery_port_id','inv_converter_ac_mode',
+     'inv_converter_efficiency_percent','inv_converter_battery_efficiency_percent'])
+     assert(html.includes('data-field="'+field+'"'),field);
+   assert(html.includes('Przekształtnik AC/DC'));
+ }
   assert(html.includes('data-field="inv_pv_0_required"'));
   if(required){assert(html.includes('ss-pv-reading-error'));assert(html.includes('role="alert"'));assert(html.includes('⚠ Brak danych'));}
   else assert(!html.includes('ss-pv-reading-error'));
@@ -80,4 +91,5 @@ run(2,true,[{key:'custom',label:'Dziś',entity:'sensor.daily',unit:'kWh'}]);
 run(12,false);
 run(1,true,[],true);
 run(1,false,[],true);
+run(1,true,[],false,true);
 console.log('PASS: inverter inspector renders on selection with 1/2/12 PV inputs and HA/TEST configurations');

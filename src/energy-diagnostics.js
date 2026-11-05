@@ -41,12 +41,19 @@ const HASSStudioEnergyDiagnostics=(()=>{
         return edge?.medium==='dc'&&[edge.from,edge.to].some(key=>
           inverterIds.has(key.slice(0,key.indexOf(':'))));
       });
+    const converterByBattery=new Map((balance.converters||[])
+      .filter(c=>c.battery_network_id)
+      .map(c=>[c.battery_network_id,c]));
     const networkOf=new Map();
     const networks=(balance.networks||[]).map((n,i)=>{
       for(const id of n.connection_ids)networkOf.set(id,i);
+      const converter=converterByBattery.get(n.id);
       return {id:n.id,index:i+1,medium:n.medium,state:n.state,
-        diagnostic_reason:needsConverter(n)?'dc_converter_missing':null,
+        diagnostic_reason:converter?.status==='invalid'?converter.reason:
+          converter?.status==='missing'?converter.reason:
+          needsConverter(n)?'dc_converter_missing':null,
         reasons:[...n.reasons],residual_kw:n.residual_kw,totals:n.totals,
+        converter_transfer_kw:n.converter_transfer_kw??null,
         unaccounted_kw:n.unaccounted_kw,export_cap_kw:n.export_cap_kw,
         devices:n.devices.map(d=>({ ...d,name:devices.get(d.node_id)?.label||
           devices.get(d.node_id)?.id||d.node_id })),
@@ -86,6 +93,8 @@ const HASSStudioEnergyDiagnostics=(()=>{
         connection_id:c.id,node_id:null,side:null,input_index:null});
     return {options,enabled:balance.enabled===true,scenario:balance.config.scenario,
       networks,cables,warnings,dcTerminals,storageTerminals,
+      converters:(balance.converters||[]).map(c=>({...c,
+        device_name:deviceName(c.converter_id)})),
       balanced:networks.filter(n=>n.state==='balanced').length,
       unresolved:networks.filter(n=>n.state!=='balanced').length};
   };
@@ -95,6 +104,25 @@ const HASSStudioEnergyDiagnostics=(()=>{
       network:'Sieć',status:'Stan',balanced:'Bilans prawidłowy',unbalanced:'Pomiary sprzeczne',
       dc_converter_missing:'Brak modelu konwersji DC',
       dc_converter_explanation:'Magazyn ładuje się z obwodu falownika, ale przepływ przez jego wewnętrzny przekształtnik nie jest jeszcze modelowany. Różnica mocy pozostaje nierozliczona; nie jest dowodem sprzecznych pomiarów.',
+      converter_title:'Przekształtniki AC/DC — bilans i straty',
+      converter_transfer:'Transfer do magistrali magazynu DC',
+      converter_note:'Transfer wewnętrzny nie jest fizycznym przewodem. HA/TEST to pomiary lub symulacje; wyliczona moc ze sprawności jest oszacowaniem.',
+      converter_status_valid:'Zgodne pomiary',converter_status_estimated:'Wartość oszacowana',
+      converter_status_missing:'Brak wymaganych danych',converter_status_invalid:'Sprzeczne dane',
+      converter_ac_port_missing:'Brak poprawnego połączenia portu AC przekształtnika',
+      converter_battery_port_missing:'Brak poprawnego połączenia portu magazynu DC',
+      converter_ambiguous_battery_network:'Wiele przekształtników przypisano do tej samej sieci DC magazynu',
+      converter_ac_meter_missing:'Brak jednoznacznego odczytu z portu AC falownika',
+      converter_pv_mapping_missing:'Brak mapowania wejścia PV do portu DC',
+      converter_pv_reading_missing:'Brak kompletnych odczytów mocy wejść PV',
+      converter_pv_reading_conflict:'Niezgodne odczyty mocy PV: pomiar bezpośredni różni się od V × A',
+      converter_pv_battery_bus_overlap:'Wejścia PV i magazynu nie mogą współdzielić tej samej szyny DC',
+      converter_battery_reading_ambiguous:'Magazyn DC nie ma kompletnego, jednoznacznego pomiaru',
+      converter_missing_dc_observation:'Brak wymaganych obserwacji PV lub magazynu',
+      converter_efficiency_or_ac_missing:'Brakuje odczytu AC lub jawnie podanej sprawności',
+      converter_invalid_ac_power:'Nieprawidłowa moc AC przekształtnika',
+      converter_ac_over_rating:'Moc AC przekracza moc znamionową falownika',
+      converter_negative_losses:'Sprzeczne pomiary — energia wyjściowa przewyższa wejściową',
       insufficient:'Brak danych',invalid:'Nieprawidłowe dane',no_devices:'Brak odbiorników / źródeł',
       role:'Urządzenie',power:'Moc netto',source:'Źródło',cables:'Przewody',
       warnings:'Ostrzeżenia',direction:'Kierunek',residual:'Różnica bilansu',
@@ -157,6 +185,25 @@ const HASSStudioEnergyDiagnostics=(()=>{
       network:'Network',status:'Status',balanced:'Balanced',unbalanced:'Conflicting readings',
       dc_converter_missing:'DC conversion model missing',
       dc_converter_explanation:'The battery is charging on an inverter-connected circuit, but its internal converter transfer is not modeled yet. The residual is unaccounted power, not proof of conflicting measurements.',
+      converter_title:'AC/DC converters — energy and losses',
+      converter_transfer:'Converter transfer to DC battery bus',
+      converter_note:'Internal conversion is not a physical wire. HA/TEST readings are measured/simulated; calculated power from assumed efficiency is estimated.',
+      converter_status_valid:'Measurements consistent',converter_status_estimated:'Estimated',
+      converter_status_missing:'Required observations missing',converter_status_invalid:'Conflicting measurements',
+      converter_ac_port_missing:'Converter AC port disconnected or invalid',
+      converter_battery_port_missing:'Battery DC port disconnected or invalid',
+      converter_ambiguous_battery_network:'Multiple converters on the same battery DC network',
+      converter_ac_meter_missing:'Inverter AC participant not uniquely available',
+      converter_pv_mapping_missing:'No mapped PV MPPT terminal',
+      converter_pv_reading_missing:'Missing PV MPPT power data',
+      converter_pv_reading_conflict:'PV power readings conflict with V × A',
+      converter_pv_battery_bus_overlap:'PV and battery DC buses must remain separate',
+      converter_battery_reading_ambiguous:'Incomplete or ambiguous DC battery meter',
+      converter_missing_dc_observation:'PV or battery observation missing',
+      converter_efficiency_or_ac_missing:'Missing AC reading or configured efficiency',
+      converter_invalid_ac_power:'Invalid converter AC power',
+      converter_ac_over_rating:'AC converter power exceeds inverter rating',
+      converter_negative_losses:'Conflicting readings: output exceeds input',
       insufficient:'Missing data',invalid:'Invalid readings',no_devices:'No sources / loads',
       role:'Device',power:'Net power',source:'Source',cables:'Cables',
       warnings:'Warnings',direction:'Direction',residual:'Balance residual',
@@ -249,6 +296,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
         [label('storage_charge'),fmt(n.totals.storage_charge_kw)],
         [label('storage_discharge'),fmt(n.totals.storage_discharge_kw)],
         ...(n.unaccounted_kw!==null?[[label('unaccounted_power'),fmt(n.unaccounted_kw)]]:[]),
+        ...(n.converter_transfer_kw!==null?[[label('converter_transfer'),fmt(n.converter_transfer_kw)]]:[]),
          [label('residual'),fmt(n.residual_kw)]
       ]):'<p>'+escape(label('noData'))+'</p>';
       const rows=o.show_devices?'<h5>'+escape(label('role'))+'</h5>'+
@@ -261,7 +309,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
           c.available?(c.mode==='off'?label('animation_disabled')+' · ':'')+
             fmt(c.kw)+' · '+label(c.direction==='none'?'zero':c.direction):
             label(c.diagnostic_reason||c.reason||'unresolved_flow')])):'';
-      const reason=n.diagnostic_reason?
+      const reason=n.diagnostic_reason==='dc_converter_missing'?
         '<p class="ss-diag-caption">'+escape(label('dc_converter_explanation'))+'</p>':
         n.reasons.length?'<p class="ss-diag-caption">'+
           n.reasons.map(r=>escape(label(r))).join(' · ')+'</p>':'';
@@ -307,6 +355,18 @@ const HASSStudioEnergyDiagnostics=(()=>{
         fmt(t.injection_kw)+' · '+label(t.source)+
           (t.soc===null?'':' · SOC '+t.soc.toFixed(1)+'%')]))+
       '<p class="ss-diag-caption">'+escape(label('storage_dc_not_source'))+'</p></article>':'';
+    const converterReadouts=view.converters.length?
+      '<article><h5>'+escape(label('converter_title'))+'</h5>'+
+      table(view.converters.flatMap(c=>[
+        [c.device_name+' · '+label('status'),
+          label('converter_status_'+c.status)+(c.reason?' · '+label(c.reason):'')],
+        [c.device_name+' · PV (DC)',fmt(c.pv_kw)],
+        [c.device_name+' · Magazyn (DC)',fmt(c.battery_kw)],
+        [c.device_name+' · AC',fmt(c.ac_kw)+' · '+label(c.ac_source)],
+        [c.device_name+' · Straty',fmt(c.loss_kw)],
+        ...(c.efficiency_observed===null?[]:[[c.device_name+' · Sprawność wynikowa',
+          c.efficiency_observed.toFixed(2)+'%']])
+      ]))+'<p class="ss-diag-caption">'+escape(label('converter_note'))+'</p></article>':'';
     const title=label('title')+' · '+view.balanced+'/'+view.networks.length;
     return '<details class="ss-energy-diagnostics ss-energy-diagnostics--'+
       (mode==='editor'?'editor':'viewer')+'" data-energy-status="'+
@@ -318,7 +378,7 @@ const HASSStudioEnergyDiagnostics=(()=>{
       '<p class="ss-diag-caption">'+escape(label('notMeasured'))+'</p>'+
       (!view.enabled?'<p>'+escape(label('off'))+'</p>':
       (view.networks.length?networks:'<p>'+escape(label('noNetwork'))+'</p>')+
-      pvReadouts+storageReadouts+detached+warningList)+
+      pvReadouts+storageReadouts+converterReadouts+detached+warningList)+
       '</div></details>';
   };
   return Object.freeze({defaults,normalize,viewModel,render,styles,escape,fmt});

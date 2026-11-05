@@ -112,6 +112,45 @@ const HASSStudioEditorInspector = (() => {
         readings+=field('Powiąż wejścia PV z portami DC (wersja testowa)',
           'inv_hybrid_enabled',c.hybrid?.enabled?'true':'false','text',
           [['true','Tak'],['false','Nie — zachowaj starszy model']]);
+        if(c.hybrid?.enabled){
+          const cv=c.hybrid.converter||HASSStudioInverter.converterDefaults();
+          const ports=HASSStudioEnergyTopology.ports(obj);
+          const choices=medium=>[['','Nie przypisano'],...ports
+            .filter(p=>p.medium===medium).map(p=>[p.id,(p.label||p.id)+' ('+p.id+')'])];
+          const acChoices=choices('ac'),dcChoices=choices('dc');
+          dcChoices.push(['none','Brak magazynu DC (świadomie)']);
+          for(const [list,value] of [[acChoices,cv.ac_port_id],[dcChoices,cv.battery_port_id]])
+            if(value&&!list.some(q=>q[0]===value))
+              list.push([value,'Nieprawidłowy port: '+value]);
+          let converter=field('Model przekształtnika AC/DC','inv_converter_enabled',
+            cv.enabled?'true':'false','text',
+            [['false','Wyłączony — starszy bilans'],['true','Włączony — model hybrydowy']]);
+          if(cv.enabled)converter+=
+            field('Port AC przekształtnika','inv_converter_ac_port_id',
+              cv.ac_port_id,'text',acChoices)+
+            field('Port DC magazynu przy falowniku','inv_converter_battery_port_id',
+              cv.battery_port_id,'text',dcChoices)+
+            field('Źródło PV','inv_converter_pv_mode',cv.pv_mode,'text',
+              [['mapped','Powiązane wejścia PV / MPPT'],['none','Brak PV — świadomie']])+
+            field('Moc AC falownika','inv_converter_ac_mode',cv.ac_mode,'text',
+              [['auto','Odczyt AC (HA → TEST), oblicz gdy brak'],
+               ['calculate','Wyliczaj z PV i magazynu (nie używaj odczytu AC)']])+
+            field('Sprawność toru DC/AC (%) — założenie do obliczeń',
+              'inv_converter_efficiency_percent',cv.efficiency_percent??'','number',null,
+              'min="0.1" max="100" step="0.1"')+
+            field('Sprawność toru magazynu DC/DC (%) — założenie do obliczeń',
+              'inv_converter_battery_efficiency_percent',
+              cv.battery_efficiency_percent??'','number',null,
+              'min="0.1" max="100" step="0.1"');
+          converter+='<p class="ss-note">Konwerter NIE łączy fizycznie sieci AC i DC. '+
+            'Moc AC z pomiaru ma pierwszeństwo w trybie automatycznym; brakująca moc '+
+            'może być oszacowana tylko z jawnie podanej sprawności DC/AC i kompletnych odczytów. '+
+            'Przy ładowaniu/rozładowaniu magazynu wymagane jest także założenie DC/DC. '+
+            'Wpisz 100% tylko jeśli chcesz świadomie przyjąć model bezstratny dla danego toru. '+
+            'Sprzeczne pomiary pozostają nierozstrzygnięte. Sprawności to założenia, nie odczyty.</p>';
+          readings+=sect('inverter-converter','Przekształtnik AC/DC — 07A.2-D',
+            'mdi:transmission-tower',converter,false);
+        }
         const dcMapping=HASSStudioInverter.dcTerminals(obj,editor._hass);
         const dcOptions=[['','Nie przypisano'],...HASSStudioEnergyTopology.ports(obj)
           .filter(p=>p.medium==='dc').map(p=>[p.id,(p.label||p.id)+' ('+p.id+')'])];
@@ -161,13 +200,15 @@ const HASSStudioEditorInspector = (() => {
               '<p class="ss-note">MPPT → port DC: '+esc(c.hybrid.pv_ports[i])+
               '. Moc na wejściu falownika: '+
               (mappedTerminal?.power_kw==null?'—':esc(mappedTerminal.power_kw.toFixed(3))+' kW')+
-              '. Bez modelu konwersji nie zasila bilansu magazynu DC.</p>':'')+
+              '. Ten odczyt jest wejściem przekształtnika, a nie bezpośrednim źródłem magistrali magazynu DC.</p>':'')+
             '<p class="ss-note">TEST aktywuje się po wpisaniu wartości (również 0); puste pole go wyłącza. Bez mieszania HA z TEST przy obliczaniu V × A.</p>';
           readings+=sect('inverter-pv-'+i,esc(input.name)+' / MPPT '+(i+1)+
             (resolved.error?'<span style="color:#ff7373"> · ⚠ Brak danych</span>':''),
             'mdi:solar-panel',fields,false);
         });
-        readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła. Mapowanie MPPT/port DC jest jawne i opcjonalne. Odczyt PV oznacza moc wpływającą do falownika, nie jest produkcją na przewodzie do magazynu i nie zamyka bilansu DC bez konwersji.</p>';
+        readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła. '+
+          'Moc na wejściu MPPT nie jest osobnym zasilaniem magazynu DC; '+
+          'do jego rozliczenia wymagany jest jawnie skonfigurowany przekształtnik.</p>';
         markup+=sect('inverter-data','2. Dane urządzenia','mdi:chart-line',readings,false);
 
         let ports='<p class="ss-note">Końcówki przewodów można dopasować do portów. Port AC i wejścia DC nie mogą dzielić jednej szyny.</p>';

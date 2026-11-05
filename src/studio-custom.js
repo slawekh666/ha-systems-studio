@@ -761,6 +761,23 @@
         }else if(k==='hybrid_enabled'){
           c.hybrid={...(HASSStudioInverter.normalize({inverter:c}).hybrid||HASSStudioInverter.hybridDefaults()),
             enabled:val==='true'};
+        }else if(k.startsWith('converter_')){
+          const hybrid=HASSStudioInverter.normalize({inverter:c}).hybrid||
+            HASSStudioInverter.hybridDefaults();
+          const converter=hybrid.converter||HASSStudioInverter.converterDefaults(),
+            prop=k.slice('converter_'.length);
+          if(prop==='enabled')converter.enabled=val==='true';
+          else if(prop==='ac_port_id'||prop==='battery_port_id')
+            converter[prop]=HASSStudioEnergyTopology.ident(val);
+          else if(prop==='pv_mode')converter.pv_mode=val==='none'?'none':'mapped';
+          else if(prop==='ac_mode')converter.ac_mode=val==='calculate'?'calculate':'auto';
+          else if(prop==='efficiency_percent'||prop==='battery_efficiency_percent'){
+            const n=Number(val);
+            converter[prop]=val.trim()===''||!Number.isFinite(n)||
+              n<=0||n>100?null:n;
+          }
+          hybrid.converter={...converter,schema_version:1};
+          c.hybrid=hybrid;
         }else if(k.startsWith('pv_')){
           const match=/^pv_(\d+)_(name|visible|required|port|entity_(?:voltage|current|power)|manual_(?:voltage|current|power))$/.exec(k);
           if(match&&Number(match[1])<12){

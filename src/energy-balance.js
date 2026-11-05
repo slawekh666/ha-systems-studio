@@ -132,7 +132,14 @@ const HASSStudioEnergyBalance=(()=>{
     if(kw!==null&&p.reverse_sign)kw=-kw;
     if(kw!==null&&(!Number.isFinite(kw)||Math.abs(kw)>10000))
       return {mode:p.mode,source:'invalid',injection_kw:null,reason:'invalid_power'};
-    if(kw!==null&&!(n.type==='building'&&HASSStudioBuilding.normalize(n).measurement==='net')&&!validDirection(kw,role))
+    // A converter-enabled inverter can import AC for DC battery charging.
+    // Legacy AC-only inverters preserve their original source-direction rule.
+    const hybridInverter=n.type==='inverter'&&
+      HASSStudioInverter.normalize(n).hybrid?.enabled===true&&
+      HASSStudioInverter.normalize(n).hybrid?.converter?.enabled===true;
+    if(kw!==null&&!hybridInverter&&
+      !(n.type==='building'&&HASSStudioBuilding.normalize(n).measurement==='net')&&
+      !validDirection(kw,role))
       return {mode:p.mode,source:'invalid',injection_kw:null,reason:'invalid_direction'};
     return {mode:p.mode,source,injection_kw:kw===null?null:round(kw)};
   };
@@ -303,7 +310,10 @@ const HASSStudioEnergyBalance=(()=>{
       for(const terminal of mapping.terminals){
         const port=portsById.get(terminal.port_id);
         const network=port?keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port)):null;
-        if(!network)
+        // An inverter's own MPPT meter can observe an installed PV string
+        // even when no separate PV-array icon/cable is drawn on the diagram.
+        // Legacy B.2 mode retains its original unconnected-port warning.
+        if(!network&&!HASSStudioInverter.normalize(n).hybrid?.converter?.enabled)
           warnings.push({reason:'pv_dc_unconnected_port',node_id:n.id,
             port_id:terminal.port_id,input_index:terminal.input_index});
         dc_terminals.push({...terminal,network_id:network?.id||null,connected:!!network});
@@ -392,6 +402,13 @@ const HASSStudioEnergyBalance=(()=>{
         mode:reading.mode,source:reading.source,injection_kw:reading.injection_kw,
         ...(reading.reason?{reason:reading.reason}:{})});
     }
+    // Converter constraints are deliberately distinct from topology edges.
+    // No change for legacy inverters or installations without an enabled
+    // versioned converter. Older standalone unit tests may not load this
+    // optional module when no converter is configured.
+    const converters=typeof HASSStudioEnergyConverter==='undefined'?[]:
+      HASSStudioEnergyConverter.integrate({nodes:allNodes,keyGroup,topology,
+        dc_terminals,warnings,tolerance_kw:config.tolerance_kw});
     const networks=[...grouped.values()].map(g=>{
       const entries=g.devices;
       adjustBuildings(g,src,topology,nodesById,warnings,config.tolerance_kw);
@@ -448,12 +465,16 @@ const HASSStudioEnergyBalance=(()=>{
         warnings.push({reason:'unaccounted_generation',network_id:g.id});
       if(boards.length&&result.state==='unbalanced')
         warnings.push({reason:'grid_disconnected_imbalance',network_id:g.id});
+      const converterTransfer=round(entries.filter(e=>e.role==='converter'&&
+        e.injection_kw!==null).reduce((sum,e)=>sum+e.injection_kw,0));
       return {id:g.id,medium:g.medium,connection_ids:g.connection_ids,
-        port_keys:[...g.ports],devices:entries,state:result.state,
+        port_keys:[...g.ports],devices:entries,
+        converter_transfer_kw:converterTransfer||null,state:result.state,
         residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons,
         unaccounted_kw,export_cap_kw};
     });
-    return {enabled:true,config,networks,warnings,topology,dc_terminals,storage_terminals};
+    return {enabled:true,config,networks,warnings,topology,
+      dc_terminals,storage_terminals,converters};
   };
   return Object.freeze({MAX_ASSIGNMENTS,defaults,normalize,participant,haPower,injection,deviceReading,measure,totals,solve,resolve});
 })();

@@ -30,13 +30,32 @@ const HASSStudioInverter=(()=>{
  // Explicit, opt-in port bindings. Legacy inverter nodes without hybrid
  // metadata retain their old AC-only accounting on normalization and saving.
  const hybridDefaults=()=>({schema_version:1,enabled:false,pv_ports:Array(MAX_INPUTS).fill('')});
+ const converterDefaults=()=>({schema_version:1,enabled:false,
+   ac_port_id:'',battery_port_id:'',pv_mode:'mapped',ac_mode:'auto',
+   efficiency_percent:null,battery_efficiency_percent:null});
+ const normalizeConverter=raw=>{
+   const x=raw&&typeof raw==='object'?raw:{};
+   const validPort=id=>typeof id==='string'&&/^[A-Za-z0-9_-]{1,32}$/.test(id)?id:'';
+   const percent=ef=>ef!==null&&ef!==undefined&&ef!==''&&
+     Number.isFinite(Number(ef))&&Number(ef)>0&&Number(ef)<=100?
+     Number(ef):null;
+   return {schema_version:1,enabled:x.schema_version===1&&x.enabled===true,
+     ac_port_id:validPort(x.ac_port_id),
+     battery_port_id:validPort(x.battery_port_id),
+     pv_mode:x.pv_mode==='none'?'none':'mapped',
+     ac_mode:x.ac_mode==='calculate'?'calculate':'auto',
+     efficiency_percent:percent(x.efficiency_percent),
+     battery_efficiency_percent:percent(x.battery_efficiency_percent)};
+ };
  const normalizeHybrid=raw=>{
    const c=raw&&typeof raw==='object'?raw:{};
    return {schema_version:1,enabled:c.schema_version===1&&c.enabled===true,
      pv_ports:Array.from({length:MAX_INPUTS},(_,i)=>{
        const id=c.pv_ports?.[i];
        return typeof id==='string'&&/^[A-Za-z0-9_-]{1,32}$/.test(id)?id:'';
-     })};
+     }),
+     ...(c.converter&&typeof c.converter==='object'?
+       {converter:normalizeConverter(c.converter)}:{})};
  };
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
@@ -223,6 +242,6 @@ const HASSStudioInverter=(()=>{
    const bottom=c.show_extra?Math.max(300,65+panelHeight(c)*c.extra_scale+10):300;
    return '<svg width="'+(150+extraWidth/2)+'" height="'+(bottom/2)+'" viewBox="'+left+' 0 '+(300+extraWidth)+' '+bottom+'" preserveAspectRatio="xMinYMin meet">'+content+'</svg>';
  };
- return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,hybridDefaults,normalizeHybrid,defaults,normalize,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
+ return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,hybridDefaults,converterDefaults,normalizeConverter,normalizeHybrid,defaults,normalize,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverter;
