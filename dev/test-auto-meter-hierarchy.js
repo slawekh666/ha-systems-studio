@@ -95,6 +95,7 @@ const upstreamOnly=[wire('pvline','pv','ac','home','entrance'),wire('evline','ho
 x=solve([{...pv,inverter:{manual:{ac_power:10}}},house('home',10),ev],upstreamOnly);net=x.balance.networks[0];
 assert.equal(net.state,'balanced');approx(net.totals.consumption_kw,10);
 console.log('J: single inverter supply without grid or board can root a tree PASS');
+const {layout,flow}=context;
 // C.2: an old untyped building defaults to individual and only changes by explicit action.
 const legacy=house('home',3,'individual');
 delete legacy.building.measurement;
