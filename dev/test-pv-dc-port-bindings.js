@@ -86,6 +86,7 @@ const html=ctx.diag.render(dcPV,{states:{}},'pl');
 assert(html.includes('3.040 kW'));
 assert(html.includes('Obserwacje wejść PV DC'));
 assert(html.includes('poza bilansem magazynu'));
+assert(html.includes('Obliczono z TEST V × A'));
 // Existing AC selection and power remain unchanged even with a DC MPPT wire.
 const grid=node('grid','power_grid',[pt('ac')],{energy_grid_auto:true});
 const acLine=diagram([inv,grid,dummy],[cable('ac_wire','sofar','ac','grid','ac'),
@@ -109,7 +110,7 @@ const absent=invalid([pt('pv2','dc')],['','pv2'],{inputs:[{required:true},{...pv
  manual:{voltage:null,current:null,power:null},manual_enabled:{voltage:false,current:false,power:false}}]});
 assert(absent.errors.some(x=>x.reason==='pv_dc_missing_measurement'));
 const files=['src/studio-inspector.js','src/studio-custom.js'].map(x=>fs.readFileSync(x,'utf8'));
-assert(files[0].includes('inv_pv_'+String('') )===false || files[0].includes("'_port'")); // structure stays dynamic
+assert(files[0].includes("'inv_pv_'+i+'_port'"),'Inspector must expose per-input port selector');
 assert(files[0].includes('inv_hybrid_enabled'));
 assert(files[1].includes("k==='hybrid_enabled'"));
 assert(files[1].includes("fieldName==='port'"));

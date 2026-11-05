@@ -138,9 +138,17 @@ const HASSStudioEditorInspector = (() => {
           const sourceName={measured:'HA — moc',simulated:'TEST — moc',
             calculated_ha:'Obliczone: HA V × A',calculated_test:'Obliczone: TEST V × A',
             missing:'Brak danych'}[resolved.power_source];
-          if(mappingError)
+          if(mappingError){
+            const mappingLabels={
+              pv_dc_required_mapping_missing:'Wymagane wejście MPPT nie ma przypisanego portu DC.',
+              pv_dc_duplicate_mapping:'Ten sam port DC został przypisany do więcej niż jednego MPPT.',
+              pv_dc_missing_port:'Wskazany port nie istnieje na falowniku.',
+              pv_dc_wrong_medium:'Wskazany port ma typ AC. Wejście MPPT wymaga portu DC.',
+              pv_dc_missing_measurement:'Brakuje odczytu mocy dla wymaganego MPPT.'
+            };
             fields+='<div role="alert" style="border:1px solid #df4444;color:#ff7373;padding:8px">'+
-              'Błędne powiązanie DC: '+esc(mappingError.reason)+'</div>';
+              'Powiązanie DC: '+esc(mappingLabels[mappingError.reason]||mappingError.reason)+'</div>';
+          }
           if(resolved.error)
             fields+='<div class="ss-pv-reading-error" role="alert" style="border:1px solid #df4444;color:#ff7373;padding:10px;margin:8px 0">'+
               '<strong>Nie można obliczyć mocy '+esc(input.name)+'</strong><p>'+esc(resolved.error)+'</p></div>';

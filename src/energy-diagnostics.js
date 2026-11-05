@@ -96,7 +96,9 @@ const HASSStudioEnergyDiagnostics=(()=>{
       imbalance:'Niezgodny bilans',unresolved_flow:'Nieznany przepływ',
       unaccounted:'Moc nierozliczona',unaccounted_generation:'Brak zidentyfikowanego odbiornika lub przepływu',
       unaccounted_branch:'Nieustalony przepływ — moc nierozliczona',unaccounted_power:'Moc nierozliczona (nie strata)',
-      calculated:'Wyliczone',measured:'Pomiar HA',simulated:'Symulacja',missing:'Brak pomiaru',
+      calculated:'Wyliczone',calculated_ha:'Obliczono z HA V × A',
+      calculated_test:'Obliczono z TEST V × A',
+      measured:'Pomiar HA',simulated:'Symulacja',missing:'Brak pomiaru',
       invalid_source:'Niepoprawny odczyt',pending:'Do obliczenia',excluded:'Wyłączone',
       ha:'HA',simulation:'Symulacja',mixed:'Mieszane',unknown:'Nieznane',unavailable:'Niedostępne',
       generation:'Produkcja PV / źródeł',consumption:'Zużycie',grid_import:'Import',
@@ -142,7 +144,9 @@ const HASSStudioEnergyDiagnostics=(()=>{
       imbalance:'Balance mismatch',unresolved_flow:'Unresolved flow',
       unaccounted:'Unaccounted power',unaccounted_generation:'Unidentified load or energy path',
       unaccounted_branch:'Unresolved flow — unaccounted power',unaccounted_power:'Unaccounted power (not a loss)',
-      calculated:'Calculated',measured:'HA measured',simulated:'Simulation',missing:'Missing',
+      calculated:'Calculated',calculated_ha:'Calculated from HA V × A',
+      calculated_test:'Calculated from TEST V × A',
+      measured:'HA measured',simulated:'Simulation',missing:'Missing',
       invalid_source:'Invalid',pending:'Calculation pending',excluded:'Excluded',
       ha:'HA',simulation:'Simulation',mixed:'Mixed',unknown:'Unknown',unavailable:'Unavailable',
       generation:'PV / source generation',consumption:'Consumption',grid_import:'Grid import',
@@ -223,7 +227,9 @@ const HASSStudioEnergyDiagnostics=(()=>{
           '<button type="button" data-energy-jump="'+escape(w.connection_id||w.node_id)+
           '" data-energy-jump-kind="'+(w.connection_id?'connection':'node')+'">'+
           escape(name||'Pokaż na schemacie')+'</button>':escape(name);
-        return '<li>'+escape(label(w.reason))+(link?' · '+link:'')+'</li>';
+        const input=w.input_index===null?'':' · MPPT '+(w.input_index+1);
+        const port=w.port_id?' · '+w.port_id:'';
+        return '<li>'+escape(label(w.reason)+input+port)+(link?' · '+link:'')+'</li>';
       }).join('')+'</ul>':
         '<p>'+escape(label('noWarnings'))+'</p>')+'</article>':'';
     const pvReadouts=view.dcTerminals.length?
