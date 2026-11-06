@@ -31,6 +31,8 @@ validate_card:
     - node dev/test-energy-e2-auto-ports.js
     - node dev/test-device-parameters.js
     - node dev/test-inverter-inspector.js
+    - node dev/test-energy-e4-inverter-kind.js
+    - node dev/test-energy-e4-storage-inspector.js
     - node dev/test-ev-charger.js
     - node dev/test-buildings-power.js
     - node dev/test-energy-balance.js

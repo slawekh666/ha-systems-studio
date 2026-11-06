@@ -767,6 +767,8 @@
            if(f==='alarm')c.manual[f]=val==='true';
         }else if(k==='ac_input_unit'){
           c.ac_input_unit=['auto','W','kW','MW'].includes(val)?val:'auto';
+        }else if(k==='kind'){
+          HASSStudioInverter.selectKind(obj,val,HASSStudioEnergyTopology.index(model));
         }else if(k==='hybrid_enabled'){
           c.hybrid={...(HASSStudioInverter.normalize({inverter:c}).hybrid||HASSStudioInverter.hybridDefaults()),
             enabled:val==='true'};
