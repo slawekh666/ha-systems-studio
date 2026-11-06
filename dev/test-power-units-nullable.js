@@ -1,0 +1,51 @@
+/* 07A.2-D.1-D: unified HA AC/DC power conversion and nullable TEST fields. */
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const c={};vm.createContext(c);
+for(const f of ['ha-state.js','readout-scale.js','building.js','ev-charger.js',
+  'energy-storage.js','power-grid.js','device-parameters.js','inverter-readings.js','inverter.js'])
+ vm.runInContext(fs.readFileSync('src/'+f,'utf8'),c,{filename:f});
+vm.runInContext('this.ha=HASSStudioHA;this.b=HASSStudioBuilding;this.ev=HASSStudioEVCharger;'+
+ 'this.storage=HASSStudioEnergyStorage;this.grid=HASSStudioPowerGrid;',c);
+const state=(x,unit)=>({state:String(x),attributes:{unit_of_measurement:unit}});
+const hass=(x,unit)=>({states:{'sensor.p':state(x,unit)}});
+assert.equal(c.ha.powerReading(hass(2500,'W'),'sensor.p'),2.5);
+assert.equal(c.ha.powerReading(hass(2.5,'kW'),'sensor.p'),2.5);
+assert.equal(c.ha.powerReading(hass(.0025,'MW'),'sensor.p'),2.5);
+assert.equal(c.ha.powerReading(hass(0,'W'),'sensor.p'),0);
+assert.equal(c.ha.powerReading(hass(2.5,'?'),'sensor.p'),null);
+assert.equal(c.ha.powerReading(hass(2500,''),'sensor.p'),null);
+assert.equal(c.ha.powerReading(hass(2500,''),'sensor.p','W'),2.5);
+assert.equal(c.ha.powerReading(hass(-2500,'W'),'sensor.p'),null);
+assert.equal(c.ha.powerReading(hass(-2500,'W'),'sensor.p','auto',true),-2.5);
+assert.equal(c.ha.powerReading(hass('unavailable','W'),'sensor.p'),null);
+assert.equal(c.ha.powerReading(hass(1,'kWh'),'sensor.p'),null);
+const sensor={energy_power_unit:'MW',energy_mode:'auto',energy_fallback_enabled:false};
+assert.equal(c.ha.powerInput(sensor,hass(.004,''),'sensor.p',null).kw,4);
+assert.equal(c.ha.powerInput(sensor,hass(0,'W'),'sensor.p',99).kw,0);
+assert.equal(c.ha.powerInput({energy_mode:'test'},null,'sensor.p',null).kw,null);
+assert.equal(c.ha.powerInput({energy_mode:'test'},null,'sensor.p',0).kw,0);
+const building={type:'building',energy_mode:'test',building:{power_kw:null}};
+assert.equal(c.b.normalize(building).power_kw,null);
+assert.equal(c.b.data(building,null).power,null);
+building.building.power_kw=0;
+assert.equal(c.b.data(building,null).power,0);
+const charger={type:'ev_charger',energy_mode:'test',ev_charger:{manual:{power:null}}};
+assert.equal(c.ev.data(charger,null).power,null);
+charger.ev_charger.manual.power=0;
+assert.equal(c.ev.data(charger,null).power,0);
+const storage={type:'energy_storage',energy_mode:'test',energy_storage:{manual:{power:null}}};
+assert.equal(c.storage.data(storage,null).power,null);
+assert.equal(c.storage.dcTerminal({...storage,energy_storage:{...storage.energy_storage,coupling:'dc',coupling_port_id:'dc'}},null).terminal.power_kw,null);
+storage.energy_storage.manual.power=0;
+assert.equal(c.storage.data(storage,null).power,0);
+const grid={type:'power_grid',energy_mode:'test',power_grid:{manual:{total_kw:null,import_kw:null,export_kw:null}}};
+assert.equal(c.grid.reading('total_kw',{...c.grid.normalize(grid),energy_mode:'test'},null),null);
+const gridLive={type:'power_grid',energy_power_unit:'MW',power_grid:{entities:{total_kw:'sensor.p'}}};
+assert.equal(c.grid.reading('total_kw',{...c.grid.normalize(gridLive),energy_power_unit:'MW'},hass(.003,'')),3);
+const inspector=fs.readFileSync('src/studio-inspector.js','utf8');
+const editor=fs.readFileSync('src/studio-custom.js','utf8');
+assert(inspector.includes("'energy_power_unit'"));
+assert(editor.includes("key==='energy_power_unit'"));
+assert(editor.includes("e.manual.power=val.trim()===''?null"));
+console.log('PASS D.1-D: W/kW/MW HA, overrides, signed zero, missing TEST, UI contracts');
