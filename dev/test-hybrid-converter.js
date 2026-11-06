@@ -167,6 +167,8 @@ assert.equal(res.networks.find(n=>n.medium==='dc').state,'balanced');
 near(res.networks.find(n=>n.medium==='dc').residual_kw,0);
 assert.equal(res.networks.find(n=>n.medium==='dc').devices.filter(d=>d.role==='converter').length,1);
 assert.equal(res.networks.find(n=>n.medium==='dc').devices.find(d=>d.role==='converter').injection_kw,0);
+assert.equal(res.networks.find(n=>n.medium==='dc').converter_transfer_kw,0,
+ 'A real zero converter transfer is not an absent reading');
 assert.equal(flow.resolve(unresolvedIdle,{states:{}}).byConnection.dc_wire.available,true);
 assert.equal(res.converters[0].loss_kw,null);
 // Physically shared DC buses must be rejected even if the PV input does not
