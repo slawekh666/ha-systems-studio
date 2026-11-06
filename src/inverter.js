@@ -60,7 +60,7 @@ const HASSStudioInverter=(()=>{
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
    rated_kw:10,production_threshold_w:10,positive_power:true,export_allowed:true,entities:parameters.entities(parameters.core),
-   manual:parameters.manualDefaults(parameters.core),inputs:[]});
+   manual:{...parameters.manualDefaults(parameters.core),ac_power:null},inputs:[]});
  const normalize=node=>{
    const raw=node?.inverter||node||{},d=defaults(),count=Math.round(clamp(raw.count,1,MAX_INPUTS,2));
    return {...d,...raw,mode:raw.mode==='manual'?'manual':'live',count,
@@ -72,7 +72,9 @@ const HASSStudioInverter=(()=>{
     panel_title:String(raw.panel_title??'Parametry falownika').slice(0,46),
     panel_rows:panelRows(raw,node,count),
     entities:parameters.entities(parameters.core,raw.entities),
-    manual:{ac_power:clamp(raw.manual?.ac_power,-500,500,6.4),
+    manual_enabled:{ac_power:raw.manual_enabled?.ac_power===true||raw.manual_enabled?.ac_power==null&&node?.energy_test_configured===true},
+    ac_input_unit:['auto','W','kW','MW'].includes(raw.ac_input_unit)?raw.ac_input_unit:'auto',
+    manual:{ac_power:raw.manual?.ac_power==null||raw.manual?.ac_power===''?null:clamp(raw.manual.ac_power,-500,500,null),
        temperature:clamp(raw.manual?.temperature,-40,150,32),
        status:['auto','generating','standby','off','fault'].includes(raw.manual?.status)?raw.manual.status:'auto',
        alarm:raw.manual?.alarm===true},

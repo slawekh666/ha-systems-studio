@@ -28,7 +28,7 @@ assert.equal(schema.pv.power.unit,'W');
 assert.equal(schema.entity('sensor.pv1'),'sensor.pv1');
 assert.equal(schema.entity('invalid'),'');
 assert.equal(JSON.stringify(inv.defaults().entities),JSON.stringify(schema.entities(schema.core)));
-assert.equal(JSON.stringify(inv.defaults().manual),JSON.stringify(schema.manualDefaults(schema.core)));
+assert.equal(JSON.stringify(inv.defaults().manual),JSON.stringify({...schema.manualDefaults(schema.core),ac_power:null}));
 assert.equal(JSON.stringify(inv.defaultInput(0)),JSON.stringify(schema.inputDefaults(0)));
 assert.equal(inv.defaultInput(3).visible,false);
 assert.equal(inv.defaultInput(11).name,'PV12');

@@ -98,7 +98,10 @@ const HASSStudioEditorInspector = (() => {
 
         const pvResolved=HASSStudioInverterReadings.resolve(obj,editor._hass,c);
         let readings=numeric(inverterFields.core.ac_power.label,'inv_entity_ac_power',
-          c.entities.ac_power,'inv_manual_ac_power',c.manual.ac_power)+
+          c.entities.ac_power,'inv_manual_ac_power',c.manual_enabled?.ac_power?
+          c.manual.ac_power:'')+
+          field('Jednostka odczytu AC z HA','inv_ac_input_unit',c.ac_input_unit||'auto','text',
+            [['auto','Automatycznie z HA'],['W','W'],['kW','kW'],['MW','MW']])+
           numeric(inverterFields.core.temperature.label,'inv_entity_temperature',
             c.entities.temperature,'inv_manual_temperature',c.manual.temperature)+
           selectMetric(inverterFields.core.status.label,'inv_entity_status',c.entities.status,
@@ -145,8 +148,8 @@ const HASSStudioEditorInspector = (() => {
             field('Źródło PV','inv_converter_pv_mode',cv.pv_mode,'text',
               [['mapped','Powiązane wejścia PV / MPPT'],['none','Brak PV — świadomie']])+
             field('Moc AC falownika','inv_converter_ac_mode',cv.ac_mode,'text',
-              [['auto','Odczyt AC (HA → TEST), oblicz gdy brak'],
-               ['calculate','Wyliczaj z PV i magazynu (nie używaj odczytu AC)']])+
+              [['auto','HA → TEST → obliczenia zastępcze'],
+               ['calculate','Historyczne ustawienie — odczyt AC ma pierwszeństwo']])+
             field('Sprawność toru DC/AC (%) — założenie do obliczeń',
               'inv_converter_efficiency_percent',cv.efficiency_percent??'','number',null,
               'min="0.1" max="100" step="0.1"')+
@@ -311,7 +314,7 @@ const HASSStudioEditorInspector = (() => {
             markup+='<p class="ss-note">Słup wyświetla tylko parametry sieci. Bilans automatycznie oblicza import i eksport z mocy falownika, magazynu i odbiorników.</p>';
           }else if(obj.type==='inverter')
             metric('Moc chwilowa falownika (kW)','inv_entity_ac_power',c.entities.ac_power,
-              'inv_manual_ac_power',c.manual.ac_power);
+              'inv_manual_ac_power',c.manual_enabled?.ac_power?c.manual.ac_power:'');
           else if(obj.type==='building'){
             metric('Pobór budynku (kW)','building_power_entity',c.power_entity,
               'building_power_kw',HASSStudioBuilding.manualPower(c),'kW','Encja mocy (W/kW)');

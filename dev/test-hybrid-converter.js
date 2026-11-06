@@ -24,8 +24,9 @@ assert.equal(x.status,'valid');near(x.loss_kw,.2);
 x=evaluate({pv_kw:0,battery_kw:0,ac_kw:0,ac_source:'measured'});
 assert.equal(x.status,'valid');assert.equal(x.loss_kw,0);
 x=evaluate({pv_kw:3.04,battery_kw:1.5,ac_kw:5,ac_source:'simulated'});
-assert.equal(x.status,'invalid');assert.equal(x.reason,'converter_negative_losses');
-near(x.loss_kw,-3.46);
+assert.equal(x.status,'unresolved');assert.equal(x.reason,'converter_unresolved_losses');
+assert.equal(x.ac_kw,5);assert.equal(x.loss_kw,null);assert.equal(x.efficiency_observed,null);
+near(x.measurement_residual_kw,-3.46);
 x=evaluate({pv_kw:null,battery_kw:1.5,ac_kw:2});
 assert.equal(x.status,'missing');assert.equal(x.reason,'converter_missing_dc_observation');
 x=evaluate({pv_kw:3.04,battery_kw:1.5,ac_kw:null});
@@ -46,7 +47,7 @@ x=evaluate({pv_kw:0,battery_kw:3,ac_kw:null,ac_mode:'calculate',
 assert.equal(x.status,'estimated');near(x.ac_kw,-3.125);
 x=evaluate({pv_kw:3.04,battery_kw:1.5,ac_kw:5,ac_mode:'calculate',
  efficiency_percent:96,battery_efficiency_percent:100});
-assert.equal(x.status,'estimated');near(x.ac_kw,1.4784);
+assert.equal(x.status,'unresolved');assert.equal(x.ac_kw,5);assert.equal(x.loss_kw,null);
 x=evaluate({pv_kw:3.04,battery_kw:0,ac_kw:20});
 assert.equal(x.status,'invalid');assert.equal(x.reason,'converter_ac_over_rating');
 const pt=(id,medium='ac',bus='main')=>({id,label:id,medium,bus,x:50,y:50});
@@ -59,7 +60,7 @@ const makeInverter=(ac=5,opts={})=>{
    battery_port_id:'bat',pv_mode:'mapped',ac_mode:'auto',
    efficiency_percent:null,battery_efficiency_percent:null,...opts};
  return node('sofar','inverter',[pt('ac'),pt('pv1','dc','pv1'),pt('bat','dc','battery')],{
-  label:'Sofar',energy_mode:'test',inverter:{count:1,rated_kw:10,
+  label:'Sofar',energy_mode:'test',energy_test_configured:ac!==null,inverter:{count:1,rated_kw:10,
    manual:{ac_power:ac},inputs:[{name:'PV1',
     manual:{voltage:380,current:8,power:null},
     manual_enabled:{voltage:true,current:true,power:false}}],
@@ -78,19 +79,22 @@ const makeLayout=(inverter=makeInverter(),store=battery(1.5),
  }});
 let diagram=makeLayout(),res=balance.resolve(diagram,{states:{}});
 assert.equal(res.converters.length,1);
-assert.equal(res.converters[0].status,'invalid');
-assert.equal(res.converters[0].reason,'converter_negative_losses');
-assert(res.warnings.some(w=>w.reason==='converter_negative_losses'));
+assert.equal(res.converters[0].status,'unresolved');
+assert.equal(res.converters[0].reason,'converter_unresolved_losses');
+assert(res.warnings.some(w=>w.reason==='converter_unresolved_losses'));
+assert.equal(res.converters[0].ac_kw,5);
+assert.equal(res.converters[0].loss_kw,null);
 assert.equal(res.networks.find(n=>n.medium==='dc').state,'unbalanced');
 assert.equal(res.networks.find(n=>n.medium==='dc').residual_kw,-1.5);
 assert.equal(res.networks.find(n=>n.medium==='dc').devices.length,1);
 assert(!res.warnings.some(w=>w.reason==='pv_dc_unconnected_port'),
  'With a measured MPPT on an opt-in converter a separate PV cable is optional');
 const badHtml=diag.render(diagram,{states:{}},'pl');
-assert(badHtml.includes('Sprzeczne pomiary'));
-assert(badHtml.includes('energia wyjściowa przewyższa wejściową'));
+assert(badHtml.includes('Straty nieustalone'));
+assert(!badHtml.includes('energia wyjściowa przewyższa wejściową'));
+assert(badHtml.includes('straty i sprawność nieustalone'));
 assert(!badHtml.includes('MPPT NaN'));
-const estimated=makeInverter(5,{ac_mode:'calculate',efficiency_percent:96,
+const estimated=makeInverter(null,{ac_mode:'calculate',efficiency_percent:96,
  battery_efficiency_percent:100});
 diagram=makeLayout(estimated);res=balance.resolve(diagram,{states:{}});
 assert.equal(res.converters[0].status,'estimated');
@@ -110,12 +114,23 @@ const roundTrip=JSON.stringify(diagram);
 const reloaded=layout.normalized({studio_layout:JSON.parse(roundTrip)});
 assert.equal(JSON.stringify(reloaded),roundTrip);
 assert.equal(reloaded.nodes.find(n=>n.id==='sofar').inverter.hybrid.converter.battery_efficiency_percent,100);
-const missing=makeInverter(5,{ac_mode:'calculate',efficiency_percent:96});
+const missing=makeInverter(null,{ac_mode:'calculate',efficiency_percent:96});
 res=balance.resolve(makeLayout(missing),{states:{}});
 assert.equal(res.converters[0].reason,'converter_battery_efficiency_missing');
 assert.equal(res.networks.find(n=>n.medium==='dc').state,'unbalanced');
 assert.equal(res.networks.find(n=>n.medium==='ac').state,'insufficient',
- 'Must not leak 5 kW TEST AC in explicitly calculated mode');
+ 'Missing TEST AC must not leak a fabricated value');
+// Explicit HA power is never overridden by efficiency assumptions.
+const priority=makeInverter(5,{ac_mode:'calculate',efficiency_percent:96,battery_efficiency_percent:100});
+priority.inverter.entities={ac_power:'sensor.inverter_ac'};
+priority.energy_mode='auto';
+priority.energy_fallback_enabled=true; // PV TEST fallback; HA AC still has priority.
+priority.inverter.manual_enabled={ac_power:true};
+res=balance.resolve(makeLayout(priority),{states:{'sensor.inverter_ac':{
+ state:'4.5',attributes:{unit_of_measurement:'kW'}}}});
+assert.equal(res.converters[0].ac_kw,4.5);
+assert.equal(res.converters[0].ac_source,'measured');
+assert.equal(res.converters[0].loss_kw,null);
 const direct=makeInverter(1.4);
 res=balance.resolve(makeLayout(direct),{states:{}});
 assert.equal(res.converters[0].status,'valid');near(res.converters[0].loss_kw,.14);

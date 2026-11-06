@@ -20,8 +20,27 @@ const HASSStudioInverterReadings=(()=>{
      return {value:backup,source:backup===null||backup===undefined?'missing':'simulated'};
    return {value:null,source:'missing'};
  };
- const power=(node,h,c)=>HASSStudioHA.powerInput(
-   node,h,c.entities.ac_power,c.manual.ac_power,c.mode,true);
+ const power=(node,h,c)=>{
+   if(c.hybrid?.enabled!==true||c.hybrid.converter?.enabled!==true)
+     return HASSStudioHA.powerInput(node,h,c.entities.ac_power,c.manual.ac_power,c.mode,true);
+   const mode=['auto','ha','test'].includes(node?.energy_mode)?node.energy_mode:
+     c.mode==='manual'?'test':'auto';
+   const raw=HASSStudioHA.reading(h,c.entities.ac_power);
+   const unit=c.ac_input_unit==='auto'||!c.ac_input_unit?raw?.unit:c.ac_input_unit;
+   const scale={W:.001,kW:1,MW:1000};
+   const live=raw&&Object.prototype.hasOwnProperty.call(scale,unit)&&
+     Number.isFinite(raw.value)&&Math.abs(raw.value*scale[unit])<=500?
+     raw.value*scale[unit]:null;
+   const manual=c.manual?.ac_power;
+   const test=typeof manual==='number'&&Number.isFinite(manual)&&
+     (c.manual_enabled?.ac_power===true||
+       c.manual_enabled?.ac_power==null&&node?.energy_test_configured===true)?
+     manual:null;
+   if(mode==='test')return {kw:test,source:test===null?'missing':'simulated'};
+   if(live!==null)return {kw:live,source:'measured'};
+   if(mode==='auto'&&test!==null)return {kw:test,source:'simulated'};
+   return {kw:null,source:'missing'};
+ };
  const pvMode=(node,c)=>{
    if(['auto','ha','test'].includes(node?.energy_mode))return node.energy_mode;
    if(node?.energy_fallback_enabled===true)return 'auto';

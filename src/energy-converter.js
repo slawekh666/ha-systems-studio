@@ -20,8 +20,8 @@ const HASSStudioEnergyConverter=(()=>{
     const direct=valid(ac_kw)?ac_kw:null;
     if(!inputValid)return {status:'missing',reason:'converter_missing_dc_observation',
       pv_kw:valid(pv_kw)?pv_kw:null,battery_kw:valid(battery_kw)?battery_kw:null,
-      ac_kw:ac_mode==='calculate'?null:direct,ac_source,loss_kw:null,efficiency_observed:null};
-    let ac=ac_mode==='calculate'?null:direct;
+      ac_kw:direct,ac_source,loss_kw:null,efficiency_observed:null};
+    let ac=direct;
     let source=ac===null?'missing':ac_source;
     if(ac===null){
       if(eta===null)return {status:'missing',reason:'converter_efficiency_or_ac_missing',
@@ -46,9 +46,9 @@ const HASSStudioEnergyConverter=(()=>{
     const input=round(pv_kw+Math.max(0,-ac)+Math.max(0,-battery_kw));
     const output=round(Math.max(0,ac)+Math.max(0,battery_kw));
     if(loss< -tolerance_kw)
-      return {status:'invalid',reason:'converter_negative_losses',pv_kw,battery_kw,
-        ac_kw:ac,ac_source:source,loss_kw:loss,efficiency_observed:
-        input>0?round(100*output/input):null};
+      return {status:'unresolved',reason:'converter_unresolved_losses',pv_kw,battery_kw,
+        ac_kw:ac,ac_source:source,loss_kw:null,efficiency_observed:null,
+        measurement_residual_kw:loss};
     const eff=input>0?round(100*output/input):input===0&&output===0?null:0;
     return {status:source==='estimated'?'estimated':'valid',reason:null,
       pv_kw,battery_kw,ac_kw:ac===0?0:ac,ac_source:source,
@@ -133,11 +133,7 @@ const HASSStudioEnergyConverter=(()=>{
         fail('converter_ac_meter_missing');continue;
       }
       const acEntry=acEntries[0];
-      // In explicit calculation mode an existing HA or TEST AC value must
-      // never reappear through the legacy balance if derivation fails.
-      if(conf.ac_mode==='calculate'){
-        acEntry.injection_kw=null;acEntry.source='missing';acEntry.mode='device';
-      }
+      // Direct HA/TEST AC readings remain authoritative in every mode.
       const mapped=dc_terminals.filter(t=>t.node_id===node.id);
       if(conf.pv_mode!=='none'&&!mapped.length){
         fail('converter_pv_mapping_missing');continue;
@@ -186,7 +182,7 @@ const HASSStudioEnergyConverter=(()=>{
         battery=round(-participants.reduce((s,d)=>s+d.injection_kw,0));
         batterySource=[...new Set(participants.map(d=>d.source))].join('+');
       }
-      const chosen=conf.ac_mode==='calculate'?null:acEntry.injection_kw;
+      const chosen=acEntry.injection_kw;
       const evaluation=evaluate({pv_kw:pv,battery_kw:battery,ac_kw:chosen,
         ac_source:acEntry.source,ac_mode:conf.ac_mode,
         efficiency_percent:conf.efficiency_percent,
@@ -199,6 +195,10 @@ const HASSStudioEnergyConverter=(()=>{
           [...new Set(mapped.map(t=>t.source))].join('+'),
         battery_source:batterySource};
       transfers.push(transfer);
+      if(evaluation.status==='unresolved'){
+        warnings.push({reason:evaluation.reason,node_id:node.id});
+        continue;
+      }
       if(evaluation.status==='invalid'){
         warnings.push({reason:evaluation.reason,node_id:node.id});
         // Raw observed power is still visible. It must not be replaced
@@ -211,7 +211,7 @@ const HASSStudioEnergyConverter=(()=>{
       }
       // Only a uniquely determined and loss-consistent conversion may provide
       // a calculated DC boundary injection; no virtual graph edge is created.
-      if(conf.ac_mode==='calculate'||chosen===null){
+      if(chosen===null){
         acEntry.injection_kw=evaluation.ac_injection_kw;
         acEntry.source=evaluation.ac_source;
         acEntry.mode='device';
