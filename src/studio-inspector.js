@@ -74,8 +74,7 @@ const HASSStudioEditorInspector = (() => {
         if(mode==='auto')basics+=field('Używaj wartości TEST, gdy brakuje odczytu HA',
           'energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',
           [['true','Tak'],['false','Nie']]);
-        const inverterKind=c.kind==='hybrid'||c.kind!=='grid_tied'&&
-          c.hybrid?.enabled===true&&c.hybrid.converter?.enabled===true?'hybrid':'grid_tied';
+        const inverterKind=HASSStudioInverter.kind(obj);
         const selectedHybrid=inverterKind==='hybrid';
         const legacyPartial=c.kind!=='hybrid'&&c.kind!=='grid_tied'&&
           c.hybrid?.enabled===true&&c.hybrid.converter?.enabled!==true;
