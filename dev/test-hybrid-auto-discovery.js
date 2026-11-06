@@ -21,7 +21,7 @@ const wire=(id,a,ap,b,bp)=>({id,type:'electric',
  energy_start:{node_id:a,port_id:ap},energy_end:{node_id:b,port_id:bp}});
 const inverter=(opts={})=>node('inv','inverter',[port('ac'),port('pv1','dc'),
  port('battery','dc')],{energy_mode:'test',inverter:{count:1,rated_kw:10,
- manual:{ac_power:1.4},inputs:[{name:'PV1',required:true,
+ manual:{ac_power:1.4},manual_enabled:{ac_power:true},inputs:[{name:'PV1',required:true,
  manual:{voltage:380,current:8,power:null},
  manual_enabled:{voltage:true,current:true,power:false}}],
  hybrid:{schema_version:1,enabled:true,pv_ports:[''],
