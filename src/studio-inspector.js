@@ -125,12 +125,22 @@ const HASSStudioEditorInspector = (() => {
             found=HASSStudioEnergyTopology.hybridAttachments(index,obj.id);
           const foundName=(port,ambiguous)=>ambiguous?'Niejednoznaczne':
             port||'Brak podłączonego przewodu';
+          const legacyBinding=c.hybrid?.converter?.ac_port_id||
+            c.hybrid?.converter?.battery_port_id||
+            c.hybrid?.pv_ports?.some(Boolean)||
+            c.hybrid?.converter?.efficiency_percent!==null&&
+              c.hybrid?.converter?.efficiency_percent!==undefined||
+            c.hybrid?.converter?.battery_efficiency_percent!==null&&
+              c.hybrid?.converter?.battery_efficiency_percent!==undefined;
           const converter='<p class="ss-note">Połączenia rozpoznawane z przewodów: AC — '+
             esc(foundName(found.ac_port_id,found.ac_ambiguous))+
             '; magazyn DC — '+esc(foundName(found.battery_port_id,found.battery_ambiguous))+
             '. Wejścia PV/MPPT są odczytywane z czujników; oddzielny przewód PV nie jest wymagany.</p>'+
             '<p class="ss-note">Dane HA i TEST mają pierwszeństwo. '+
-            'Nieustalone straty nie blokują jednoznacznego bilansu magazynu DC.</p>';
+            'Nieustalone straty nie blokują jednoznacznego bilansu magazynu DC.</p>'+
+            (legacyBinding?'<p class="ss-note">Ta konfiguracja zawiera historyczne '+
+             'ręczne przypisania lub założenia sprawności. Zostały zachowane '+
+             'dla zgodności; ich migracja nastąpi w E.5.</p>':'');
           readings+=sect('inverter-converter','Automatyczne połączenia AC / DC',
             'mdi:transmission-tower',converter,false);
         }
