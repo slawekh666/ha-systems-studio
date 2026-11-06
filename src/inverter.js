@@ -95,6 +95,42 @@ const HASSStudioInverter=(()=>{
         manual_enabled:manualEnabled};
     }),...(raw.hybrid&&typeof raw.hybrid==='object'?{hybrid:normalizeHybrid(raw.hybrid)}:{})};
  };
+ // Explicit type transition, isolated from editor controls and tested
+ // independently. No saved wires or port identifiers are rewritten.
+ const kind=node=>{
+   const raw=node?.inverter||node||{};
+   if(raw.kind==='grid_tied'||raw.kind==='hybrid')return raw.kind;
+   return raw.hybrid?.enabled===true&&raw.hybrid.converter?.enabled===true?
+     'hybrid':'grid_tied';
+ };
+ const selectKind=(node,value,topologyIndex=null)=>{
+   if(node?.type!=='inverter'||!['grid_tied','hybrid'].includes(value))return false;
+   const conf=node.inverter=node.inverter||defaults(),
+     hybrid=normalizeHybrid(conf.hybrid||hybridDefaults()),
+     converter=hybrid.converter||converterDefaults(),
+     hybridOn=value==='hybrid';
+   conf.kind=value;hybrid.enabled=hybridOn;converter.enabled=hybridOn;
+   hybrid.converter=converter;conf.hybrid=hybrid;
+   if(!hybridOn)return true;
+   // Standard PV-only inverters have no separate battery DC terminal.
+   // Existing validated battery wiring, including custom port names, wins.
+   const found=topologyIndex?
+     HASSStudioEnergyTopology.hybridAttachments(topologyIndex,node.id):null;
+   const ports=HASSStudioEnergyTopology.ports(node);
+   const existing=ports.some(p=>p.medium==='dc'&&
+     (p.bus==='battery'||p.id==='battery'||p.id==='bat'));
+   if(!existing&&!(found?.storage_links?.length)&&
+     ports.length<HASSStudioEnergyTopology.MAX_PORTS){
+     const used=new Set(ports.map(p=>p.id));
+     let id='battery',i=2;
+     while(used.has(id))id='battery'+i++;
+     node.energy_ports=Array.isArray(node.energy_ports)?
+       node.energy_ports:HASSStudioEnergyTopology.defaultPorts(node);
+     node.energy_ports.push({id,label:'Magazyn DC',medium:'dc',
+       bus:'battery',x:100,y:80});
+   }
+   return true;
+ };
  // An MPPT reading measures power entering the inverter on a separate PV
  // circuit. It is NOT a battery-bus generator or an AC/DC converter transfer.
  const dcTerminals=(node,h,topologyIndex=null)=>{
@@ -263,6 +299,6 @@ const HASSStudioInverter=(()=>{
    const bottom=c.show_extra?Math.max(300,65+panelHeight(c)*c.extra_scale+10):300;
    return '<svg width="'+(150+extraWidth/2)+'" height="'+(bottom/2)+'" viewBox="'+left+' 0 '+(300+extraWidth)+' '+bottom+'" preserveAspectRatio="xMinYMin meet">'+content+'</svg>';
  };
- return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,hybridDefaults,converterDefaults,normalizeConverter,normalizeHybrid,defaults,normalize,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
+ return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,hybridDefaults,converterDefaults,normalizeConverter,normalizeHybrid,defaults,normalize,kind,selectKind,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverter;
