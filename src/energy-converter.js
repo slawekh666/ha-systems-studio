@@ -196,6 +196,24 @@ const HASSStudioEnergyConverter=(()=>{
         battery_source:batterySource};
       transfers.push(transfer);
       if(evaluation.status==='unresolved'){
+        // The converter's internal loss equation and its battery DC boundary
+        // are independent constraints. At this point the existing safety
+        // checks have proved a unique inverter, a separate PV bus and a
+        // fully observed storage-only DC network. Its inverter-side boundary
+        // is therefore the opposite of the observed battery injection even
+        // when PV/AC/loss observations cannot be reconciled.
+        // This never changes a measured AC value or creates an AC/DC edge.
+        if(batteryGroup){
+          batteryGroup.devices.push({
+            node_id:node.id,node_type:'inverter_converter',
+            port_id:batteryPort.id,role:'converter',mode:'device',
+            source:'calculated',injection_kw:battery===0?0:battery,
+            measurement:'inverter_dc_battery_boundary',
+            boundary_basis:'independent_storage_meter'
+          });
+          transfer.battery_boundary_kw=battery===0?0:battery;
+          transfer.battery_boundary_source='calculated';
+        }
         warnings.push({reason:evaluation.reason,node_id:node.id});
         continue;
       }
