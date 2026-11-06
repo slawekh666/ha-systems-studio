@@ -87,9 +87,10 @@ const HASSStudioEnergyStorage=(()=>{
   // Observed power at the physical DC battery terminal. Positive injection
   // supplies its DC bus; a negative injection means charging. This DOES NOT
   // infer any energy transfer through the inverter's internal converter.
-  const dcTerminal=(node,h)=>{
-    const c=normalize(node);
-    if(node?.type!=='energy_storage'||c.coupling!=='dc')
+  const dcTerminal=(node,h,autoPortId='')=>{
+    const c=normalize(node),portId=c.coupling_port_id||autoPortId;
+    if(node?.type!=='energy_storage'||!(c.coupling==='dc'||
+      c.coupling==='legacy'&&autoPortId))
       return {enabled:false,terminal:null,issues:[]};
     const observed=HASSStudioHA.powerInput(
       node,h,c.entities.power,c.manual.power,c.mode,true);
@@ -112,7 +113,7 @@ const HASSStudioEnergyStorage=(()=>{
     }
     if(bms===true)issues.push('dc_storage_bms_alarm');
     return {enabled:true,issues,terminal:{
-      node_id:node.id,port_id:c.coupling_port_id,medium:'dc',
+      node_id:node.id,port_id:portId,medium:'dc',
       measurement_point:'battery_dc_terminal',power_kw:kw,
       injection_kw:injection,source:observed.source,soc,bms_alarm:bms,
       status:kw===null?'missing':issues.length?'warning':'ok',

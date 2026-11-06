@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.41-dev';
+const VERSION = '0.4.42-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2683,9 +2683,10 @@ const HASSStudioEnergyStorage=(()=>{
   // Observed power at the physical DC battery terminal. Positive injection
   // supplies its DC bus; a negative injection means charging. This DOES NOT
   // infer any energy transfer through the inverter's internal converter.
-  const dcTerminal=(node,h)=>{
-    const c=normalize(node);
-    if(node?.type!=='energy_storage'||c.coupling!=='dc')
+  const dcTerminal=(node,h,autoPortId='')=>{
+    const c=normalize(node),portId=c.coupling_port_id||autoPortId;
+    if(node?.type!=='energy_storage'||!(c.coupling==='dc'||
+      c.coupling==='legacy'&&autoPortId))
       return {enabled:false,terminal:null,issues:[]};
     const observed=HASSStudioHA.powerInput(
       node,h,c.entities.power,c.manual.power,c.mode,true);
@@ -2708,7 +2709,7 @@ const HASSStudioEnergyStorage=(()=>{
     }
     if(bms===true)issues.push('dc_storage_bms_alarm');
     return {enabled:true,issues,terminal:{
-      node_id:node.id,port_id:c.coupling_port_id,medium:'dc',
+      node_id:node.id,port_id:portId,medium:'dc',
       measurement_point:'battery_dc_terminal',power_kw:kw,
       injection_kw:injection,source:observed.source,soc,bms_alarm:bms,
       status:kw===null?'missing':issues.length?'warning':'ok',
@@ -2991,29 +2992,48 @@ const HASSStudioInverter=(()=>{
  };
  // An MPPT reading measures power entering the inverter on a separate PV
  // circuit. It is NOT a battery-bus generator or an AC/DC converter transfer.
- const dcTerminals=(node,h)=>{
+ const dcTerminals=(node,h,topologyIndex=null)=>{
    const c=normalize(node);
    if(node?.type!=='inverter'||c.hybrid?.enabled!==true)
      return {enabled:false,terminals:[],errors:[]};
    const terminals=[],errors=[],seen=new Set(),
      byId=new Map(HASSStudioEnergyTopology.ports(node).map(p=>[p.id,p])),
-     inputs=HASSStudioInverterReadings.resolve(node,h,c).inputs;
+     inputs=HASSStudioInverterReadings.resolve(node,h,c).inputs,
+     converter=c.hybrid.converter?.enabled===true,
+     connected=converter&&topologyIndex?
+       HASSStudioEnergyTopology.hybridAttachments(topologyIndex,node.id):null,
+     explicit=new Set(c.hybrid.pv_ports.filter(Boolean)),
+     unbound=inputs.map((v,i)=>({i,v})).filter(({i,v})=>
+       !c.hybrid.pv_ports[i]&&(c.inputs[i].required||v.watts!==null)),
+     physical=connected?.pv_port_ids.filter(id=>!explicit.has(id))||[];
+   // Match physical DC PV branches only when the correspondence is unique.
+   // Otherwise the MPPT remains unresolved, not guessed by drawing order.
+   const inferred=physical.length===1&&unbound.length===1?
+     new Map([[unbound[0].i,physical[0]]]):new Map();
    for(let i=0;i<c.count;i++){
-     const portId=c.hybrid.pv_ports[i],input=c.inputs[i];
-     if(!portId){
+     const input=c.inputs[i],value=inputs[i],
+       portId=c.hybrid.pv_ports[i]||inferred.get(i)||'';
+     if(!portId&&!converter){
        if(input.required)errors.push({reason:'pv_dc_required_mapping_missing',input_index:i,port_id:''});
        continue;
      }
+     if(!portId&&converter&&!input.required&&value.watts===null)continue;
      const report=reason=>errors.push({reason,input_index:i,port_id:portId});
-     if(seen.has(portId)){report('pv_dc_duplicate_mapping');continue;}
-     seen.add(portId);
-     const port=byId.get(portId);
-     if(!port){report('pv_dc_missing_port');continue;}
-     if(port.medium!=='dc'){report('pv_dc_wrong_medium');continue;}
-     const value=inputs[i],powerKw=value.watts===null?null:value.watts/1000;
+     if(!portId&&physical.length&&!inferred.size){
+       report('pv_dc_ambiguous_physical_source');continue;
+     }
+     if(portId){
+       if(seen.has(portId)){report('pv_dc_duplicate_mapping');continue;}
+       seen.add(portId);
+       const port=byId.get(portId);
+       if(!port){report('pv_dc_missing_port');continue;}
+       if(port.medium!=='dc'){report('pv_dc_wrong_medium');continue;}
+     }
+     const powerKw=value.watts===null?null:value.watts/1000;
      terminals.push({node_id:node.id,port_id:portId,input_index:i,
        input_name:input.name,medium:'dc',measurement_point:'inverter_mppt_input',
-       power_kw:powerKw,injection_kw:powerKw===null?null:-powerKw,
+       logical:!portId,power_kw:powerKw,
+       injection_kw:powerKw===null?null:-powerKw,
        source:value.power_source,status:value.status,included_in_balance:false});
      if(powerKw===null&&input.required)report('pv_dc_missing_measurement');
    }
@@ -3509,6 +3529,10 @@ const HASSStudioEnergyTopology=(()=>{
    if(n.type==='distribution_board')return [ac('left1',0,32),ac('left2',0,68),ac('right1',100,32),ac('right2',100,68)];
    if(n.type==='inverter')return [ac('ac',100,55),{id:'pv1',label:'PV1',medium:'dc',bus:'pv1',x:0,y:30},{id:'pv2',label:'PV2',medium:'dc',bus:'pv2',x:0,y:70}];
    if(n.type==='power_grid')return [ac('ac',100,50)];
+   // New storage offers both physical media. Existing saved energy_ports
+   // remain unchanged and retain their original AC wiring.
+   if(n.type==='energy_storage')return [ac('ac',0,50),
+     {id:'dc',label:'DC',medium:'dc',bus:'battery',x:100,y:50}];
    return [ac('ac',n.type==='pump'?50:0,50)];
  };
  const ports=n=>(Array.isArray(n?.energy_ports)?n.energy_ports:defaultPorts(n)).slice(0,MAX_PORTS)
@@ -3646,6 +3670,29 @@ const HASSStudioEnergyTopology=(()=>{
      linksByNode,nodesById};
  };
 
+ // Classify only direct, validated electrical links. The index suppresses
+ // invalid and duplicate cable IDs, so neither can authorize auto binding.
+ // This function is pure and does not persist a device/port mapping.
+ const hybridAttachments=(idx,nodeId)=>{
+   const links=idx.linksByNode.get(nodeId)||[],nodes=idx.nodesById;
+   const ac=new Set(),battery=new Set(),pv=new Set(),storage_links=[];
+   for(const link of links){
+     if(link.medium==='ac'){ac.add(link.port_id);continue;}
+     if(link.medium!=='dc')continue;
+     const peer=nodes.get(link.peer_node_id);
+     if(peer?.type==='energy_storage'){
+       battery.add(link.port_id);storage_links.push(link);
+     }else if(peer&&(peer.type==='pv_source'||
+       peer.energy_role==='source'&&peer.type!=='inverter'))
+       pv.add(link.port_id);
+   }
+   const unique=set=>set.size===1?[...set][0]:'';
+   return {ac_port_id:unique(ac),battery_port_id:unique(battery),
+     pv_port_ids:[...pv],storage_links,
+     ac_ambiguous:ac.size>1,battery_ambiguous:battery.size>1,
+     pv_ambiguous:pv.size>1};
+ };
+ 
  // Automatically derive a building meter's downstream devices from the AC
  // cable graph. A building owns a device only if EVERY path from the selected
  // upstream boundary to that device passes through the building. This is a
@@ -3816,7 +3863,7 @@ const HASSStudioEnergyTopology=(()=>{
    }
    return best;
  };
- return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,busKey,defaultPorts,electricalType,node,end,connection,graph,index,
+ return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,busKey,defaultPorts,electricalType,node,end,connection,graph,index,hybridAttachments,
    geometry,anchor,locate,moveAttached,attach,nearest,meterHierarchy});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyTopology;
@@ -3886,7 +3933,8 @@ const HASSStudioEnergyConverter=(()=>{
       provenance:{pv:'observed',battery:'calculated',ac:source,
         losses:source==='estimated'?'estimated':'calculated'}};
   };
-  const integrate=({nodes,keyGroup,topology,dc_terminals,warnings,tolerance_kw})=>{
+  const integrate=({nodes,keyGroup,topology,topologyIndex,autoStoragePorts,
+    dc_terminals,warnings,tolerance_kw})=>{
     const transfers=[],portCache=new Map(),getPorts=n=>{
       if(!portCache.has(n.id))portCache.set(n.id,new Map(
         HASSStudioEnergyTopology.ports(n).map(p=>[p.id,p])));
@@ -3896,19 +3944,28 @@ const HASSStudioEnergyConverter=(()=>{
     const candidates=nodes.filter(n=>n.type==='inverter').map(n=>({
       node:n,c:HASSStudioInverter.normalize(n)
     })).filter(x=>x.c.hybrid?.enabled===true&&active(x.c.hybrid.converter));
+    const discovered=new Map(candidates.map(({node})=>[node.id,
+      HASSStudioEnergyTopology.hybridAttachments(topologyIndex,node.id)]));
+    const bindings=new Map(candidates.map(({node,c})=>{
+      const conf=c.hybrid.converter,found=discovered.get(node.id);
+      return [node.id,{ac:conf.ac_port_id||found.ac_port_id,
+        battery:conf.battery_port_id||found.battery_port_id}];
+    }));
     const groupsByBattery=new Map();
     for(const x of candidates){
-      const conf=x.c.hybrid.converter,port=getPorts(x.node).get(conf.battery_port_id);
-      const group=conf.battery_port_id==='none'?null:netFor(x.node,port);
+      const portId=bindings.get(x.node.id).battery,
+        port=getPorts(x.node).get(portId);
+      const group=portId==='none'?null:netFor(x.node,port);
       if(group){
         if(!groupsByBattery.has(group.id))groupsByBattery.set(group.id,[]);
         groupsByBattery.get(group.id).push(x.node.id);
       }
     }
     for(const {node,c} of candidates){
-      const conf=c.hybrid.converter;
+      const conf=c.hybrid.converter,found=discovered.get(node.id),
+        binding=bindings.get(node.id);
       const base={converter_id:node.id,device_name:node.label||node.id,
-        ac_port_id:conf.ac_port_id,battery_port_id:conf.battery_port_id,
+        ac_port_id:binding.ac,battery_port_id:binding.battery,
         enabled:true,medium:'ac/dc',status:'missing',reason:null,
         pv_kw:null,battery_kw:null,ac_kw:null,loss_kw:null,
         ac_source:'missing',pv_source:'missing',battery_source:'missing',
@@ -3917,12 +3974,21 @@ const HASSStudioEnergyConverter=(()=>{
         transfers.push({...base,status:'missing',reason});
         warnings.push({reason,node_id:node.id});
       };
-      const ports=getPorts(node),acPort=ports.get(conf.ac_port_id),
+      const ports=getPorts(node),acPort=ports.get(binding.ac),
         acGroup=acPort?.medium==='ac'?netFor(node,acPort):null,
-        batteryNone=conf.battery_port_id==='none',
-        batteryPort=ports.get(conf.battery_port_id),
+        batteryNone=binding.battery==='none',
+        batteryPort=ports.get(binding.battery),
         batteryGroup=batteryNone?null:
           batteryPort?.medium==='dc'?netFor(node,batteryPort):null;
+      if(!conf.ac_port_id&&found.ac_ambiguous){
+        fail('converter_ambiguous_ac_ports');continue;
+      }
+      if(!conf.battery_port_id&&found.battery_ambiguous){
+        fail('converter_ambiguous_battery_ports');continue;
+      }
+      if(batteryNone&&found.storage_links.length){
+        fail('converter_battery_absence_conflicts_with_wire');continue;
+      }
       if(!acPort||acPort.medium!=='ac'||!acGroup){
         fail('converter_ac_port_missing');continue;
       }
@@ -3980,7 +4046,10 @@ const HASSStudioEnergyConverter=(()=>{
             d.injection_kw===null||d.source==='invalid')return false;
           const storage=nodes.find(n=>n.id===d.node_id);
           const cc=storage?HASSStudioEnergyStorage.normalize(storage):null;
-          return cc?.coupling==='dc'&&cc.coupling_port_id===d.port_id;
+          return cc&&(cc.coupling==='dc'&&
+            (cc.coupling_port_id||autoStoragePorts?.get(d.node_id))===d.port_id||
+            cc.coupling==='legacy'&&
+            autoStoragePorts?.get(d.node_id)===d.port_id);
         });
         if(!onlyStorage){
           fail('converter_battery_reading_ambiguous');continue;
@@ -4316,12 +4385,37 @@ const HASSStudioEnergyBalance=(()=>{
     const overrides=new Map(config.participants.map(p=>[p.node_id,p]));
     const allNodes=(Array.isArray(src.nodes)?src.nodes:[]);
     const nodesById=new Map(allNodes.map(n=>[n.id,n]));
+    // Hybrid-only, ephemeral battery attachments. Existing legacy AC layouts
+    // remain unchanged; dual feed and multiple inverters fail closed.
+    const autoStoragePorts=new Map(),storageCandidates=new Map();
+    for(const inverter of allNodes){
+      if(inverter.type!=='inverter')continue;
+      const hybrid=HASSStudioInverter.normalize(inverter).hybrid;
+      if(!hybrid?.enabled||!hybrid.converter?.enabled)continue;
+      const found=HASSStudioEnergyTopology.hybridAttachments(topologyIndex,inverter.id);
+      for(const link of found.storage_links){
+        if(!storageCandidates.has(link.peer_node_id))
+          storageCandidates.set(link.peer_node_id,[]);
+        storageCandidates.get(link.peer_node_id).push(link);
+      }
+    }
+    for(const [id,links] of storageCandidates){
+      const storage=nodesById.get(id),c=HASSStudioEnergyStorage.normalize(storage);
+      if(c.coupling==='ac'||c.coupling_port_id)continue;
+      const ports=new Set(links.map(l=>l.peer_port_id)),
+        inverters=new Set(links.map(l=>l.node_id));
+      const attached=HASSStudioEnergyTopology.ports(storage).filter(p=>
+        keyGroup.has(HASSStudioEnergyTopology.busKey(id,p)));
+      if(ports.size===1&&inverters.size===1&&attached.length===1&&
+        attached[0].medium==='dc'&&ports.has(attached[0].id))
+        autoStoragePorts.set(id,[...ports][0]);
+    }
     // MPPT observations describe DC power entering the inverter, not the
     // battery bus. Report them separately from participants and totals.
     const dc_terminals=[];
     for(const n of allNodes){
       if(n.type!=='inverter')continue;
-      const mapping=HASSStudioInverter.dcTerminals(n,hass);
+      const mapping=HASSStudioInverter.dcTerminals(n,hass,topologyIndex);
       if(!mapping.enabled)continue;
       for(const issue of mapping.errors)
         warnings.push({reason:issue.reason,node_id:n.id,
@@ -4342,17 +4436,19 @@ const HASSStudioEnergyBalance=(()=>{
     const storage_terminals=[];
     for(const n of allNodes){
       if(n.type!=='energy_storage')continue;
-      const battery=HASSStudioEnergyStorage.dcTerminal(n,hass);
+      const inferred=autoStoragePorts.get(n.id)||'';
+      const battery=HASSStudioEnergyStorage.dcTerminal(n,hass,inferred);
       if(!battery.enabled)continue;
-      const c=HASSStudioEnergyStorage.normalize(n);
-      const port=HASSStudioEnergyTopology.ports(n).find(q=>q.id===c.coupling_port_id);
+      const c=HASSStudioEnergyStorage.normalize(n),
+        portId=c.coupling_port_id||inferred;
+      const port=HASSStudioEnergyTopology.ports(n).find(q=>q.id===portId);
       const network=port?.medium==='dc'?
         keyGroup.get(HASSStudioEnergyTopology.busKey(n.id,port)):null;
       const terminal={...battery.terminal,network_id:network?.id||null,connected:!!network};
       storage_terminals.push(terminal);
       for(const reason of battery.issues)
-        warnings.push({reason,node_id:n.id,port_id:c.coupling_port_id});
-      if(!c.coupling_port_id)
+        warnings.push({reason,node_id:n.id,port_id:portId});
+      if(!portId)
         warnings.push({reason:'dc_storage_port_required',node_id:n.id});
       else if(!port)
         warnings.push({reason:'dc_storage_port_missing',node_id:n.id,port_id:c.coupling_port_id});
@@ -4374,14 +4470,17 @@ const HASSStudioEnergyBalance=(()=>{
       let matches=ports.filter(port=>keyGroup.has(HASSStudioEnergyTopology.busKey(n.id,port)));
       const coupling=n.type==='energy_storage'?
         HASSStudioEnergyStorage.normalize(n):null;
-      // Explicit battery coupling is authoritative. Do not silently select
-      // another attached AC/DC port if the selected port is unavailable.
-      if(coupling&&coupling.coupling!=='legacy'){
-        if(p.port_id&&p.port_id!==coupling.coupling_port_id)
+      // Explicit selection wins; otherwise one validated DC wire may
+      // identify an opt-in hybrid storage terminal without migration.
+      const inferredPort=autoStoragePorts.get(n.id)||'';
+      if(coupling&&(coupling.coupling!=='legacy'||inferredPort)){
+        const effectivePort=coupling.coupling_port_id||inferredPort;
+        if(p.port_id&&p.port_id!==effectivePort)
           warnings.push({reason:'storage_coupling_override_conflict',node_id:n.id,
             port_id:p.port_id});
-        const selected=ports.find(q=>q.id===coupling.coupling_port_id);
-        const valid=!!selected&&selected.medium===coupling.coupling&&
+        const selected=ports.find(q=>q.id===effectivePort);
+        const valid=!!selected&&selected.medium===
+          (coupling.coupling==='legacy'?'dc':coupling.coupling)&&
           matches.some(q=>q.id===selected.id)&&
           (!p.port_id||p.port_id===selected.id);
         if(!valid){
@@ -4390,11 +4489,11 @@ const HASSStudioEnergyBalance=(()=>{
           // A wrong or unconnected selection must not accidentally result
           // in an apparently balanced network through some other port.
           for(const group of attached)group.devices.push({
-            node_id:n.id,node_type:n.type,port_id:coupling.coupling_port_id,
+            node_id:n.id,node_type:n.type,port_id:effectivePort,
             role,measurement:null,mode:'device',source:'invalid',
             injection_kw:null,reason:'invalid_storage_coupling'});
           warnings.push({reason:'invalid_storage_coupling',node_id:n.id,
-            port_id:coupling.coupling_port_id});
+            port_id:effectivePort});
           continue;
         }
         matches=[selected];
@@ -4428,7 +4527,8 @@ const HASSStudioEnergyBalance=(()=>{
     // optional module when no converter is configured.
     const converters=typeof HASSStudioEnergyConverter==='undefined'?[]:
       HASSStudioEnergyConverter.integrate({nodes:allNodes,keyGroup,topology,
-        dc_terminals,warnings,tolerance_kw:config.tolerance_kw});
+        dc_terminals,warnings,tolerance_kw:config.tolerance_kw,
+        topologyIndex,autoStoragePorts});
     const networks=[...grouped.values()].map(g=>{
       const entries=g.devices;
       adjustBuildings(g,src,topology,nodesById,warnings,config.tolerance_kw);
@@ -5933,7 +6033,7 @@ const HASSStudioEditorInspector = (() => {
             'inv_manual_alarm',c.manual.alarm?'true':'false',[
               ['false','Brak alarmu'],['true','Alarm']]);
         readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
-        readings+=field('Powiąż wejścia PV z portami DC (wersja testowa)',
+        readings+=field('Włącz wejścia PV / MPPT (model hybrydowy)',
           'inv_hybrid_enabled',c.hybrid?.enabled?'true':'false','text',
           [['true','Tak'],['false','Nie — zachowaj starszy model']]);
         if(c.hybrid?.enabled){
@@ -5949,11 +6049,23 @@ const HASSStudioEditorInspector = (() => {
           let converter=field('Model przekształtnika AC/DC','inv_converter_enabled',
             cv.enabled?'true':'false','text',
             [['false','Wyłączony — starszy bilans'],['true','Włączony — model hybrydowy']]);
-          if(cv.enabled)converter+=
+          if(cv.enabled){
+            const index=typeof HASSStudioEnergyTopology.index==='function'?
+              HASSStudioEnergyTopology.index(model):null,
+              found=index&&typeof HASSStudioEnergyTopology.hybridAttachments==='function'?
+                HASSStudioEnergyTopology.hybridAttachments(index,obj.id):
+                {ac_port_id:'',battery_port_id:'',ac_ambiguous:false,battery_ambiguous:false};
+            converter+='<p class="ss-note">Rozpoznawanie przewodów: AC '+esc(
+              found.ac_ambiguous?'niejednoznaczne':found.ac_port_id||'brak')+
+              ', magazyn DC '+esc(found.battery_ambiguous?'niejednoznaczny':
+              found.battery_port_id||'brak')+
+              '. Brak fizycznego PV nie blokuje logicznych odczytów MPPT.</p>';
+            converter+='<details class="ss-section-details">'+
+              '<summary>Zaawansowane: ręczne przypisanie portów (opcjonalne)</summary>'+
             field('Port AC przekształtnika','inv_converter_ac_port_id',
               cv.ac_port_id,'text',acChoices)+
             field('Port DC magazynu przy falowniku','inv_converter_battery_port_id',
-              cv.battery_port_id,'text',dcChoices)+
+              cv.battery_port_id,'text',dcChoices)+'</details>'+
             field('Źródło PV','inv_converter_pv_mode',cv.pv_mode,'text',
               [['mapped','Powiązane wejścia PV / MPPT'],['none','Brak PV — świadomie']])+
             field('Moc AC falownika','inv_converter_ac_mode',cv.ac_mode,'text',
@@ -5966,6 +6078,7 @@ const HASSStudioEditorInspector = (() => {
               'inv_converter_battery_efficiency_percent',
               cv.battery_efficiency_percent??'','number',null,
               'min="0.1" max="100" step="0.1"');
+          }
           converter+='<p class="ss-note">Konwerter NIE łączy fizycznie sieci AC i DC. '+
             'Moc AC z pomiaru ma pierwszeństwo w trybie automatycznym; brakująca moc '+
             'może być oszacowana tylko z jawnie podanej sprawności DC/AC i kompletnych odczytów. '+
@@ -5988,10 +6101,13 @@ const HASSStudioEditorInspector = (() => {
               input.visible?'true':'false','text',[['true','Tak'],['false','Nie']])+
             field('Wymagaj poprawnego odczytu mocy','inv_pv_'+i+'_required',
               input.required?'true':'false','text',[['true','Tak'],['false','Nie']])+
-            (c.hybrid?.enabled?field('Port DC dla '+input.name,'inv_pv_'+i+'_port',
+            (c.hybrid?.enabled?'<details class="ss-section-details">'+
+              '<summary>Zaawansowane: przypisanie fizycznego portu MPPT</summary>'+
+              field('Port DC dla '+input.name,'inv_pv_'+i+'_port',
               c.hybrid.pv_ports[i]||'','text',
               dcOptions.concat(c.hybrid.pv_ports[i]&&!dcOptions.some(x=>x[0]===c.hybrid.pv_ports[i])?
-                [[c.hybrid.pv_ports[i],'Nieistniejący port: '+c.hybrid.pv_ports[i]]]:[])):'')+
+                [[c.hybrid.pv_ports[i],'Nieistniejący port: '+c.hybrid.pv_ports[i]]]:[]))+
+              '</details>':'')+
             numeric(inverterFields.pv.voltage.label+' '+input.name+' ('+inverterFields.pv.voltage.unit+')','inv_pv_'+i+'_entity_voltage',
               input.entities.voltage,'inv_pv_'+i+'_manual_voltage',manualValue('voltage'))+
             numeric(inverterFields.pv.current.label+' '+input.name+' ('+inverterFields.pv.current.unit+')','inv_pv_'+i+'_entity_current',
@@ -6319,9 +6435,11 @@ const HASSStudioEditorInspector = (() => {
               .map(port=>[port.id,(port.label||port.id)+' ('+port.id+')'])];
             if(c.coupling_port_id&&!options.some(p=>p[0]===c.coupling_port_id))
               options.push([c.coupling_port_id,'Nieprawidłowy port: '+c.coupling_port_id]);
-            markup+=field('Fizyczny port magazynu','storage_coupling_port_id',
-              c.coupling_port_id,'text',options);
-            markup+='<p class="ss-note">Wybór przyłącza nie zmienia typu portów ani przewodów. '+
+            markup+='<details class="ss-section-details">'+
+              '<summary>Zaawansowane: nadpisz automatyczny port magazynu</summary>'+
+              field('Fizyczny port magazynu','storage_coupling_port_id',
+              c.coupling_port_id,'text',options)+'</details>';
+            markup+='<p class="ss-note">Jeśli połączenie DC jest jednoznaczne, port zostanie rozpoznany z przewodu. Wybór przyłącza nie zmienia typu portów ani przewodów. '+
               'Jeśli portu '+c.coupling.toUpperCase()+' nie ma, dodaj go w ustawieniach zaawansowanych i podłącz przewód.</p>';
           }
           if(c.coupling==='dc'){
