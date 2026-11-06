@@ -754,7 +754,12 @@
           }
         }else if(k.startsWith('manual_')){
           const f=k.slice(7);c.manual=c.manual||{};
-          if(f==='ac_power'){c.manual[f]=clamp(val,-500,500,0);obj.energy_test_configured=true;}
+          if(f==='ac_power'){
+            c.manual_enabled=c.manual_enabled||{};
+            c.manual_enabled.ac_power=val.trim()!=='';
+            c.manual[f]=val.trim()===''?null:clamp(val,-500,500,0);
+            obj.energy_test_configured=c.manual_enabled.ac_power;
+          }
           if(f==='temperature')c.manual[f]=clamp(val,-40,150,25);
            if(f==='status')c.manual[f]=['auto','generating','standby','off','fault'].includes(val)?val:'auto';
            if(f==='alarm')c.manual[f]=val==='true';
