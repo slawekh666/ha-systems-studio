@@ -686,7 +686,9 @@
          obj.energy_grid_auto=val==='true';
         }else if(selection.type==='node'&&key==='energy_grid_connected'&&obj.type==='distribution_board'){
           obj.energy_grid_connected=val==='true';
-       }else if(selection.type==='node'&&key==='energy_power_entity'){
+       }else if(selection.type==='node'&&key==='energy_power_unit'){
+          obj.energy_power_unit=['auto','W','kW','MW'].includes(val)?val:'auto';
+        }else if(selection.type==='node'&&key==='energy_power_entity'){
          obj.energy_power_entity=validEntity(val)?val:'';
        }else if(selection.type==='node'&&key==='energy_manual_kw'){
          obj.energy_manual_kw=val===''?null:clamp(val,0,10000,0);obj.energy_test_configured=true;
@@ -737,7 +739,7 @@
           const name=k.slice(7);e.manual=e.manual||{};
           if(name==='status')e.manual.status=['charging','ready','disconnected','fault'].includes(val)?val:'ready';
           else if(name==='alarm')e.manual.alarm=val==='true';
-          else if(name==='power'){e.manual.power=clamp(val,-500,500,0);obj.energy_test_configured=true;}
+          else if(name==='power'){e.manual.power=val.trim()===''?null:clamp(val,-500,500,null);obj.energy_test_configured=true;}
           else if(name==='session_energy')e.manual.session_energy=clamp(val,0,100000,0);
         }else if(k==='mode')e.mode=val==='manual'?'manual':'live';
         else if(k==='phases')e.phases=val==='1'?1:3;
@@ -843,7 +845,7 @@
         }else if(k.startsWith('manual_')){
           const name=k.slice(7);c.manual=c.manual||{};
           if(name==='soc')c.manual.soc=clamp(val,0,100,75);
-          if(name==='power')c.manual.power=clamp(val,-500,500,1.5);
+          if(name==='power')c.manual.power=val.trim()===''?null:clamp(val,-500,500,null);
         }else if(k==='coupling'){
           const next=['ac','dc'].includes(val)?val:'legacy';
           if(c.coupling!==next)c.coupling_port_id='';
@@ -911,7 +913,7 @@
         }else if(k.startsWith('manual_')){
           const name=k.slice(7);
           if([...HASSStudioPowerGrid.FIELDS,'grid_status','voltage_alarm','phase_loss'].includes(name)){
-            g.manual=g.manual||{};g.manual[name]=clamp(val,-10000,10000,0);
+            g.manual=g.manual||{};g.manual[name]=val.trim()===''?null:clamp(val,-10000,10000,null);
           }
         }else if(k.startsWith('extra_')){
           const name=k.slice(6);

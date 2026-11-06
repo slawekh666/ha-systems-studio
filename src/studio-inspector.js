@@ -291,7 +291,10 @@ const HASSStudioEditorInspector = (() => {
           const test=mode==='test'||mode==='auto'&&obj.energy_fallback_enabled===true;
           markup+=field('Źródło danych','energy_mode',mode,'text',
             [['auto','Automatycznie: HA → TEST'],['ha','Tylko Home Assistant'],['test','Symulacja ręczna']]);
-          if(mode==='auto')markup+=field('Wartość testowa, gdy czujnik HA nie działa',
+          markup+=field('Jednostka mocy z HA','energy_power_unit',
+             ['W','kW','MW'].includes(obj.energy_power_unit)?obj.energy_power_unit:'auto','text',
+             [['auto','Automatycznie z HA'],['W','W'],['kW','kW'],['MW','MW']]);
+           if(mode==='auto')markup+=field('Wartość testowa, gdy czujnik HA nie działa',
             'energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',
             [['true','Włączona'],['false','Wyłączona']]);
           const metric=(title,entityKey,entity,testKey,testValue,unit='kW',entityLabel='Czujnik Home Assistant')=>{
