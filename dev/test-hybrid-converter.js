@@ -84,9 +84,11 @@ assert.equal(res.converters[0].reason,'converter_unresolved_losses');
 assert(res.warnings.some(w=>w.reason==='converter_unresolved_losses'));
 assert.equal(res.converters[0].ac_kw,5);
 assert.equal(res.converters[0].loss_kw,null);
-assert.equal(res.networks.find(n=>n.medium==='dc').state,'unbalanced');
-assert.equal(res.networks.find(n=>n.medium==='dc').residual_kw,-1.5);
-assert.equal(res.networks.find(n=>n.medium==='dc').devices.length,1);
+assert.equal(res.networks.find(n=>n.medium==='dc').state,'balanced');
+assert.equal(res.networks.find(n=>n.medium==='dc').residual_kw,0);
+assert.equal(res.networks.find(n=>n.medium==='dc').devices.length,2);
+assert.equal(res.networks.find(n=>n.medium==='dc').devices.find(d=>d.role==='converter').injection_kw,1.5);
+assert.equal(res.converters[0].battery_boundary_kw,1.5);
 assert(!res.warnings.some(w=>w.reason==='pv_dc_unconnected_port'),
  'With a measured MPPT on an opt-in converter a separate PV cable is optional');
 const badHtml=diag.render(diagram,{states:{}},'pl');
