@@ -9,7 +9,7 @@ const HASSStudioPowerGrid=(()=>{
  const defaults=()=>({variant:'classic',theme:'auto',panel_position:'right',panel_x:0,panel_y:0,panel_scale:.7,
   show_panel:true,show_v:true,show_a:true,show_l1:true,show_l2:true,show_l3:true,
   show_extras:[],mode:'live',entities:{},manual:{l1_v:231.8,l1_a:4.2,l2_v:229.7,l2_a:3.8,l3_v:233.5,l3_a:5.1,
-  total_kw:2.5,import_kw:2.5,export_kw:0,frequency:49.98,power_factor:0.98,grid_status:1,voltage_alarm:0,phase_loss:0},
+  total_kw:null,import_kw:null,export_kw:null,frequency:49.98,power_factor:0.98,grid_status:1,voltage_alarm:0,phase_loss:0},
   min_voltage:207,max_voltage:253});
  const normalize=(node)=>{
   const d=defaults(),raw=node?.power_grid||{},entities=raw.entities||{},manual=raw.manual||{};
@@ -33,8 +33,9 @@ const HASSStudioPowerGrid=(()=>{
   if(!Number.isFinite(n))return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
   const unit=String(state.attributes?.unit_of_measurement||'').trim();
   if(key==='total_kw'||key==='import_kw'||key==='export_kw'){
-   if(unit==='W')return n/1000;
-   if(unit===''||unit==='kW')return n;
+    const kw=HASSStudioHA.powerReading(hass,id,conf.energy_power_unit||'auto',true);
+    return kw===null&&conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:kw;
+   }||unit==='kW')return n;
    return null;
   }
   if(key.endsWith('_v')&&unit!==''&&unit!=='V')return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
@@ -53,7 +54,9 @@ const HASSStudioPowerGrid=(()=>{
   return null;
  };
  const resolve=(node,hass)=>{
-  const c={...normalize(node),energy_mode:node?.energy_mode||null,fallback:node?.energy_fallback_enabled===true};const phase={};let alarm=false;
+  const c={...normalize(node),energy_mode:node?.energy_mode||null,
+     energy_power_unit:node?.energy_power_unit||'auto',
+     fallback:node?.energy_fallback_enabled===true};const phase={};let alarm=false;
   for(const n of [1,2,3]){
    const v=reading('l'+n+'_v',c,hass),a=reading('l'+n+'_a',c,hass);
    const voltageAlert=v!==null&&(v<c.min_voltage||v>c.max_voltage);

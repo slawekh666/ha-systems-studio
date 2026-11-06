@@ -5,7 +5,7 @@ const HASSStudioEVCharger=(()=>{
  const valid=x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x)?x:'';
  const clamp=(v,min,max,d)=>v!==''&&v!=null&&Number.isFinite(Number(v))?Math.max(min,Math.min(max,Number(v))):d;
  const defaults=()=>({mode:'live',phases:3,power_threshold_w:30,display_scale:1,show_extra:false,extra_scale:1,extra_position:'right',charging_positive:true,animate:true,
-   entities:Object.fromEntries(keys.map(k=>[k,''])),manual:{power:7.2,session_energy:18.6,status:'charging',alarm:false}});
+   entities:Object.fromEntries(keys.map(k=>[k,''])),manual:{power:null,session_energy:18.6,status:'charging',alarm:false}});
  const normalize=node=>{
   const o=node?.ev_charger||node||{},d=defaults();
   return {...d,...o,mode:o.mode==='manual'?'manual':'live',phases:o.phases===1?1:3,
@@ -14,13 +14,13 @@ const HASSStudioEVCharger=(()=>{
    extra_position:o.extra_position==='left'?'left':'right',show_extra:o.show_extra===true,
    charging_positive:o.charging_positive!==false,animate:o.animate!==false,
    entities:Object.fromEntries(keys.map(k=>[k,valid(o.entities?.[k])])),
-   manual:{power:clamp(o.manual?.power,-500,500,7.2),session_energy:clamp(o.manual?.session_energy,0,100000,18.6),
+   manual:{power:clamp(o.manual?.power,-500,500,null),session_energy:clamp(o.manual?.session_energy,0,100000,18.6),
      status:['charging','ready','disconnected','fault'].includes(o.manual?.status)?o.manual.status:'charging',alarm:o.manual?.alarm===true}};
  };
  const reading=(h,id,unit,kind)=>{
   const r=HASSStudioHA.reading(h,id);
   if(!r)return null;
-  if(kind==='power')return r.unit==='W'?r.value/1000:r.unit==='kW'?r.value:null;
+  if(kind==='power')return HASSStudioHA.powerReading(h,id,'auto',true);
   if(kind==='energy')return r.unit==='Wh'?r.value/1000:r.unit==='kWh'?r.value:r.unit==='MWh'?r.value*1000:null;
   if(kind==='temp')return ['','°C','C'].includes(r.unit)&&r.value>=-40&&r.value<=150?r.value:null;
   if(kind==='soc')return ['','%'].includes(r.unit)&&r.value>=0&&r.value<=100?r.value:null;

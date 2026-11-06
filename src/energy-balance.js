@@ -32,10 +32,7 @@ const HASSStudioEnergyBalance=(()=>{
   };
   // Device-native readouts retain their own sign conventions and manual modes.
   // This adapter intentionally reads POWER only; cumulative kWh is never kW.
-  const powerEntity=(h,id)=>{
-    const r=HASSStudioHA.reading(h,id);
-    return r&&['W','kW'].includes(r.unit)?r.value/(r.unit==='W'?1000:1):null;
-  };
+  const powerEntity=(h,id,unit='auto')=>HASSStudioHA.powerReading(h,id,unit,true);
   const fallbackAllowed=(n,legacy)=>n.energy_fallback_enabled===true||
     n.energy_fallback_enabled==null&&legacy==='manual';
   const preferred=(live,manual,enabled)=>live!==null?{kw:live,source:'measured'}:
@@ -72,8 +69,9 @@ const HASSStudioEnergyBalance=(()=>{
         return {kw:null,source:'missing'};
       }
       const c=HASSStudioPowerGrid.normalize(n);
-      const i=powerEntity(h,c.entities.import_kw),e=powerEntity(h,c.entities.export_kw);
-      const total=powerEntity(h,c.entities.total_kw);
+      const unit=n.energy_power_unit||'auto';
+       const i=powerEntity(h,c.entities.import_kw,unit),e=powerEntity(h,c.entities.export_kw,unit);
+       const total=powerEntity(h,c.entities.total_kw,unit);
       const measured=p.grid_strategy==='signed_total'?total:
         i!==null&&e!==null?i-e:null;
       const manual=p.grid_strategy==='signed_total'?c.manual.total_kw:
@@ -99,10 +97,7 @@ const HASSStudioEnergyBalance=(()=>{
     }
     return {kw:null,source:'missing'};
   };
-  const haPower=(h,id)=>{
-    const v=HASSStudioHA.reading(h,id);
-    return v&&['W','kW'].includes(v.unit)?(v.unit==='W'?v.value/1000:v.value):null;
-  };
+  const haPower=(h,id,unit='auto')=>HASSStudioHA.powerReading(h,id,unit,true);
   // For manual/HA overrides, positive means production/import/discharge,
   // except for loads where positive means consumption.
   const injection=(kw,role)=>role==='load'?-kw:kw;
@@ -118,7 +113,7 @@ const HASSStudioEnergyBalance=(()=>{
     let kw=null,source='missing';
     if(p.mode==='manual'){kw=injection(p.manual_kw,role);source='simulated';}
     else if(p.mode==='ha'){
-      const raw=haPower(h,p.entity);
+      const raw=haPower(h,p.entity,n.energy_power_unit||'auto');
       if(raw!==null){kw=injection(raw,role);source='measured';}
     }else{
       const r=deviceReading(n,h,p);

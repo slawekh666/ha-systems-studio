@@ -1,13 +1,13 @@
 /* Building load: original, editable house/garage/workshop SVG and HA electrical load. */
 const HASSStudioBuilding=(()=>{
- const defaults=()=>({mode:'live',power_entity:'',daily_entity:'',power_kw:2,daily_kwh:0,show_readout:true,readout_scale:1,measurement:'individual',remaining_enabled:false,remaining_kw:0,window_glow:true});
+ const defaults=()=>({mode:'live',power_entity:'',daily_entity:'',power_kw:null,daily_kwh:0,show_readout:true,readout_scale:1,measurement:'individual',remaining_enabled:false,remaining_kw:null,window_glow:true});
  const clamp=(v,a,b,d)=>v!==''&&v!=null&&Number.isFinite(Number(v))?Math.max(a,Math.min(b,Number(v))):d;
  const entity=v=>typeof v==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(v)?v:'';
  const normalize=n=>{
   const x=n?.building||n||{},d=defaults();
   return {...d,...x,mode:x.mode==='manual'?'manual':'live',power_entity:entity(x.power_entity),
-   daily_entity:entity(x.daily_entity),power_kw:clamp(x.power_kw,x.measurement==='net'?-10000:0,10000,2),
-   daily_kwh:clamp(x.daily_kwh,0,1000000,0),remaining_enabled:x.remaining_enabled===true,remaining_kw:clamp(x.remaining_kw,0,10000,0),
+   daily_entity:entity(x.daily_entity),power_kw:clamp(x.power_kw,x.measurement==='net'?-10000:0,10000,null),
+   daily_kwh:clamp(x.daily_kwh,0,1000000,0),remaining_enabled:x.remaining_enabled===true,remaining_kw:clamp(x.remaining_kw,0,10000,null),
    readout_scale:HASSStudioReadoutScale.factor(x.readout_scale),
    measurement:['aggregate','net'].includes(x.measurement)?x.measurement:'individual',
    show_readout:x.show_readout!==false,window_glow:x.window_glow!==false};
@@ -121,7 +121,7 @@ const HASSStudioBuilding=(()=>{
  const setManualPower=(node,value)=>{
   const c=node.building||(node.building=defaults()),old=normalize(node);
   const key=old.measurement==='individual'&&old.remaining_enabled?'remaining_kw':'power_kw';
-  c[key]=clamp(value,old.measurement==='net'?-10000:0,10000,0);
+  c[key]=clamp(value,old.measurement==='net'?-10000:0,10000,null);
   return c[key];
  };
  // Per-building, explicit migration only; never rewrite older meters on load.
@@ -137,7 +137,7 @@ const HASSStudioBuilding=(()=>{
  const numeric=(h,id,kind)=>{
   const x=HASSStudioHA.reading(h,id);
   if(!x||x.value<0)return null;
-  if(kind==='power')return x.unit==='W'?x.value/1000:x.unit==='kW'?x.value:null;
+  if(kind==='power')return HASSStudioHA.powerReading(h,id);
   return x.unit==='Wh'?x.value/1000:x.unit==='kWh'?x.value:x.unit==='MWh'?x.value*1000:null;
  };
  const data=(node,h)=>{
