@@ -508,7 +508,7 @@
         const n=model.nodes.length;
         const node={id:freshId('n'),type:kind,x:position?position.x:80+(n%6)*170,y:position?position.y:100+Math.floor(n/6)*170,
           energy_ports:HASSStudioEnergyTopology.defaultPorts({type:kind,variant:preset}),energy_mode:'auto',energy_fallback_enabled:false,energy_test_configured:false,energy_grid_auto:kind==='power_grid',energy_grid_connected:true,energy_power_entity:'',energy_manual_kw:null,
-           scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,pellet_test_mode:false,pellet_manual_state:'burning',pellet_manual_temperature:65,pellet_manual_power_unit:'%',pellet_manual_power:65,pellet_manual_feeder:false,pellet_manual_alarm:false,pellet_burner_power_entity:'',pellet_feeder_entity:'',pellet_alarm_entity:'',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,equipment_mode:'live',equipment_test_running:false,equipment_test_speed:1,equipment_test_position:0,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?{...HASSStudioBuilding.defaults(),measurement:'aggregate',remaining_kw:0}:undefined,entities:[],parts:[]};
+           scale:1,readout_scale:1,visual:'warmwasser',variant:registry.isVariant(kind,preset)?preset:registry.defaultVariant(kind),label:'',entity:'',burner_entity:'',burner_mode:'auto',solid_fuel:'wood',pellet_level_entity:'',pellet_level_manual:false,pellet_level_test:80,pellet_alarm_pct:20,pellet_test_mode:false,pellet_manual_state:'burning',pellet_manual_temperature:65,pellet_manual_power_unit:'%',pellet_manual_power:65,pellet_manual_feeder:false,pellet_manual_alarm:false,pellet_burner_power_entity:'',pellet_feeder_entity:'',pellet_alarm_entity:'',solid_state:'auto',solid_glow:78,hp_power_entity:'',hp_fan_entity:'',hp_max_rpm:1800,hp_glow:65,hp_test_mode:false,hp_manual_kw:0,hp_manual_fan:0,gas_draw_entity:'',gas_glow:62,electric_power_entity:'',electric_load_entity:'',electric_max_kw:8,electric_glow:60,equipment_mode:'live',equipment_test_running:false,equipment_test_speed:1,equipment_test_position:0,pump_entity:'',tank_entity:'',solar_on_delta:6,solar_off_delta:3,burner_on_temp:35,burner_off_temp:32,power_grid:kind==='power_grid'?HASSStudioPowerGrid.defaults():undefined,radiator:kind==='radiator'?HASSStudioRadiator.defaults():undefined,manifold:kind==='manifold'?HASSStudioManifold.defaults():undefined,energy_storage:kind==='energy_storage'?HASSStudioEnergyStorage.defaults():undefined,inverter:kind==='inverter'?HASSStudioInverter.defaults():undefined,ev_charger:kind==='ev_charger'?HASSStudioEVCharger.defaults():undefined,building:kind==='building'?{...HASSStudioBuilding.defaults(),measurement:'aggregate'}:undefined,entities:[],parts:[]};
         if(HASSStudioEnergyTopology.electricalType(node))model.energy_balance.enabled=true;
          model.nodes.push(node);selection={type:'node',id:node.id};
       }
@@ -686,7 +686,9 @@
          obj.energy_grid_auto=val==='true';
         }else if(selection.type==='node'&&key==='energy_grid_connected'&&obj.type==='distribution_board'){
           obj.energy_grid_connected=val==='true';
-       }else if(selection.type==='node'&&key==='energy_power_entity'){
+       }else if(selection.type==='node'&&key==='energy_power_unit'){
+          obj.energy_power_unit=['auto','W','kW','MW'].includes(val)?val:'auto';
+        }else if(selection.type==='node'&&key==='energy_power_entity'){
          obj.energy_power_entity=validEntity(val)?val:'';
        }else if(selection.type==='node'&&key==='energy_manual_kw'){
          obj.energy_manual_kw=val===''?null:clamp(val,0,10000,0);obj.energy_test_configured=true;
@@ -737,7 +739,7 @@
           const name=k.slice(7);e.manual=e.manual||{};
           if(name==='status')e.manual.status=['charging','ready','disconnected','fault'].includes(val)?val:'ready';
           else if(name==='alarm')e.manual.alarm=val==='true';
-          else if(name==='power'){e.manual.power=clamp(val,-500,500,0);obj.energy_test_configured=true;}
+          else if(name==='power'){e.manual.power=val.trim()===''?null:clamp(val,-500,500,null);obj.energy_test_configured=true;}
           else if(name==='session_energy')e.manual.session_energy=clamp(val,0,100000,0);
         }else if(k==='mode')e.mode=val==='manual'?'manual':'live';
         else if(k==='phases')e.phases=val==='1'?1:3;
@@ -843,7 +845,7 @@
         }else if(k.startsWith('manual_')){
           const name=k.slice(7);c.manual=c.manual||{};
           if(name==='soc')c.manual.soc=clamp(val,0,100,75);
-          if(name==='power')c.manual.power=clamp(val,-500,500,1.5);
+          if(name==='power')c.manual.power=val.trim()===''?null:clamp(val,-500,500,null);
         }else if(k==='coupling'){
           const next=['ac','dc'].includes(val)?val:'legacy';
           if(c.coupling!==next)c.coupling_port_id='';
@@ -911,7 +913,7 @@
         }else if(k.startsWith('manual_')){
           const name=k.slice(7);
           if([...HASSStudioPowerGrid.FIELDS,'grid_status','voltage_alarm','phase_loss'].includes(name)){
-            g.manual=g.manual||{};g.manual[name]=clamp(val,-10000,10000,0);
+            g.manual=g.manual||{};g.manual[name]=val.trim()===''?null:clamp(val,-10000,10000,null);
           }
         }else if(k.startsWith('extra_')){
           const name=k.slice(6);

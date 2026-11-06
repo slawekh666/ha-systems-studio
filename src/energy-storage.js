@@ -13,13 +13,13 @@ const HASSStudioEnergyStorage=(()=>{
   const cleanPort=x=>typeof x==='string'&&/^[A-Za-z0-9_-]{1,32}$/.test(x)?x:'';
   const limit=x=>x===null||x===undefined||x===''?null:
     Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=500?Number(x):null;
-  const defaults=()=>({...DEFAULTS,entities:Object.fromEntries(FIELDS.map(k=>[k,''])),manual:{soc:75,power:1.5}});
+  const defaults=()=>({...DEFAULTS,entities:Object.fromEntries(FIELDS.map(k=>[k,''])),manual:{soc:75,power:null}});
   const normalize=node=>{
     const src=node?.energy_storage||node||{},d=defaults();
     const c={...d,...src,mode:src.mode==='manual'?'manual':'live',
       display_scale:HASSStudioReadoutScale.factor(src.display_scale),
       entities:Object.fromEntries(FIELDS.map(k=>[k,cleanEntity(src.entities?.[k])])),
-      manual:{soc:clamp(src.manual?.soc,0,100,75),power:clamp(src.manual?.power,-500,500,1.5)},
+      manual:{soc:clamp(src.manual?.soc,0,100,75),power:clamp(src.manual?.power,-500,500,null)},
       coupling:['ac','dc'].includes(src.coupling)?src.coupling:'legacy',
       coupling_port_id:cleanPort(src.coupling_port_id),
       max_charge_kw:limit(src.max_charge_kw),
