@@ -75,7 +75,8 @@ const HASSStudioEnergyBalance=(()=>{
       const measured=p.grid_strategy==='signed_total'?total:
         i!==null&&e!==null?i-e:null;
       const manual=p.grid_strategy==='signed_total'?c.manual.total_kw:
-        c.manual.import_kw-c.manual.export_kw;
+         c.manual.import_kw!==null&&c.manual.export_kw!==null?
+           c.manual.import_kw-c.manual.export_kw:null;
       return HASSStudioHA.powerInput(n,h,
         p.grid_strategy==='signed_total'?c.entities.total_kw:'',
         manual,c.mode,true).source==='simulated'?

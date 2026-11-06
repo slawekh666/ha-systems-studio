@@ -43,7 +43,7 @@ const HASSStudioPowerGrid=(()=>{
   return n;
  };
  const status=(key,c,h)=>{
-  if(c.mode==='manual')return Boolean(c.manual[key]);
+  if(c.mode==='manual')return c.manual[key]===null?null:Boolean(c.manual[key]);
   const id=c.entities[key],s=h?.states?.[id]?.state;
   if(!id||s==null||['unknown','unavailable'].includes(String(s).toLowerCase()))return null;
   const v=String(s).toLowerCase();
