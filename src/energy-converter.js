@@ -195,34 +195,34 @@ const HASSStudioEnergyConverter=(()=>{
           [...new Set(mapped.map(t=>t.source))].join('+'),
         battery_source:batterySource};
       transfers.push(transfer);
-      if(evaluation.status==='unresolved'){
+      // Internal converter losses and the battery DC terminal are separate
+      // constraints. A uniquely observed, storage-only DC bus has a known
+      // boundary even when the PV/AC observations cannot determine losses.
+      // Missing/invalid measurements and ambiguous topology still fail closed.
+      if(!['valid','estimated','unresolved'].includes(evaluation.status)){
         warnings.push({reason:evaluation.reason,node_id:node.id});
         continue;
       }
-      if(evaluation.status==='invalid'){
+      if(evaluation.status==='unresolved')
         warnings.push({reason:evaluation.reason,node_id:node.id});
-        // Raw observed power is still visible. It must not be replaced
-        // by a made-up DC transfer, and the converter stays invalid.
-        continue;
-      }
-      if(evaluation.status==='missing'){
-        warnings.push({reason:evaluation.reason,node_id:node.id});
-        continue;
-      }
-      // Only a uniquely determined and loss-consistent conversion may provide
-      // a calculated DC boundary injection; no virtual graph edge is created.
-      if(chosen===null){
+      // Inverter AC is authoritative. Never infer/overwrite AC from the
+      // storage boundary while internal conversion remains unresolved.
+      if(chosen===null&&evaluation.status!=='unresolved'){
         acEntry.injection_kw=evaluation.ac_injection_kw;
         acEntry.source=evaluation.ac_source;
         acEntry.mode='device';
       }
       if(batteryGroup){
+        const boundary_kw=battery===0?0:battery;
         batteryGroup.devices.push({
           node_id:node.id,node_type:'inverter_converter',
           port_id:batteryPort.id,role:'converter',mode:'device',
-          source:'calculated',injection_kw:evaluation.battery_injection_kw,
-          measurement:'inverter_dc_battery_boundary'
+          source:'calculated',injection_kw:boundary_kw,
+          measurement:'inverter_dc_battery_boundary',
+          boundary_basis:'independent_storage_meter'
         });
+        transfer.battery_boundary_kw=boundary_kw;
+        transfer.battery_boundary_source='calculated';
       }
     }
     return transfers;

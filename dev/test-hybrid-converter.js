@@ -84,9 +84,11 @@ assert.equal(res.converters[0].reason,'converter_unresolved_losses');
 assert(res.warnings.some(w=>w.reason==='converter_unresolved_losses'));
 assert.equal(res.converters[0].ac_kw,5);
 assert.equal(res.converters[0].loss_kw,null);
-assert.equal(res.networks.find(n=>n.medium==='dc').state,'unbalanced');
-assert.equal(res.networks.find(n=>n.medium==='dc').residual_kw,-1.5);
-assert.equal(res.networks.find(n=>n.medium==='dc').devices.length,1);
+assert.equal(res.networks.find(n=>n.medium==='dc').state,'balanced');
+assert.equal(res.networks.find(n=>n.medium==='dc').residual_kw,0);
+assert.equal(res.networks.find(n=>n.medium==='dc').devices.length,2);
+assert.equal(res.networks.find(n=>n.medium==='dc').devices.find(d=>d.role==='converter').injection_kw,1.5);
+assert.equal(res.converters[0].battery_boundary_kw,1.5);
 assert(!res.warnings.some(w=>w.reason==='pv_dc_unconnected_port'),
  'With a measured MPPT on an opt-in converter a separate PV cable is optional');
 const badHtml=diag.render(diagram,{states:{}},'pl');
@@ -144,6 +146,31 @@ const discharge=makeInverter(1.8,{pv_mode:'none'});
 res=balance.resolve(makeLayout(discharge,battery(-2)),{states:{}});
 assert.equal(res.converters[0].status,'valid');near(res.converters[0].loss_kw,.2);
 assert.equal(res.networks.find(n=>n.medium==='dc').state,'balanced');
+// E.3: independently observed battery DC power remains solvable when
+// inverter PV/AC readings cannot establish internal conversion losses.
+const unresolvedDischarge=makeLayout(makeInverter(4,{pv_mode:'none'}),battery(-2));
+res=balance.resolve(unresolvedDischarge,{states:{}});
+assert.equal(res.converters[0].status,'unresolved');
+assert.equal(res.converters[0].loss_kw,null);
+assert.equal(res.converters[0].battery_boundary_kw,-2);
+assert.equal(res.networks.find(n=>n.medium==='dc').state,'balanced');
+near(res.networks.find(n=>n.medium==='dc').residual_kw,0);
+near(res.networks.find(n=>n.medium==='dc').converter_transfer_kw,-2);
+assert.equal(res.networks.find(n=>n.medium==='dc').devices.filter(d=>d.role==='converter').length,1);
+near(res.networks.find(n=>n.medium==='ac').devices.find(d=>d.node_id==='sofar').injection_kw,4);
+assert.equal(flow.resolve(unresolvedDischarge,{states:{}}).byConnection.dc_wire.available,true);
+const unresolvedIdle=makeLayout(makeInverter(5),battery(0));
+res=balance.resolve(unresolvedIdle,{states:{}});
+assert.equal(res.converters[0].status,'unresolved');
+assert.equal(res.converters[0].battery_boundary_kw,0);
+assert.equal(res.networks.find(n=>n.medium==='dc').state,'balanced');
+near(res.networks.find(n=>n.medium==='dc').residual_kw,0);
+assert.equal(res.networks.find(n=>n.medium==='dc').devices.filter(d=>d.role==='converter').length,1);
+assert.equal(res.networks.find(n=>n.medium==='dc').devices.find(d=>d.role==='converter').injection_kw,0);
+assert.equal(res.networks.find(n=>n.medium==='dc').converter_transfer_kw,0,
+ 'A real zero converter transfer is not an absent reading');
+assert.equal(flow.resolve(unresolvedIdle,{states:{}}).byConnection.dc_wire.available,true);
+assert.equal(res.converters[0].loss_kw,null);
 // Physically shared DC buses must be rejected even if the PV input does not
 // have a separate drawn cable.
 const sameBus=makeInverter(1.4);

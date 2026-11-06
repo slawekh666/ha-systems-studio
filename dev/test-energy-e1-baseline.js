@@ -124,19 +124,32 @@ assert.equal(dcResolved.storage_terminals.length,1);
 assert.equal(dcResolved.storage_terminals[0].connected,true);
 assert.equal(dcResolved.storage_terminals[0].port_id,'dc');
 eq(dcResolved.storage_terminals[0].injection_kw,-1.5);
-// KNOWN E.3 DEFECT: the converter skips the DC boundary when losses are unresolved.
-// Keep this snapshot until E.3 replaces it with 0 kW residual, without changing AC.
-assert.equal(dcNetwork.state,'unbalanced');
-eq(dcNetwork.residual_kw,-1.5);
-assert.equal(dcNetwork.devices.some(d=>d.role==='converter'),false);
-assert.equal(flow.resolve(dcDiagram,hass).byConnection.battery_dc.available,false);
+// E.3: the battery-only DC bus is balanced independently of inverter losses.
+// The measured AC and unresolved internal converter residual remain unchanged.
+assert.equal(dcNetwork.state,'balanced');
+eq(dcNetwork.residual_kw,0);
+assert.equal(dcNetwork.devices.filter(d=>d.role==='converter').length,1);
+const dcBoundary=dcNetwork.devices.find(d=>d.role==='converter');
+eq(dcBoundary.injection_kw,1.5);
+assert.equal(dcBoundary.source,'calculated');
+assert.equal(dcBoundary.boundary_basis,'independent_storage_meter');
+assert.equal(converter.battery_boundary_kw,1.5);
+assert.equal(converter.battery_boundary_source,'calculated');
+const dcFlow=flow.resolve(dcDiagram,hass).byConnection.battery_dc;
+assert.equal(dcFlow.available,true);
+eq(Math.abs(dcFlow.kw),1.5);
 const diagnostic=diagnostics.viewModel(dcDiagram,hass);
 assert.equal(diagnostic.converters[0].status,'unresolved');
 assert.equal(diagnostic.converters[0].loss_kw,null);
+assert.equal(diagnostic.networks.find(n=>n.medium==='dc').diagnostic_reason,null,
+  'An enabled converter with a solved DC boundary must not be labelled missing');
+const dcHtml=diagnostics.render(dcDiagram,hass,'pl');
+assert(!dcHtml.includes('Brak modelu konwersji DC'));
+assert(dcHtml.includes('straty i sprawność nieustalone'));
 assert.equal(JSON.stringify(dcDiagram),snapshot,'Hybrid solve must not mutate graph');
 assert.equal(JSON.stringify(layout.normalized({studio_layout:dcDiagram})),snapshot,
   'Hybrid config must round-trip exactly');
-console.log('E.1 DC: documented -1.500 kW pre-fix gap, independent measured AC PASS');
+console.log('E.3 DC: corrected +1.500 kW boundary, measured AC and unresolved losses preserved PASS');
 
 // Invalid AC/DC cable cannot join dissimilar media or inject inverter AC into DC.
 const invalid=normalized([grid,inverter(),battery()],
