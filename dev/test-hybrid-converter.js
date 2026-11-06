@@ -60,7 +60,7 @@ const makeInverter=(ac=5,opts={})=>{
    battery_port_id:'bat',pv_mode:'mapped',ac_mode:'auto',
    efficiency_percent:null,battery_efficiency_percent:null,...opts};
  return node('sofar','inverter',[pt('ac'),pt('pv1','dc','pv1'),pt('bat','dc','battery')],{
-  label:'Sofar',energy_mode:'test',inverter:{count:1,rated_kw:10,
+  label:'Sofar',energy_mode:'test',energy_test_configured:ac!==null,inverter:{count:1,rated_kw:10,
    manual:{ac_power:ac},inputs:[{name:'PV1',
     manual:{voltage:380,current:8,power:null},
     manual_enabled:{voltage:true,current:true,power:false}}],
