@@ -3010,6 +3010,42 @@ const HASSStudioInverter=(()=>{
         manual_enabled:manualEnabled};
     }),...(raw.hybrid&&typeof raw.hybrid==='object'?{hybrid:normalizeHybrid(raw.hybrid)}:{})};
  };
+ // Explicit type transition, isolated from editor controls and tested
+ // independently. No saved wires or port identifiers are rewritten.
+ const kind=node=>{
+   const raw=node?.inverter||node||{};
+   if(raw.kind==='grid_tied'||raw.kind==='hybrid')return raw.kind;
+   return raw.hybrid?.enabled===true&&raw.hybrid.converter?.enabled===true?
+     'hybrid':'grid_tied';
+ };
+ const selectKind=(node,value,topologyIndex=null)=>{
+   if(node?.type!=='inverter'||!['grid_tied','hybrid'].includes(value))return false;
+   const conf=node.inverter=node.inverter||defaults(),
+     hybrid=normalizeHybrid(conf.hybrid||hybridDefaults()),
+     converter=hybrid.converter||converterDefaults(),
+     hybridOn=value==='hybrid';
+   conf.kind=value;hybrid.enabled=hybridOn;converter.enabled=hybridOn;
+   hybrid.converter=converter;conf.hybrid=hybrid;
+   if(!hybridOn)return true;
+   // Standard PV-only inverters have no separate battery DC terminal.
+   // Existing validated battery wiring, including custom port names, wins.
+   const found=topologyIndex?
+     HASSStudioEnergyTopology.hybridAttachments(topologyIndex,node.id):null;
+   const ports=HASSStudioEnergyTopology.ports(node);
+   const existing=ports.some(p=>p.medium==='dc'&&
+     (p.bus==='battery'||p.id==='battery'||p.id==='bat'));
+   if(!existing&&!(found?.storage_links?.length)&&
+     ports.length<HASSStudioEnergyTopology.MAX_PORTS){
+     const used=new Set(ports.map(p=>p.id));
+     let id='battery',i=2;
+     while(used.has(id))id='battery'+i++;
+     node.energy_ports=Array.isArray(node.energy_ports)?
+       node.energy_ports:HASSStudioEnergyTopology.defaultPorts(node);
+     node.energy_ports.push({id,label:'Magazyn DC',medium:'dc',
+       bus:'battery',x:100,y:80});
+   }
+   return true;
+ };
  // An MPPT reading measures power entering the inverter on a separate PV
  // circuit. It is NOT a battery-bus generator or an AC/DC converter transfer.
  const dcTerminals=(node,h,topologyIndex=null)=>{
@@ -3178,7 +3214,7 @@ const HASSStudioInverter=(()=>{
    const bottom=c.show_extra?Math.max(300,65+panelHeight(c)*c.extra_scale+10):300;
    return '<svg width="'+(150+extraWidth/2)+'" height="'+(bottom/2)+'" viewBox="'+left+' 0 '+(300+extraWidth)+' '+bottom+'" preserveAspectRatio="xMinYMin meet">'+content+'</svg>';
  };
- return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,hybridDefaults,converterDefaults,normalizeConverter,normalizeHybrid,defaults,normalize,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
+ return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,hybridDefaults,converterDefaults,normalizeConverter,normalizeHybrid,defaults,normalize,kind,selectKind,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverter;
 
@@ -6067,7 +6103,15 @@ const HASSStudioEditorInspector = (() => {
         if(mode==='auto')basics+=field('Używaj wartości TEST, gdy brakuje odczytu HA',
           'energy_fallback_enabled',obj.energy_fallback_enabled?'true':'false','text',
           [['true','Tak'],['false','Nie']]);
-        basics+=field('Rodzaj grafiki','variant',obj.variant,'text',variantOptions(obj))+
+        const inverterKind=HASSStudioInverter.kind(obj);
+        const selectedHybrid=inverterKind==='hybrid';
+        const legacyPartial=c.kind!=='hybrid'&&c.kind!=='grid_tied'&&
+          c.hybrid?.enabled===true&&c.hybrid.converter?.enabled!==true;
+        basics+=field('Rodzaj falownika','inv_kind',inverterKind,'text',
+          [['grid_tied','Sieciowy (AC)'],['hybrid','Hybrydowy (AC / DC)']])+
+          (legacyPartial?'<p class="ss-note">Starszy częściowy model hybrydowy. '+
+            'Wybór rodzaju falownika aktywuje model bez przepisywania przewodów.</p>':'')+
+          field('Rodzaj grafiki','variant',obj.variant,'text',variantOptions(obj))+
           field('Styl grafiki','visual',obj.visual,'text',styleOptions)+
           '<div class="ss-preview"><svg viewBox="0 0 150 180" width="120" height="120">'+
           HASSStudioInverter.render(obj,editor._hass)+'</svg></div>'+
@@ -6105,64 +6149,21 @@ const HASSStudioEditorInspector = (() => {
             'inv_manual_alarm',c.manual.alarm?'true':'false',[
               ['false','Brak alarmu'],['true','Alarm']]);
         readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
-        readings+=field('Włącz wejścia PV / MPPT (model hybrydowy)',
-          'inv_hybrid_enabled',c.hybrid?.enabled?'true':'false','text',
-          [['true','Tak'],['false','Nie — zachowaj starszy model']]);
-        if(c.hybrid?.enabled){
-          const cv=c.hybrid.converter||HASSStudioInverter.converterDefaults();
-          const ports=HASSStudioEnergyTopology.ports(obj);
-          const choices=medium=>[['','Nie przypisano'],...ports
-            .filter(p=>p.medium===medium).map(p=>[p.id,(p.label||p.id)+' ('+p.id+')'])];
-          const acChoices=choices('ac'),dcChoices=choices('dc');
-          dcChoices.push(['none','Brak magazynu DC (świadomie)']);
-          for(const [list,value] of [[acChoices,cv.ac_port_id],[dcChoices,cv.battery_port_id]])
-            if(value&&!list.some(q=>q[0]===value))
-              list.push([value,'Nieprawidłowy port: '+value]);
-          let converter=field('Model przekształtnika AC/DC','inv_converter_enabled',
-            cv.enabled?'true':'false','text',
-            [['false','Wyłączony — starszy bilans'],['true','Włączony — model hybrydowy']]);
-          if(cv.enabled){
-            const index=typeof HASSStudioEnergyTopology.index==='function'?
-              HASSStudioEnergyTopology.index(model):null,
-              found=index&&typeof HASSStudioEnergyTopology.hybridAttachments==='function'?
-                HASSStudioEnergyTopology.hybridAttachments(index,obj.id):
-                {ac_port_id:'',battery_port_id:'',ac_ambiguous:false,battery_ambiguous:false};
-            converter+='<p class="ss-note">Rozpoznawanie przewodów: AC '+esc(
-              found.ac_ambiguous?'niejednoznaczne':found.ac_port_id||'brak')+
-              ', magazyn DC '+esc(found.battery_ambiguous?'niejednoznaczny':
-              found.battery_port_id||'brak')+
-              '. Brak fizycznego PV nie blokuje logicznych odczytów MPPT.</p>';
-            converter+='<details class="ss-section-details">'+
-              '<summary>Zaawansowane: ręczne przypisanie portów (opcjonalne)</summary>'+
-            field('Port AC przekształtnika','inv_converter_ac_port_id',
-              cv.ac_port_id,'text',acChoices)+
-            field('Port DC magazynu przy falowniku','inv_converter_battery_port_id',
-              cv.battery_port_id,'text',dcChoices)+'</details>'+
-            field('Źródło PV','inv_converter_pv_mode',cv.pv_mode,'text',
-              [['mapped','Powiązane wejścia PV / MPPT'],['none','Brak PV — świadomie']])+
-            field('Moc AC falownika','inv_converter_ac_mode',cv.ac_mode,'text',
-              [['auto','HA → TEST → obliczenia zastępcze'],
-               ['calculate','Historyczne ustawienie — odczyt AC ma pierwszeństwo']])+
-            field('Sprawność toru DC/AC (%) — założenie do obliczeń',
-              'inv_converter_efficiency_percent',cv.efficiency_percent??'','number',null,
-              'min="0.1" max="100" step="0.1"')+
-            field('Sprawność toru magazynu DC/DC (%) — założenie do obliczeń',
-              'inv_converter_battery_efficiency_percent',
-              cv.battery_efficiency_percent??'','number',null,
-              'min="0.1" max="100" step="0.1"');
-          }
-          converter+='<p class="ss-note">Konwerter NIE łączy fizycznie sieci AC i DC. '+
-            'Moc AC z pomiaru ma pierwszeństwo w trybie automatycznym; brakująca moc '+
-            'może być oszacowana tylko z jawnie podanej sprawności DC/AC i kompletnych odczytów. '+
-            'Przy ładowaniu/rozładowaniu magazynu wymagane jest także założenie DC/DC. '+
-            'Wpisz 100% tylko jeśli chcesz świadomie przyjąć model bezstratny dla danego toru. '+
-            'Sprzeczne pomiary pozostają nierozstrzygnięte. Sprawności to założenia, nie odczyty.</p>';
-          readings+=sect('inverter-converter','Przekształtnik AC/DC — 07A.2-D',
+        if(selectedHybrid){
+          const index=HASSStudioEnergyTopology.index(model),
+            found=HASSStudioEnergyTopology.hybridAttachments(index,obj.id);
+          const foundName=(port,ambiguous)=>ambiguous?'Niejednoznaczne':
+            port||'Brak podłączonego przewodu';
+          const converter='<p class="ss-note">Połączenia rozpoznawane z przewodów: AC — '+
+            esc(foundName(found.ac_port_id,found.ac_ambiguous))+
+            '; magazyn DC — '+esc(foundName(found.battery_port_id,found.battery_ambiguous))+
+            '. Wejścia PV/MPPT są odczytywane z czujników; oddzielny przewód PV nie jest wymagany.</p>'+
+            '<p class="ss-note">Dane HA i TEST mają pierwszeństwo. '+
+            'Nieustalone straty nie blokują jednoznacznego bilansu magazynu DC.</p>';
+          readings+=sect('inverter-converter','Automatyczne połączenia AC / DC',
             'mdi:transmission-tower',converter,false);
         }
         const dcMapping=HASSStudioInverter.dcTerminals(obj,editor._hass);
-        const dcOptions=[['','Nie przypisano'],...HASSStudioEnergyTopology.ports(obj)
-          .filter(p=>p.medium==='dc').map(p=>[p.id,(p.label||p.id)+' ('+p.id+')'])];
         c.inputs.forEach((input,i)=>{
           const resolved=pvResolved.inputs[i];
           const mappingError=dcMapping.errors.find(e=>e.input_index===i);
@@ -6173,13 +6174,6 @@ const HASSStudioEditorInspector = (() => {
               input.visible?'true':'false','text',[['true','Tak'],['false','Nie']])+
             field('Wymagaj poprawnego odczytu mocy','inv_pv_'+i+'_required',
               input.required?'true':'false','text',[['true','Tak'],['false','Nie']])+
-            (c.hybrid?.enabled?'<details class="ss-section-details">'+
-              '<summary>Zaawansowane: przypisanie fizycznego portu MPPT</summary>'+
-              field('Port DC dla '+input.name,'inv_pv_'+i+'_port',
-              c.hybrid.pv_ports[i]||'','text',
-              dcOptions.concat(c.hybrid.pv_ports[i]&&!dcOptions.some(x=>x[0]===c.hybrid.pv_ports[i])?
-                [[c.hybrid.pv_ports[i],'Nieistniejący port: '+c.hybrid.pv_ports[i]]]:[]))+
-              '</details>':'')+
             numeric(inverterFields.pv.voltage.label+' '+input.name+' ('+inverterFields.pv.voltage.unit+')','inv_pv_'+i+'_entity_voltage',
               input.entities.voltage,'inv_pv_'+i+'_manual_voltage',manualValue('voltage'))+
             numeric(inverterFields.pv.current.label+' '+input.name+' ('+inverterFields.pv.current.unit+')','inv_pv_'+i+'_entity_current',
@@ -6208,8 +6202,8 @@ const HASSStudioEditorInspector = (() => {
           fields+='<p class="ss-note">Wynik '+esc(input.name)+': '+
             (resolved.watts===null?'—':esc(resolved.watts.toFixed(2)+' W'))+
             ' · '+esc(sourceName||'Brak danych')+'</p>'+
-            (c.hybrid?.enabled&&c.hybrid.pv_ports[i]?
-              '<p class="ss-note">MPPT → port DC: '+esc(c.hybrid.pv_ports[i])+
+            (selectedHybrid&&mappedTerminal?.port_id?
+              '<p class="ss-note">MPPT → port DC: '+esc(mappedTerminal.port_id)+
               '. Moc na wejściu falownika: '+
               (mappedTerminal?.power_kw==null?'—':esc(mappedTerminal.power_kw.toFixed(3))+' kW')+
               '. Ten odczyt jest wejściem przekształtnika, a nie bezpośrednim źródłem magistrali magazynu DC.</p>':'')+
@@ -6220,27 +6214,18 @@ const HASSStudioEditorInspector = (() => {
         });
         readings+='<p class="ss-note">PV: HA → aktywny TEST → V × A z jednego źródła. '+
           'Moc na wejściu MPPT nie jest osobnym zasilaniem magazynu DC; '+
-          'do jego rozliczenia wymagany jest jawnie skonfigurowany przekształtnik.</p>';
+          'przyłącze magazynu DC rozpoznawane jest automatycznie z przewodu.</p>';
         markup+=sect('inverter-data','2. Dane urządzenia','mdi:chart-line',readings,false);
 
-        let ports='<p class="ss-note">Końcówki przewodów można dopasować do portów. Port AC i wejścia DC nie mogą dzielić jednej szyny.</p>';
-        const labels=HASSStudioEnergyTopology.ports(obj);
-        ports+=labels.map((port,i)=>
-          '<div class="ss-energy-port-edit"><strong>'+esc(port.label||port.id)+'</strong>'+
-          field('Nazwa portu','energy_port_label',port.label,'text',null,'data-index="'+i+'"')+
-          field('Typ portu','energy_port_medium',port.medium,'text',
-            [['ac','AC'],['dc','DC']],'data-index="'+i+'"')+
-          field('Położenie X (%)','energy_port_x',port.x,'number',null,
-            'min="0" max="100" data-index="'+i+'"')+
-          field('Położenie Y (%)','energy_port_y',port.y,'number',null,
-            'min="0" max="100" data-index="'+i+'"')+
-          '<details><summary>Ustawienia techniczne portu</summary>'+
-          field('Szyna logiczna','energy_port_bus',port.bus,'text',null,
-            'data-index="'+i+'"')+'</details>'+
-          '<button type="button" data-remove-energy-port="'+i+'">Usuń port</button></div>'
-        ).join('');
-        ports+='<button type="button" data-add-energy-port>+ Dodaj port</button>';
-        markup+=sect('inverter-ports','3. Porty i połączenia','mdi:connection',ports,false);
+        const graph=HASSStudioEnergyTopology.index(model),
+          discovered=HASSStudioEnergyTopology.hybridAttachments(graph,obj.id);
+        const ports='<p class="ss-note">Połączenia AC/DC są rozpoznawane z końcówek przewodów. '+
+          'Zachowano istniejące porty i ich identyfikatory.</p>'+
+          '<p class="ss-note">Port AC: '+esc(discovered.ac_ambiguous?'Niejednoznaczny':
+          discovered.ac_port_id||'Brak przewodu')+
+          '; magazyn DC: '+esc(discovered.battery_ambiguous?'Niejednoznaczny':
+          discovered.battery_port_id||'Brak przewodu')+'</p>';
+        markup+=sect('inverter-ports','3. Połączenia automatyczne','mdi:connection',ports,false);
 
         let extra='<p class="ss-note">Tutaj dodajesz wyłącznie własne odczyty HA. PV1/PV2, moc i temperatura są już skonfigurowane w „Dane urządzenia”.</p>';
         c.panel_rows.forEach((row,i)=>{
@@ -6342,7 +6327,7 @@ const HASSStudioEditorInspector = (() => {
          if(electrical)markup+='<details class="ss-section-details" data-section="electrical-advanced"'+
           (openSections.get('electrical-advanced')===true?' open':'')+
           '><summary>'+sectionIcon('mdi:tune')+'<span>Dodatkowe parametry i wygląd</span></summary><section>';
-        if(electrical){
+        if(electrical&&!['inverter','energy_storage'].includes(obj.type)){
           markup+='<details data-section="energy-ports"'+
             (openSections.get('energy-ports')===true?' open':'')+
             '><summary>Porty — ustawienia zaawansowane</summary>';
@@ -6499,32 +6484,26 @@ const HASSStudioEditorInspector = (() => {
           markup+=field('Skala ekranu (%)','storage_display_scale',Math.round(c.display_scale*100),'range',null,'min="40" max="150" step="5"');
           markup+=bool('show_screen','Pokaż ekran')+bool('animate_charge','Animacja podczas ładowania');
           markup+=bool('charge_positive','Dodatnia moc oznacza ładowanie');
-          markup+='<h4>Przyłącze magazynu (AC / DC)</h4>'+
-            field('Rodzaj przyłącza','storage_coupling',c.coupling,'text',[
-              ['legacy','Dotychczasowy — zgodnie z zapisanymi portami'],
-              ['ac','AC — wskazany port'],['dc','DC — wskazany port']]);
-          if(c.coupling!=='legacy'){
-            const ports=HASSStudioEnergyTopology.ports(obj);
-            const options=[['','Wybierz port '+c.coupling.toUpperCase()],...ports
-              .filter(port=>port.medium===c.coupling)
-              .map(port=>[port.id,(port.label||port.id)+' ('+port.id+')'])];
-            if(c.coupling_port_id&&!options.some(p=>p[0]===c.coupling_port_id))
-              options.push([c.coupling_port_id,'Nieprawidłowy port: '+c.coupling_port_id]);
-            markup+='<details class="ss-section-details">'+
-              '<summary>Zaawansowane: nadpisz automatyczny port magazynu</summary>'+
-              field('Fizyczny port magazynu','storage_coupling_port_id',
-              c.coupling_port_id,'text',options)+'</details>';
-            markup+='<p class="ss-note">Jeśli połączenie DC jest jednoznaczne, port zostanie rozpoznany z przewodu. Wybór przyłącza nie zmienia typu portów ani przewodów. '+
-              'Jeśli portu '+c.coupling.toUpperCase()+' nie ma, dodaj go w ustawieniach zaawansowanych i podłącz przewód.</p>';
-          }
-          if(c.coupling==='dc'){
-            markup+=field('Limit ładowania DC (kW) — opcjonalny',
-              'storage_max_charge_kw',c.max_charge_kw??'','number',null,'min="0" max="500" step="0.01"')+
-              field('Limit rozładowania DC (kW) — opcjonalny',
-              'storage_max_discharge_kw',c.max_discharge_kw??'','number',null,'min="0" max="500" step="0.01"');
-            markup+='<p class="ss-note">Limity i alarm BMS generują wyłącznie ostrzeżenia — nie sterują ładowaniem '+
-              'ani nie korygują wartości pomiarów. Kierunek mocy wynika z ustawienia znaku powyżej.</p>';
-          }
+          const binding=HASSStudioEnergyTopology.storageAttachment(
+            HASSStudioEnergyTopology.index(model),obj.id);
+          const labels={ac:'AC — połączenie rozpoznane',
+            dc:'DC — połączenie z falownikiem rozpoznane',
+            ambiguous:'Niejednoznaczne przyłącze — sprawdź przewody',
+            unconnected:'Niepodłączony'};
+          markup+='<h4>Przyłącze magazynu</h4>'+
+            '<p class="ss-note">Typ przyłącza: '+esc(labels[binding.status]||
+              'Nieznany')+'. Rozpoznawany automatycznie z przewodów i typu portów.</p>';
+          if(c.coupling!=='legacy'||c.coupling_port_id)
+            markup+='<p class="ss-note">Zapisano historyczne ustawienie przyłącza. '+
+              'Pozostaje zachowane do migracji w E.5.</p>';
+          markup+=field('Limit ładowania DC (kW) — opcjonalny',
+              'storage_max_charge_kw',c.max_charge_kw??'','number',null,
+              'min="0" max="500" step="0.01"')+
+            field('Limit rozładowania DC (kW) — opcjonalny',
+              'storage_max_discharge_kw',c.max_discharge_kw??'','number',null,
+              'min="0" max="500" step="0.01"')+
+            '<p class="ss-note">Limity i alarmy BMS generują ostrzeżenia, '+
+            'ale nie sterują ładowaniem ani nie zmieniają pomiarów.</p>';
           markup+='<h4>Rezerwa i ostrzeżenia (wyłącznie wizualne)</h4>';
           markup+=field('Minimalny poziom SOC (%)','storage_min_soc',c.min_soc,'number',null,'min="0" max="100" step="1"');
           markup+=field('Margines ostrzeżenia (p.p.)','storage_warning_margin',c.warning_margin,'number',null,'min="0" max="30" step="1"');
@@ -7682,6 +7661,8 @@ const HASSStudioEditorLibrary=(()=>{
            if(f==='alarm')c.manual[f]=val==='true';
         }else if(k==='ac_input_unit'){
           c.ac_input_unit=['auto','W','kW','MW'].includes(val)?val:'auto';
+        }else if(k==='kind'){
+          HASSStudioInverter.selectKind(obj,val,HASSStudioEnergyTopology.index(model));
         }else if(k==='hybrid_enabled'){
           c.hybrid={...(HASSStudioInverter.normalize({inverter:c}).hybrid||HASSStudioInverter.hybridDefaults()),
             enabled:val==='true'};
