@@ -18,13 +18,17 @@ const HASSStudioHA = (() => {
     const c = r.unit === '°F' || r.unit === 'F' ? (r.value - 32) * 5 / 9 : r.value;
     return c >= -40 && c <= 150 ? c : null;
   };
-  const powerKw = (h, id) => {
-    const r = reading(h, id);
-    if (!r || r.value < 0) return null;
-    if (r.unit === 'W') return r.value / 1000;
-    if (r.unit === 'kW') return r.value;
-    return null;
+  const powerFactors=Object.freeze({W:.001,kW:1,MW:1000});
+  // AC/DC power is always normalized to kW. Missing or unsafe units stay null.
+  const powerReading=(h,id,unitOverride='auto',signed=false)=>{
+    const r=reading(h,id);
+    if(!r)return null;
+    const unit=unitOverride==='auto'||unitOverride==null?r.unit:unitOverride;
+    if(!Object.prototype.hasOwnProperty.call(powerFactors,unit))return null;
+    const kw=r.value*powerFactors[unit];
+    return Number.isFinite(kw)&&(signed||kw>=0)?kw:null;
   };
+  const powerKw=(h,id)=>powerReading(h,id);
   const percentage = (h, id, allowUnitless = true) => {
     const r = reading(h, id);
     if (!r || !(r.unit === '%' || r.unit === 'percent' || (allowUnitless && r.unit === ''))) return null;
@@ -41,9 +45,7 @@ const HASSStudioHA = (() => {
       node?.energy_fallback_enabled===true?'auto':
       node?.energy_fallback_enabled===false?'ha':
       legacy==='manual'?'test':'ha';
-    const r=reading(h,id);
-    const measured=r&&['W','kW'].includes(r.unit)&&Number.isFinite(r.value)&&
-      (signed||r.value>=0)?r.value/(r.unit==='W'?1000:1):null;
+    const measured=powerReading(h,id,node?.energy_power_unit||'auto',signed);
     const manual=typeof test==='number'&&Number.isFinite(test)&&(signed||test>=0)?test:null;
     if(mode==='test')return {kw:manual,source:manual===null?'missing':'simulated'};
     if(measured!==null)return {kw:measured,source:'measured'};
@@ -51,5 +53,5 @@ const HASSStudioHA = (() => {
       node?.energy_fallback_enabled===true;
     return {kw:fallback?manual:null,source:fallback&&manual!==null?'simulated':'missing'};
   };
-  return Object.freeze({ entity, reading, temperature, powerKw, percentage, active, powerInput });
+  return Object.freeze({ entity, reading, temperature, powerReading, powerKw, percentage, active, powerInput });
 })();
