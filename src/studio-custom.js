@@ -767,6 +767,37 @@
            if(f==='alarm')c.manual[f]=val==='true';
         }else if(k==='ac_input_unit'){
           c.ac_input_unit=['auto','W','kW','MW'].includes(val)?val:'auto';
+        }else if(k==='kind'){
+          // Explicit user choice is the only point where old mode flags change.
+          // Never rewrite existing cable endpoints or stored port IDs.
+          const hybrid=HASSStudioInverter.normalize({inverter:c}).hybrid||
+            HASSStudioInverter.hybridDefaults();
+          const converter=hybrid.converter||HASSStudioInverter.converterDefaults();
+          const enable=val==='hybrid';
+          c.kind=enable?'hybrid':'grid_tied';
+          hybrid.enabled=enable;converter.enabled=enable;
+          if(enable){
+            // The new hybrid may have PV-only DC ports but no battery terminal.
+            // Add a distinct DC battery port only when no physical DC battery
+            // link already exists. Preserve every existing port and cable.
+            const found=HASSStudioEnergyTopology.hybridAttachments(
+              HASSStudioEnergyTopology.index(model),obj.id);
+            const ports=HASSStudioEnergyTopology.ports(obj);
+            const batteryPorts=(obj.energy_ports||[]).filter(p=>p.medium==='dc'&&
+              (p.bus==='battery'||p.id==='battery'||p.id==='bat'));
+            if(!found.battery_port_id&&!batteryPorts.length&&
+                (obj.energy_ports||[]).length<HASSStudioEnergyTopology.MAX_PORTS){
+              const used=new Set((obj.energy_ports||[]).map(p=>p.id));
+              let id='battery',i=2;
+              while(used.has(id))id='battery'+i++;
+              obj.energy_ports=obj.energy_ports||[];
+              obj.energy_ports.push({id,label:'Magazyn DC',medium:'dc',
+                bus:'battery',x:100,y:80});
+            }
+            // A deliberate new selection enables graph-driven bindings.
+            // Historical explicit assignments are preserved until E.5.
+          }
+          hybrid.converter=converter;c.hybrid=hybrid;
         }else if(k==='hybrid_enabled'){
           c.hybrid={...(HASSStudioInverter.normalize({inverter:c}).hybrid||HASSStudioInverter.hybridDefaults()),
             enabled:val==='true'};
