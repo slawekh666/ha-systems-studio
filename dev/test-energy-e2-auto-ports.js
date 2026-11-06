@@ -100,5 +100,35 @@ assert.equal(sharedIndex.byMedium.dc.length,1);
 assert.notEqual(sharedIndex.keyGroup.get('multi:ac:same'),
  sharedIndex.keyGroup.get('multi:dc:same'));
 
+// A storage with both AC and DC links needs an explicit topology decision;
+ // neither the AC nor the DC inverter-side inference may take precedence.
+const dual=node('dual','energy_storage',[port('line','ac'),port('cell','dc')],
+ {energy_mode:'test',energy_storage:{coupling:'legacy',mode:'manual',
+ manual:{soc:70,power:1.5}}});
+const mixed=topology.index({nodes:[inv,grid,dual],connections:[
+ aw,wire('dual_ac','grid','ac','dual','line'),
+ wire('dual_dc','inv','dc_battery','dual','cell')]});
+assert.equal(topology.storageAttachment(mixed,'dual').status,'ambiguous');
+assert.equal(topology.hybridAttachments(mixed,'inv').battery_ambiguous,true);
+assert.equal(topology.hybridAttachments(mixed,'inv').battery_port_id,'');
+
+// Two independent inverter DC terminals attached to one storage must
+// not be collapsed into a fictional one-to-one converter boundary.
+const second=node('inv2','inverter',[port('store','dc')]);
+const battery2=node('battery2','energy_storage',[port('cell','dc')],{
+ energy_mode:'test',energy_storage:{coupling:'legacy',manual:{power:1,soc:70}}});
+const sharedBattery=topology.index({nodes:[inv,second,battery2],connections:[
+ wire('b1','inv','dc_battery','battery2','cell'),
+ wire('b2','inv2','store','battery2','cell')]});
+assert.equal(topology.storageAttachment(sharedBattery,'battery2').status,'ambiguous');
+assert.equal(topology.hybridAttachments(sharedBattery,'inv').battery_port_id,'');
+assert.equal(topology.hybridAttachments(sharedBattery,'inv2').battery_port_id,'');
+
+// No physical wire is not a zero-power link or an inferred connection.
+const disconnected=topology.index({nodes:[inv,bat],connections:[]});
+assert.equal(topology.storageAttachment(disconnected,'bat').status,'unconnected');
+assert.equal(topology.hybridAttachments(disconnected,'inv').ac_port_id,'');
+assert.equal(topology.hybridAttachments(disconnected,'inv').battery_port_id,'');
+
 assert.equal(JSON.stringify(d),snapshot);
 console.log('PASS E.2 shared AC/DC recognition, legacy parity, ambiguous feeds, wrong medium, duplicate IDs');
