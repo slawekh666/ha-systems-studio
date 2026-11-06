@@ -124,6 +124,7 @@ assert.equal(res.networks.find(n=>n.medium==='ac').state,'insufficient',
 const priority=makeInverter(5,{ac_mode:'calculate',efficiency_percent:96,battery_efficiency_percent:100});
 priority.inverter.entities={ac_power:'sensor.inverter_ac'};
 priority.energy_mode='auto';
+priority.energy_fallback_enabled=true; // PV TEST fallback; HA AC still has priority.
 priority.inverter.manual_enabled={ac_power:true};
 res=balance.resolve(makeLayout(priority),{states:{'sensor.inverter_ac':{
  state:'4.5',attributes:{unit_of_measurement:'kW'}}}});
