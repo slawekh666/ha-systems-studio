@@ -3686,33 +3686,92 @@ const HASSStudioEnergyTopology=(()=>{
        peer_node_id:start.node_id,peer_type:nodesById.get(start.node_id)?.type||'',
        peer_port_id:a.id,peer_bus_key:from,network_id:group.id});
    }
-   return {graph:topology,grouped,keyGroup,byMedium,edgesByMedium,
+   const result={graph:topology,grouped,keyGroup,byMedium,edgesByMedium,
      linksByNode,nodesById};
+   // Ephemeral bindings from validated AC/DC endpoints, never serialized.
+   result.attachments=discoverAttachments(result);
+   return result;
  };
 
- // Classify only direct, validated electrical links. The index suppresses
- // invalid and duplicate cable IDs, so neither can authorize auto binding.
- // This function is pure and does not persist a device/port mapping.
- const hybridAttachments=(idx,nodeId)=>{
-   const links=idx.linksByNode.get(nodeId)||[],nodes=idx.nodesById;
-   const ac=new Set(),battery=new Set(),pv=new Set(),storage_links=[];
-   for(const link of links){
-     if(link.medium==='ac'){ac.add(link.port_id);continue;}
-     if(link.medium!=='dc')continue;
-     const peer=nodes.get(link.peer_node_id);
-     if(peer?.type==='energy_storage'){
-       battery.add(link.port_id);storage_links.push(link);
-     }else if(peer&&(peer.type==='pv_source'||
-       peer.energy_role==='source'&&peer.type!=='inverter'))
-       pv.add(link.port_id);
+ // Resolve connected electrical media and terminal ports from one indexed
+ // graph. Neither node names nor port IDs (including "ac") determine medium.
+ // Multiple DC feeds or mixed AC/DC storage attachments fail closed.
+ const discoverAttachments=idx=>{
+   const storages=new Map(),inverters=new Map(),
+     linksOf=id=>idx.linksByNode.get(id)||[];
+   const unique=(links,key)=>{
+     const values=[...new Set(links.map(key))];
+     return values.length===1?values[0]:null;
+   };
+   // Storage first: cross-check the physical opposite end of inverter links.
+   for(const n of idx.nodesById.values()){
+     if(n.type!=='energy_storage')continue;
+     const links=linksOf(n.id),ac=links.filter(x=>x.medium==='ac'),
+       dc=links.filter(x=>x.medium==='dc');
+     let status='unconnected',port_id='',network_id=null,inverter_id='';
+     if(ac.length&&dc.length)status='ambiguous';
+     else if(dc.length){
+       // A parallel feed is not automatically a single metering boundary.
+       if(dc.length===1&&dc[0].peer_type==='inverter'){
+         status='dc';port_id=dc[0].port_id;
+         network_id=dc[0].network_id;inverter_id=dc[0].peer_node_id;
+       }else status='ambiguous';
+     }else if(ac.length){
+       const port=unique(ac,x=>x.port_id),network=unique(ac,x=>x.network_id);
+       if(port&&network){status='ac';port_id=port;network_id=network;}
+       else status='ambiguous';
+     }
+     storages.set(n.id,{status,port_id,network_id,inverter_id});
    }
-   const unique=set=>set.size===1?[...set][0]:'';
-   return {ac_port_id:unique(ac),battery_port_id:unique(battery),
-     pv_port_ids:[...pv],storage_links,
-     ac_ambiguous:ac.size>1,battery_ambiguous:battery.size>1,
-     pv_ambiguous:pv.size>1};
+   for(const n of idx.nodesById.values()){
+     if(n.type!=='inverter')continue;
+     const links=linksOf(n.id),ac=links.filter(x=>x.medium==='ac'),
+       batteries=links.filter(x=>x.medium==='dc'&&x.peer_type==='energy_storage'),
+       pv=links.filter(x=>{
+         if(x.medium!=='dc')return false;
+         const peer=idx.nodesById.get(x.peer_node_id);
+         return peer?.type==='pv_source'||peer?.energy_role==='source'&&
+           peer.type!=='inverter';
+       });
+     const acPort=unique(ac,x=>x.port_id),
+       acAmbiguous=ac.length>0&&!acPort;
+     const linked=batteries.length===1?batteries[0]:null,
+       counterpart=linked?storages.get(linked.peer_node_id):null,
+       batteryValid=!!linked&&counterpart?.status==='dc'&&
+         counterpart.inverter_id===n.id&&
+         counterpart.port_id===linked.peer_port_id&&
+         counterpart.network_id===linked.network_id;
+     const batteryAmbiguous=batteries.length>1||
+       batteries.length===1&&!batteryValid;
+     const pvPorts=[...new Set(pv.map(x=>x.port_id))];
+     inverters.set(n.id,{
+       ac_port_id:acPort||'',
+       battery_port_id:batteryValid?linked.port_id:'',
+       pv_port_ids:pvPorts,storage_links:batteries,
+       ac_ambiguous:acAmbiguous,battery_ambiguous:batteryAmbiguous,
+       pv_ambiguous:pvPorts.length>1,
+       ac_status:acPort?'connected':acAmbiguous?'ambiguous':'unconnected',
+       battery_status:batteryValid?'connected':
+         batteryAmbiguous?'ambiguous':'unconnected',
+       storage_node_id:batteryValid?linked.peer_node_id:'',
+       storage_port_id:batteryValid?linked.peer_port_id:''
+     });
+   }
+   return {inverters,storages};
  };
- 
+ // Public compatibility for existing hybrid/inspector code; no second
+ // per-device graph traversal or independent port matching algorithm.
+ const hybridAttachments=(idx,nodeId)=>{
+   const bound=(idx.attachments||discoverAttachments(idx)).inverters.get(nodeId);
+   return bound||{ac_port_id:'',battery_port_id:'',pv_port_ids:[],
+     storage_links:[],ac_ambiguous:false,battery_ambiguous:false,
+     pv_ambiguous:false,ac_status:'unconnected',
+     battery_status:'unconnected',storage_node_id:'',storage_port_id:''};
+ };
+ const storageAttachment=(idx,nodeId)=>
+   (idx.attachments||discoverAttachments(idx)).storages.get(nodeId)||
+     {status:'unconnected',port_id:'',network_id:null,inverter_id:''};
+
  // Automatically derive a building meter's downstream devices from the AC
  // cable graph. A building owns a device only if EVERY path from the selected
  // upstream boundary to that device passes through the building. This is a
@@ -3883,7 +3942,7 @@ const HASSStudioEnergyTopology=(()=>{
    }
    return best;
  };
- return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,busKey,defaultPorts,electricalType,node,end,connection,graph,index,hybridAttachments,
+ return Object.freeze({MAX_PORTS,MAX_BUSES,ident,role,medium,port,ports,busKey,defaultPorts,electricalType,node,end,connection,graph,index,hybridAttachments,storageAttachment,
    geometry,anchor,locate,moveAttached,attach,nearest,meterHierarchy});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyTopology;
@@ -4401,30 +4460,20 @@ const HASSStudioEnergyBalance=(()=>{
     const overrides=new Map(config.participants.map(p=>[p.node_id,p]));
     const allNodes=(Array.isArray(src.nodes)?src.nodes:[]);
     const nodesById=new Map(allNodes.map(n=>[n.id,n]));
-    // Hybrid-only, ephemeral battery attachments. Existing legacy AC layouts
-    // remain unchanged; dual feed and multiple inverters fail closed.
-    const autoStoragePorts=new Map(),storageCandidates=new Map();
+    // Reuse the graph's validated storage/inverter attachment model.
+    // Preserve explicit legacy selections and every existing AC layout.
+    const autoStoragePorts=new Map();
     for(const inverter of allNodes){
       if(inverter.type!=='inverter')continue;
       const hybrid=HASSStudioInverter.normalize(inverter).hybrid;
       if(!hybrid?.enabled||!hybrid.converter?.enabled)continue;
       const found=HASSStudioEnergyTopology.hybridAttachments(topologyIndex,inverter.id);
-      for(const link of found.storage_links){
-        if(!storageCandidates.has(link.peer_node_id))
-          storageCandidates.set(link.peer_node_id,[]);
-        storageCandidates.get(link.peer_node_id).push(link);
-      }
-    }
-    for(const [id,links] of storageCandidates){
-      const storage=nodesById.get(id),c=HASSStudioEnergyStorage.normalize(storage);
+      if(found.battery_status!=='connected')continue;
+      const storage=nodesById.get(found.storage_node_id);
+      if(!storage)continue;
+      const c=HASSStudioEnergyStorage.normalize(storage);
       if(c.coupling==='ac'||c.coupling_port_id)continue;
-      const ports=new Set(links.map(l=>l.peer_port_id)),
-        inverters=new Set(links.map(l=>l.node_id));
-      const attached=HASSStudioEnergyTopology.ports(storage).filter(p=>
-        keyGroup.has(HASSStudioEnergyTopology.busKey(id,p)));
-      if(ports.size===1&&inverters.size===1&&attached.length===1&&
-        attached[0].medium==='dc'&&ports.has(attached[0].id))
-        autoStoragePorts.set(id,[...ports][0]);
+      autoStoragePorts.set(storage.id,found.storage_port_id);
     }
     // MPPT observations describe DC power entering the inverter, not the
     // battery bus. Report them separately from participants and totals.

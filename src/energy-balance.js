@@ -276,30 +276,20 @@ const HASSStudioEnergyBalance=(()=>{
     const overrides=new Map(config.participants.map(p=>[p.node_id,p]));
     const allNodes=(Array.isArray(src.nodes)?src.nodes:[]);
     const nodesById=new Map(allNodes.map(n=>[n.id,n]));
-    // Hybrid-only, ephemeral battery attachments. Existing legacy AC layouts
-    // remain unchanged; dual feed and multiple inverters fail closed.
-    const autoStoragePorts=new Map(),storageCandidates=new Map();
+    // Reuse the graph's validated storage/inverter attachment model.
+    // Preserve explicit legacy selections and every existing AC layout.
+    const autoStoragePorts=new Map();
     for(const inverter of allNodes){
       if(inverter.type!=='inverter')continue;
       const hybrid=HASSStudioInverter.normalize(inverter).hybrid;
       if(!hybrid?.enabled||!hybrid.converter?.enabled)continue;
       const found=HASSStudioEnergyTopology.hybridAttachments(topologyIndex,inverter.id);
-      for(const link of found.storage_links){
-        if(!storageCandidates.has(link.peer_node_id))
-          storageCandidates.set(link.peer_node_id,[]);
-        storageCandidates.get(link.peer_node_id).push(link);
-      }
-    }
-    for(const [id,links] of storageCandidates){
-      const storage=nodesById.get(id),c=HASSStudioEnergyStorage.normalize(storage);
+      if(found.battery_status!=='connected')continue;
+      const storage=nodesById.get(found.storage_node_id);
+      if(!storage)continue;
+      const c=HASSStudioEnergyStorage.normalize(storage);
       if(c.coupling==='ac'||c.coupling_port_id)continue;
-      const ports=new Set(links.map(l=>l.peer_port_id)),
-        inverters=new Set(links.map(l=>l.node_id));
-      const attached=HASSStudioEnergyTopology.ports(storage).filter(p=>
-        keyGroup.has(HASSStudioEnergyTopology.busKey(id,p)));
-      if(ports.size===1&&inverters.size===1&&attached.length===1&&
-        attached[0].medium==='dc'&&ports.has(attached[0].id))
-        autoStoragePorts.set(id,[...ports][0]);
+      autoStoragePorts.set(storage.id,found.storage_port_id);
     }
     // MPPT observations describe DC power entering the inverter, not the
     // battery bus. Report them separately from participants and totals.
