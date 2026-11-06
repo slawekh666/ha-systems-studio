@@ -66,7 +66,7 @@ const backup=resolve(auto,empty);
 assert.equal(backup.power,null);
 assert.equal(backup.temperature,32);
 assert.equal(backup.inputs[0].watts,1640);
-assert.equal(backup.sources.power,'simulated');
+assert.equal(backup.sources.power,'missing');
 const disabled=make({energy_mode:'auto',energy_fallback_enabled:false});
 assert.equal(resolve(disabled,empty).power,null);
 assert.equal(resolve(disabled,empty).temperature,null);
