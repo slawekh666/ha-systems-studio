@@ -45,7 +45,9 @@ const run=(count,manual,customRows=[],required=false,converter=false)=>{
  const editor={_hass:{states:{}},_config:{}};
  ctx.HASSStudioEnergyTopology={ports:()=>[
   {id:'ac',label:'AC',medium:'ac',bus:'main',x:50,y:0}
- ]};
+ ],index:()=>({}),hybridAttachments:()=>({
+  ac_port_id:'',battery_port_id:'',ac_ambiguous:false,battery_ambiguous:false
+ })};
  const make=ctx.inspector.create({
   editor,L:{properties:'Właściwości',choose:'Wybierz',inverter:'Falownik'},
   properties,esc:escape,opts,registry,pickLang:()=>'pl',
@@ -58,7 +60,12 @@ const run=(count,manual,customRows=[],required=false,converter=false)=>{
  const html=properties.innerHTML;
  assert(html.includes('1. Podstawowe ustawienia i wygląd'));
  assert(html.includes('2. Dane urządzenia'));
- assert(html.includes('3. Porty i połączenia'));
+ assert(html.includes('3. Połączenia automatyczne'));
+ assert(html.includes('data-field="inv_kind"'));
+ assert(!html.includes('data-field="inv_hybrid_enabled"'));
+ assert(!html.includes('data-field="inv_converter_enabled"'));
+ assert(!html.includes('data-field="inv_converter_battery_port_id"'));
+ assert(!html.includes('data-field="energy_port_medium"'));
  assert(html.includes('4. Dodatkowe encje'));
  assert(html.includes('data-field="inv_entity_ac_power"'));
  assert(html.includes('data-field="inv_entity_temperature"'));
@@ -66,11 +73,9 @@ const run=(count,manual,customRows=[],required=false,converter=false)=>{
  assert(html.includes('data-field="inv_pv_'+(count-1)+'_entity_power"'));
  assert(html.includes('Napięcie PV1 (V)'));
  if(converter){
-   for(const field of ['inv_converter_enabled','inv_converter_ac_port_id',
-     'inv_converter_battery_port_id','inv_converter_ac_mode',
-     'inv_converter_efficiency_percent','inv_converter_battery_efficiency_percent'])
-     assert(html.includes('data-field="'+field+'"'),field);
-   assert(html.includes('Przekształtnik AC/DC'));
+   assert(html.includes('Automatyczne połączenia AC / DC'));
+   assert(html.includes('data-field="inv_kind"'));
+   assert(!html.includes('data-field="inv_converter_efficiency_percent"'));
  }
   assert(html.includes('data-field="inv_pv_0_required"'));
   if(required){assert(html.includes('ss-pv-reading-error'));assert(html.includes('role="alert"'));assert(html.includes('⚠ Brak danych'));}

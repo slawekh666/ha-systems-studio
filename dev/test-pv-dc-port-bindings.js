@@ -110,8 +110,9 @@ const absent=invalid([pt('pv2','dc')],['','pv2'],{inputs:[{required:true},{...pv
  manual:{voltage:null,current:null,power:null},manual_enabled:{voltage:false,current:false,power:false}}]});
 assert(absent.errors.some(x=>x.reason==='pv_dc_missing_measurement'));
 const files=['src/studio-inspector.js','src/studio-custom.js'].map(x=>fs.readFileSync(x,'utf8'));
-assert(files[0].includes("'inv_pv_'+i+'_port'"),'Inspector must expose per-input port selector');
-assert(files[0].includes('inv_hybrid_enabled'));
-assert(files[1].includes("k==='hybrid_enabled'"));
-assert(files[1].includes("fieldName==='port'"));
+assert(!files[0].includes("'inv_pv_'+i+'_port'"),'E.4 removes manual MPPT port selectors');
+assert(!files[0].includes("'inv_hybrid_enabled'"),'E.4 replaces the hybrid toggle with inverter type');
+assert(files[0].includes("'inv_kind'"),'E.4 exposes the inverter type');
+assert(files[1].includes("k==='kind'"),'E.4 applies a deliberate inverter type choice');
+assert(files[1].includes("fieldName==='port'"),'Legacy saved PV port changes remain compatible until E.5');
 console.log('PASS B.2: explicit MPPT bindings, saved config, DC safety, no double count, AC parity and diagnostics.');

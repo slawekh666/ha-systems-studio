@@ -200,7 +200,8 @@ assert(res.networks.find(n=>n.medium==='ac').state==='invalid');
 assert.equal(inv.normalize({type:'inverter',inverter:{}}).hybrid,undefined);
 const code=[fs.readFileSync('src/studio-inspector.js','utf8'),
  fs.readFileSync('src/studio-custom.js','utf8')];
-assert(code[0].includes("'inv_converter_enabled'"));
-assert(code[0].includes("'inv_converter_battery_efficiency_percent'"));
-assert(code[1].includes("k.startsWith('converter_')"));
+assert(code[0].includes("'inv_kind'"));
+assert(!code[0].includes("'inv_converter_enabled'"));
+assert(!code[0].includes("'inv_converter_battery_efficiency_percent'"));
+assert(code[1].includes("k.startsWith('converter_')"),'E.5 removes legacy handlers');
 console.log('PASS 07A.2-D: PV/AC/battery conservation, losses, explicit assumptions, signed flow and legacy isolation.');

@@ -146,8 +146,9 @@ assert.equal(oldDcFlow.networks.find(n=>n.medium==='dc').residual_kw,-1.5,
  'Existing DC diagrams retain their old meter behavior until opted in');
 const code=[fs.readFileSync('src/studio-inspector.js','utf8'),
  fs.readFileSync('src/studio-custom.js','utf8')];
-assert(code[0].includes("'storage_coupling'"));
-assert(code[0].includes("'storage_coupling_port_id'"));
-assert(code[1].includes("k==='coupling'"));
+assert(!code[0].includes("'storage_coupling'"));
+assert(!code[0].includes("'storage_coupling_port_id'"));
+assert(code[0].includes("HASSStudioEnergyTopology.storageAttachment"));
+assert(code[1].includes("k==='coupling'"),'E.5 removes legacy handler');
 assert(code[1].includes("k==='coupling_port_id'"));
 console.log('PASS 07A.2-C: legacy AC/DC unchanged, explicit DC battery port, sign, SOC/BMS, limits, no artificial converter flows.');
