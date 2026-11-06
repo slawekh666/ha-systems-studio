@@ -35,9 +35,7 @@ const HASSStudioPowerGrid=(()=>{
   if(key==='total_kw'||key==='import_kw'||key==='export_kw'){
     const kw=HASSStudioHA.powerReading(hass,id,conf.energy_power_unit||'auto',true);
     return kw===null&&conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:kw;
-   }||unit==='kW')return n;
-   return null;
-  }
+   }
   if(key.endsWith('_v')&&unit!==''&&unit!=='V')return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
   if(key.endsWith('_a')&&unit!==''&&unit!=='A')return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
   if(key==='frequency'&&unit!==''&&unit!=='Hz')return conf.energy_mode==='auto'&&conf.fallback?conf.manual[key]:null;
