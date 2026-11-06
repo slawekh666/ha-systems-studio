@@ -42,7 +42,7 @@ function inspect(storage,other,connections){
  return html;
 }
 const dc={id:'bat',type:'energy_storage',variant:'modern',label:'Battery',x:20,y:20,
- scale:1,visual:'studio',energy_mode:'test',energy_ports:[port('ac'),port('dc','dc','battery')],
+ scale:1,visual:'studio',entities:[],parts:[],energy_mode:'test',energy_ports:[port('ac'),port('dc','dc','battery')],
  energy_storage:{coupling:'dc',coupling_port_id:'dc',manual:{soc:70,power:1.5},
  charge_positive:true,max_charge_kw:5}};
 const inverter={id:'inv',type:'inverter',energy_ports:[port('ac'),port('battery','dc','battery')]};
