@@ -65,7 +65,9 @@ eq(participant(n,'inv').injection_kw,3.68);
 eq(participant(n,'home').injection_kw,-3.68);
 eq(participant(n,'grid').injection_kw,0);
 assert.equal(participant(n,'inv').source,'measured');
-assert.equal(participant(n,'home').source,'measured');
+assert.equal(participant(n,'home').source,'calculated');
+assert.equal(participant(n,'home').power_model.source,'measured',
+  'Aggregate building retains HA provenance but contributes calculated own load');
 assert.equal(participant(n,'grid').source,'calculated');
 assert.equal(r.converters.length,0);
 assert.equal(r.networks.length,1);
