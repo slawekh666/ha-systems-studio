@@ -63,7 +63,7 @@ assert.equal(manual.sources.power,'simulated');
 assert.equal(inv.data(forced,observed).fault,true);
 console.log('RESOLVER C: explicit TEST and V×A calculation PASS');
 const backup=resolve(auto,empty);
-assert.equal(backup.power,6.4);
+assert.equal(backup.power,null);
 assert.equal(backup.temperature,32);
 assert.equal(backup.inputs[0].watts,1640);
 assert.equal(backup.sources.power,'simulated');
