@@ -133,8 +133,6 @@ const HASSStudioEnergyConverter=(()=>{
         fail('converter_ac_meter_missing');continue;
       }
       const acEntry=acEntries[0];
-      // In explicit calculation mode an existing HA or TEST AC value must
-      // never reappear through the legacy balance if derivation fails.
       // Direct HA/TEST AC readings remain authoritative in every mode.
       const mapped=dc_terminals.filter(t=>t.node_id===node.id);
       if(conf.pv_mode!=='none'&&!mapped.length){

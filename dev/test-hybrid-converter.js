@@ -91,7 +91,8 @@ assert(!res.warnings.some(w=>w.reason==='pv_dc_unconnected_port'),
  'With a measured MPPT on an opt-in converter a separate PV cable is optional');
 const badHtml=diag.render(diagram,{states:{}},'pl');
 assert(badHtml.includes('Straty nieustalone'));
-assert(badHtml.includes('energia wyjściowa przewyższa wejściową'));
+assert(!badHtml.includes('energia wyjściowa przewyższa wejściową'));
+assert(badHtml.includes('straty i sprawność nieustalone'));
 assert(!badHtml.includes('MPPT NaN'));
 const estimated=makeInverter(null,{ac_mode:'calculate',efficiency_percent:96,
  battery_efficiency_percent:100});

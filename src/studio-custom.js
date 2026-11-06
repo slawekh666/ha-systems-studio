@@ -763,6 +763,8 @@
           if(f==='temperature')c.manual[f]=clamp(val,-40,150,25);
            if(f==='status')c.manual[f]=['auto','generating','standby','off','fault'].includes(val)?val:'auto';
            if(f==='alarm')c.manual[f]=val==='true';
+        }else if(k==='ac_input_unit'){
+          c.ac_input_unit=['auto','W','kW','MW'].includes(val)?val:'auto';
         }else if(k==='hybrid_enabled'){
           c.hybrid={...(HASSStudioInverter.normalize({inverter:c}).hybrid||HASSStudioInverter.hybridDefaults()),
             enabled:val==='true'};

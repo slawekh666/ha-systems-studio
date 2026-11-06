@@ -98,8 +98,10 @@ const HASSStudioEditorInspector = (() => {
 
         const pvResolved=HASSStudioInverterReadings.resolve(obj,editor._hass,c);
         let readings=numeric(inverterFields.core.ac_power.label,'inv_entity_ac_power',
-          c.entities.ac_power,'inv_manual_ac_power',c.hybrid?.converter?.enabled===true&&
-          !c.manual_enabled?.ac_power?'':c.manual.ac_power)+
+          c.entities.ac_power,'inv_manual_ac_power',c.manual_enabled?.ac_power?
+          c.manual.ac_power:'')+
+          field('Jednostka odczytu AC z HA','inv_ac_input_unit',c.ac_input_unit||'auto','text',
+            [['auto','Automatycznie z HA'],['W','W'],['kW','kW'],['MW','MW']])+
           numeric(inverterFields.core.temperature.label,'inv_entity_temperature',
             c.entities.temperature,'inv_manual_temperature',c.manual.temperature)+
           selectMetric(inverterFields.core.status.label,'inv_entity_status',c.entities.status,
@@ -312,7 +314,7 @@ const HASSStudioEditorInspector = (() => {
             markup+='<p class="ss-note">Słup wyświetla tylko parametry sieci. Bilans automatycznie oblicza import i eksport z mocy falownika, magazynu i odbiorników.</p>';
           }else if(obj.type==='inverter')
             metric('Moc chwilowa falownika (kW)','inv_entity_ac_power',c.entities.ac_power,
-              'inv_manual_ac_power',c.manual.ac_power);
+              'inv_manual_ac_power',c.manual_enabled?.ac_power?c.manual.ac_power:'');
           else if(obj.type==='building'){
             metric('Pobór budynku (kW)','building_power_entity',c.power_entity,
               'building_power_kw',HASSStudioBuilding.manualPower(c),'kW','Encja mocy (W/kW)');

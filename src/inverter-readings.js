@@ -26,8 +26,11 @@ const HASSStudioInverterReadings=(()=>{
    const mode=['auto','ha','test'].includes(node?.energy_mode)?node.energy_mode:
      c.mode==='manual'?'test':'auto';
    const raw=HASSStudioHA.reading(h,c.entities.ac_power);
-   const live=raw&&['W','kW'].includes(raw.unit)&&Math.abs(raw.value)<=500000?
-     raw.value/(raw.unit==='W'?1000:1):null;
+   const unit=c.ac_input_unit==='auto'||!c.ac_input_unit?raw?.unit:c.ac_input_unit;
+   const scale={W:.001,kW:1,MW:1000};
+   const live=raw&&Object.prototype.hasOwnProperty.call(scale,unit)&&
+     Number.isFinite(raw.value)&&Math.abs(raw.value*scale[unit])<=500?
+     raw.value*scale[unit]:null;
    const manual=c.manual?.ac_power;
    const test=typeof manual==='number'&&Number.isFinite(manual)&&
      (c.manual_enabled?.ac_power===true||
