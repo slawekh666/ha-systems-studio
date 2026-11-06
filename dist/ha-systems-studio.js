@@ -2818,8 +2818,11 @@ const HASSStudioInverterReadings=(()=>{
    const mode=['auto','ha','test'].includes(node?.energy_mode)?node.energy_mode:
      c.mode==='manual'?'test':'auto';
    const raw=HASSStudioHA.reading(h,c.entities.ac_power);
-   const live=raw&&['W','kW'].includes(raw.unit)&&Math.abs(raw.value)<=500000?
-     raw.value/(raw.unit==='W'?1000:1):null;
+   const unit=c.ac_input_unit==='auto'||!c.ac_input_unit?raw?.unit:c.ac_input_unit;
+   const scale={W:.001,kW:1,MW:1000};
+   const live=raw&&Object.prototype.hasOwnProperty.call(scale,unit)&&
+     Number.isFinite(raw.value)&&Math.abs(raw.value*scale[unit])<=500?
+     raw.value*scale[unit]:null;
    const manual=c.manual?.ac_power;
    const test=typeof manual==='number'&&Number.isFinite(manual)&&
      (c.manual_enabled?.ac_power===true||
@@ -2973,7 +2976,7 @@ const HASSStudioInverter=(()=>{
  const defaults=()=>({mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
    rated_kw:10,production_threshold_w:10,positive_power:true,export_allowed:true,entities:parameters.entities(parameters.core),
-   manual:parameters.manualDefaults(parameters.core),inputs:[]});
+   manual:{...parameters.manualDefaults(parameters.core),ac_power:null},inputs:[]});
  const normalize=node=>{
    const raw=node?.inverter||node||{},d=defaults(),count=Math.round(clamp(raw.count,1,MAX_INPUTS,2));
    return {...d,...raw,mode:raw.mode==='manual'?'manual':'live',count,
@@ -2986,7 +2989,8 @@ const HASSStudioInverter=(()=>{
     panel_rows:panelRows(raw,node,count),
     entities:parameters.entities(parameters.core,raw.entities),
     manual_enabled:{ac_power:raw.manual_enabled?.ac_power===true||raw.manual_enabled?.ac_power==null&&node?.energy_test_configured===true},
-    manual:{ac_power:raw.hybrid?.converter?.enabled===true&&raw.manual?.ac_power==null?null:clamp(raw.manual?.ac_power,-500,500,6.4),
+    ac_input_unit:['auto','W','kW','MW'].includes(raw.ac_input_unit)?raw.ac_input_unit:'auto',
+    manual:{ac_power:raw.manual?.ac_power==null||raw.manual?.ac_power===''?null:clamp(raw.manual.ac_power,-500,500,null),
        temperature:clamp(raw.manual?.temperature,-40,150,32),
        status:['auto','generating','standby','off','fault'].includes(raw.manual?.status)?raw.manual.status:'auto',
        alarm:raw.manual?.alarm===true},
@@ -4021,8 +4025,6 @@ const HASSStudioEnergyConverter=(()=>{
         fail('converter_ac_meter_missing');continue;
       }
       const acEntry=acEntries[0];
-      // In explicit calculation mode an existing HA or TEST AC value must
-      // never reappear through the legacy balance if derivation fails.
       // Direct HA/TEST AC readings remain authoritative in every mode.
       const mapped=dc_terminals.filter(t=>t.node_id===node.id);
       if(conf.pv_mode!=='none'&&!mapped.length){
@@ -6043,8 +6045,10 @@ const HASSStudioEditorInspector = (() => {
 
         const pvResolved=HASSStudioInverterReadings.resolve(obj,editor._hass,c);
         let readings=numeric(inverterFields.core.ac_power.label,'inv_entity_ac_power',
-          c.entities.ac_power,'inv_manual_ac_power',c.hybrid?.converter?.enabled===true&&
-          !c.manual_enabled?.ac_power?'':c.manual.ac_power)+
+          c.entities.ac_power,'inv_manual_ac_power',c.manual_enabled?.ac_power?
+          c.manual.ac_power:'')+
+          field('Jednostka odczytu AC z HA','inv_ac_input_unit',c.ac_input_unit||'auto','text',
+            [['auto','Automatycznie z HA'],['W','W'],['kW','kW'],['MW','MW']])+
           numeric(inverterFields.core.temperature.label,'inv_entity_temperature',
             c.entities.temperature,'inv_manual_temperature',c.manual.temperature)+
           selectMetric(inverterFields.core.status.label,'inv_entity_status',c.entities.status,
@@ -6257,7 +6261,7 @@ const HASSStudioEditorInspector = (() => {
             markup+='<p class="ss-note">Słup wyświetla tylko parametry sieci. Bilans automatycznie oblicza import i eksport z mocy falownika, magazynu i odbiorników.</p>';
           }else if(obj.type==='inverter')
             metric('Moc chwilowa falownika (kW)','inv_entity_ac_power',c.entities.ac_power,
-              'inv_manual_ac_power',c.manual.ac_power);
+              'inv_manual_ac_power',c.manual_enabled?.ac_power?c.manual.ac_power:'');
           else if(obj.type==='building'){
             metric('Pobór budynku (kW)','building_power_entity',c.power_entity,
               'building_power_kw',HASSStudioBuilding.manualPower(c),'kW','Encja mocy (W/kW)');
@@ -7625,6 +7629,8 @@ const HASSStudioEditorLibrary=(()=>{
           if(f==='temperature')c.manual[f]=clamp(val,-40,150,25);
            if(f==='status')c.manual[f]=['auto','generating','standby','off','fault'].includes(val)?val:'auto';
            if(f==='alarm')c.manual[f]=val==='true';
+        }else if(k==='ac_input_unit'){
+          c.ac_input_unit=['auto','W','kW','MW'].includes(val)?val:'auto';
         }else if(k==='hybrid_enabled'){
           c.hybrid={...(HASSStudioInverter.normalize({inverter:c}).hybrid||HASSStudioInverter.hybridDefaults()),
             enabled:val==='true'};
