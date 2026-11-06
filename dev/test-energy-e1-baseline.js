@@ -141,6 +141,11 @@ eq(Math.abs(dcFlow.kw),1.5);
 const diagnostic=diagnostics.viewModel(dcDiagram,hass);
 assert.equal(diagnostic.converters[0].status,'unresolved');
 assert.equal(diagnostic.converters[0].loss_kw,null);
+assert.equal(diagnostic.networks.find(n=>n.medium==='dc').diagnostic_reason,null,
+  'An enabled converter with a solved DC boundary must not be labelled missing');
+const dcHtml=diagnostics.render(dcDiagram,hass,'pl');
+assert(!dcHtml.includes('Brak modelu konwersji DC'));
+assert(dcHtml.includes('straty i sprawność nieustalone'));
 assert.equal(JSON.stringify(dcDiagram),snapshot,'Hybrid solve must not mutate graph');
 assert.equal(JSON.stringify(layout.normalized({studio_layout:dcDiagram})),snapshot,
   'Hybrid config must round-trip exactly');

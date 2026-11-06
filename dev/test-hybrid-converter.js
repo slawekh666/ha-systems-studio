@@ -168,8 +168,6 @@ near(res.networks.find(n=>n.medium==='dc').residual_kw,0);
 assert.equal(res.networks.find(n=>n.medium==='dc').devices.filter(d=>d.role==='converter').length,1);
 assert.equal(res.networks.find(n=>n.medium==='dc').devices.find(d=>d.role==='converter').injection_kw,0);
 assert.equal(flow.resolve(unresolvedIdle,{states:{}}).byConnection.dc_wire.available,true);
-// A converter without an AC observation and usable conversion assumptions
-// must not invent an AC or DC transfer (a separate future scope).
 assert.equal(res.converters[0].loss_kw,null);
 // Physically shared DC buses must be rejected even if the PV input does not
 // have a separate drawn cable.
