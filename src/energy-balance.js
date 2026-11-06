@@ -466,11 +466,13 @@ const HASSStudioEnergyBalance=(()=>{
         warnings.push({reason:'unaccounted_generation',network_id:g.id});
       if(boards.length&&result.state==='unbalanced')
         warnings.push({reason:'grid_disconnected_imbalance',network_id:g.id});
-      const converterTransfer=round(entries.filter(e=>e.role==='converter'&&
-        e.injection_kw!==null).reduce((sum,e)=>sum+e.injection_kw,0));
+      const converterEntries=entries.filter(e=>e.role==='converter'&&
+        e.injection_kw!==null);
+      const converterTransfer=converterEntries.length?
+        round(converterEntries.reduce((sum,e)=>sum+e.injection_kw,0)):null;
       return {id:g.id,medium:g.medium,connection_ids:g.connection_ids,
         port_keys:[...g.ports],devices:entries,
-        converter_transfer_kw:converterTransfer||null,state:result.state,
+        converter_transfer_kw:converterTransfer,state:result.state,
         residual_kw:result.residual_kw,totals:result.totals,reasons:result.reasons,
         unaccounted_kw,export_cap_kw};
     });
