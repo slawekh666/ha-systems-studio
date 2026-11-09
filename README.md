@@ -36,12 +36,27 @@ Power balance is an informational visualization, not a control system. Data mark
 
 For development builds, choose the repository's default `main` branch in HACS and use **Redownload / Pobierz ponownie**. Refresh the browser after updating. HACS may cache the JavaScript bundle.
 
-Installed development build: **0.4.46-dev**.
+Installed development build: **0.4.47-dev**.
 
 ## Historia aktualizacji
 
 <!-- HASS-STUDIO-CHANGELOG-BEGIN -->
-<!-- HASS-STUDIO-SOURCE: adbcc2632e3af45cda0876780e45fb903952f869 -->
+<!-- HASS-STUDIO-SOURCE: 91857f9d49a4091b53359b39b891b296a4a39858 -->
+
+### 0.4.47-dev — od 0.4.46-dev
+
+**Refaktoryzacja**
+- remove dead built-in inverter diagnostic row editors
+
+**Dokumentacja, testy i narzędzia**
+- scope removed-field assertions to inverter handler
+
+**Do przetestowania ręcznie w Home Assistant**
+- Po ponownym pobraniu w HACS sprawdzić załadowanie karty i brak błędów konsoli.
+- Sprawdzić edycję właściwości, zapis konfiguracji i ponowne otwarcie projektu.
+- Sprawdzić falownik: encje HA, TEST 0/puste, MPPT oraz odczyty SVG.
+
+---
 
 ### 0.4.46-dev — od 0.4.45-dev
 

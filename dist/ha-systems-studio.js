@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.46-dev';
+const VERSION = '0.4.47-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2979,10 +2979,10 @@ const HASSStudioInverter=(()=>{
  const entity=x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x)?x:'';
  const parameters=HASSStudioDeviceParameters.inverter;
  const defaultInput=i=>parameters.inputDefaults(i);
- const DEFAULT_KEYS=['ac_power','temperature','status','alarm','pv_summary','pv_voltage','pv_current','pv_power','custom'];
- const defaultRow=(key='custom',input=0)=>({key:DEFAULT_KEYS.includes(key)?key:'custom',
-   input,entity:'',label:'',unit:'auto',decimals:1,manual_value:''});
- const panelRows=(raw,node,count)=>{
+ // All native AC/PV telemetry belongs in "Dane urządzenia"; extra rows are custom only.
+ const defaultRow=()=>({key:'custom',input:0,entity:'',label:'',
+   unit:'auto',decimals:1,manual_value:''});
+ const panelRows=(raw,node)=>{
    // Built-in inverter metrics (including PV1/PV2) are configured under
    // "Device data", not duplicated as independently editable panel rows.
    // Keep only user-defined HA entities, including those from legacy layouts.
@@ -3074,7 +3074,7 @@ const HASSStudioInverter=(()=>{
     rated_kw:clamp(raw.rated_kw,.1,500,10),production_threshold_w:clamp(raw.production_threshold_w,0,1000,10),
     positive_power:raw.positive_power!==false,export_allowed:raw.export_allowed!==false,
     panel_title:String(raw.panel_title??'Parametry falownika').slice(0,46),
-    panel_rows:panelRows(raw,node,count),
+    panel_rows:panelRows(raw,node),
     entities:parameters.entities(parameters.core,raw.entities),
     manual_enabled:{
       ac_power:raw.manual_enabled?.ac_power===true||
@@ -3218,40 +3218,15 @@ const HASSStudioInverter=(()=>{
    '<text x="104" y="0" font-size="7.4" fill="#86d6fa" font-family="Arial,sans-serif">'+esc(q.name.slice(0,6))+'</text>'+
    '<text x="197" y="0" text-anchor="end" font-size="7.5" fill="#c9f5ff" font-family="Arial,sans-serif">'+
    esc(fmt(q.voltage)+'V  '+fmt(q.current,1)+'A  '+(q.watts===null?'—':fmt(q.watts))+'W')+'</text></g>';
- const labelFor=(row,c)=>{
-   if(row.label)return row.label;
-   const names={ac_power:'Moc AC',temperature:'Temperatura',status:'Status',alarm:'Alarm',
-     pv_summary:'PV — V / A / W',pv_voltage:'Napięcie PV',pv_current:'Prąd PV',pv_power:'Moc PV',custom:'Encja'};
-   const prefix=names[row.key]||'Encja';
-   const pv=row.key.startsWith('pv_');
-   return pv?(row.key==='pv_summary'?c.inputs[row.input]?.name||'PV':prefix+' '+(c.inputs[row.input]?.name||'PV'+(row.input+1))):prefix;
- };
+ const labelFor=row=>row.label||'Encja';
  const readingFor=(row,d,h)=>{
-   const c=d.c,manual=d.manual;
-   const index=c.inputs[row.input];
    let value=null,unit='';
-   if(row.key==='ac_power'){value=d.power;unit='kW';}
-   else if(row.key==='temperature'){value=d.temperature;unit='°C';}
-   else if(row.key==='status'){
-     if(manual)value=({generating:'Produkcja',standby:'Czuwanie',off:'Wyłączony',fault:'Awaria'})[d.state]||'Brak danych';
-     else value=HASSStudioHA.entity(h,c.entities.status)?.state??null;
-   }else if(row.key==='alarm'){
-     if(manual)value=d.c.manual.alarm?'Alarm':'Brak';
-     else value=HASSStudioHA.entity(h,c.entities.alarm)?.state??null;
-   }else if(index&&row.key==='pv_voltage'){value=d.inputs[row.input].voltage;unit='V';}
-   else if(index&&row.key==='pv_current'){value=d.inputs[row.input].current;unit='A';}
-   else if(index&&row.key==='pv_power'){value=d.inputs[row.input].watts;unit='W';}
-   else if(index&&row.key==='pv_summary'){
-     const pv=d.inputs[row.input];
-     const v=pv.voltage,a=pv.current,w=pv.watts;
-     return {text:fmt(v)+' V / '+fmt(a,1)+' A / '+fmt(w)+' W',known:v!==null||a!==null||w!==null};
-   }else if(row.key==='custom'){
-     if(manual)value=row.manual_value;
-     else{
-       const state=HASSStudioHA.entity(h,row.entity);
-       value=state?.state??null;
-       unit=String(state?.attributes?.unit_of_measurement??'').slice(0,12);
-     }
+   // Normalization discards native-metric panel keys; only custom HA/TEST rows remain.
+   if(d.manual)value=row.manual_value;
+   else{
+     const state=HASSStudioHA.entity(h,row.entity);
+     value=state?.state??null;
+     unit=String(state?.attributes?.unit_of_measurement??'').slice(0,12);
    }
    if(value===null||value===undefined||value===''||['unavailable','unknown','none','null'].includes(String(value).trim().toLowerCase()))
      return {text:'—',known:false};
@@ -3275,7 +3250,7 @@ const HASSStudioInverter=(()=>{
  };
  const panelData=(node,h)=>{
    const d=data(node,h);
-   return d.c.panel_rows.map((row)=>({...row,label:labelFor(row,d.c),reading:readingFor(row,d,h)}));
+   return d.c.panel_rows.map((row)=>({...row,label:labelFor(row),reading:readingFor(row,d,h)}));
  };
  const extra=(d,h)=>{
    const c=d.c,all=c.panel_rows,hgt=panelHeight(c),w=PANEL_WIDTH;
@@ -3284,7 +3259,7 @@ const HASSStudioInverter=(()=>{
      '<rect x="0" y="0" width="'+w+'" height="'+hgt+'" rx="9" fill="#0c1b2d" stroke="#498baf" stroke-width="1.2"/>',
      '<text x="10" y="20" fill="#a8e4ff" font-family="Arial,sans-serif" font-size="11" font-weight="700">'+esc(c.panel_title)+'</text>'];
    all.forEach((q,i)=>{
-     const y=39+i*ROW_HEIGHT,label=labelFor(q,c),v=readingFor(q,d,h);
+     const y=39+i*ROW_HEIGHT,label=labelFor(q),v=readingFor(q,d,h);
      panel.push('<g class="inv-metric-row" data-row="'+i+'" data-key="'+esc(q.key)+'">');
      panel.push('<text x="10" y="'+y+'" fill="#79d5fc" font-family="Arial,sans-serif" font-size="10">'+esc(label.slice(0,32))+'</text>');
      panel.push('<text x="'+(w-9)+'" y="'+y+'" text-anchor="end" fill="'+(v.known?'#e4f7ff':'#8ca9b8')+'" font-family="Arial,sans-serif" font-size="10">'+esc(v.text)+'</text></g>');
@@ -3321,7 +3296,7 @@ const HASSStudioInverter=(()=>{
    const bottom=c.show_extra?Math.max(300,65+panelHeight(c)*c.extra_scale+10):300;
    return '<svg width="'+(150+extraWidth/2)+'" height="'+(bottom/2)+'" viewBox="'+left+' 0 '+(300+extraWidth)+' '+bottom+'" preserveAspectRatio="xMinYMin meet">'+content+'</svg>';
  };
- return Object.freeze({MAX_INPUTS,MAX_ROWS,DEFAULT_KEYS,parameters,defaultInput,defaultRow,hybridDefaults,converterDefaults,normalizeConverter,normalizeHybrid,defaults,normalize,kind,conversion,savedConfig,selectKind,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
+ return Object.freeze({MAX_INPUTS,MAX_ROWS,parameters,defaultInput,defaultRow,hybridDefaults,converterDefaults,normalizeConverter,normalizeHybrid,defaults,normalize,kind,conversion,savedConfig,selectKind,dcTerminals,data,geometry,render,fmt,panelData,readingFor,labelFor,panelHeight});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverter;
 
@@ -7781,28 +7756,24 @@ const HASSStudioEditorLibrary=(()=>{
             }
           }
         }else if(k.startsWith('row_')){
-          const match=/^row_(\d+)_(key|label|input|entity|unit|decimals|manual_value)$/.exec(k);
+          const match=/^row_(\d+)_(label|entity|unit|decimals|manual_value)$/.exec(k);
           if(match){
             const i=Number(match[1]),field=match[2],rows=c.panel_rows=c.panel_rows||HASSStudioInverter.normalize(obj).panel_rows;
             if(i>=0&&i<rows.length){
               const row=rows[i];
-              if(field==='key')row.key=HASSStudioInverter.DEFAULT_KEYS.includes(val)?val:'custom';
-              else if(field==='label')row.label=val.slice(0,42);
+              if(field==='label')row.label=val.slice(0,42);
               else if(field==='entity')row.entity=validEntity(val)?val:'';
               else if(field==='unit')row.unit=['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].includes(val)?val:'auto';
-              else if(field==='input')row.input=clamp(val,1,12,1)-1;
               else if(field==='decimals')row.decimals=clamp(val,0,3,1);
               else if(field==='manual_value')row.manual_value=val.slice(0,60);
             }
           }
         }else if(k==='panel_title')c.panel_title=val.slice(0,46);
-        else if(k==='mode')c.mode=val==='manual'?'manual':'live';
         else if(k==='count')c.count=clamp(val,1,12,2);
         else if(k==='display_scale'||k==='extra_scale')c[k]=clamp(val,40,150,100)/100;
         else if(k==='extra_position')c.extra_position=val==='left'?'left':'right';
         else if(k==='rated_kw')c.rated_kw=clamp(val,.1,500,10);
-        else if(k==='production_threshold_w')c.production_threshold_w=clamp(val,0,1000,10);
-        else if(['positive_power','show_extra','export_allowed'].includes(k))c[k]=val==='true';
+        else if(['show_extra','export_allowed'].includes(k))c[k]=val==='true';
       }else if(obj.type==='energy_storage'&&key.startsWith('storage_')){
         const c=obj.energy_storage=obj.energy_storage||HASSStudioEnergyStorage.defaults();
         const k=key.slice(8);
