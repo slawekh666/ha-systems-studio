@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.45-dev';
+const VERSION = '0.4.46-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2841,6 +2841,21 @@ const HASSStudioInverterReadings=(()=>{
    return ['on','alarm','fault','error','critical','warning'].includes(value)?'alarm':
      ['off','normal','ok','clear'].includes(value)?'ok':null;
  };
+ // Unlike the alarm entity, a status entity describes operating state.
+ // Unknown, numeric or vendor-specific states must not be interpreted as a fault.
+ // In particular, "on" and "warning" are NOT equivalent to a fault.
+ const statusState=(h,id)=>{
+   const state=String(HASSStudioHA.entity(h,id)?.state??'').trim().toLowerCase();
+   if(['generating','producing','production','running','feeding'].includes(state))
+     return 'generating';
+   if(['standby','idle','sleep','sleeping','waiting'].includes(state))
+     return 'standby';
+   if(['off','stopped','shutdown','disabled'].includes(state))
+     return 'off';
+   if(['fault','error','failed','alarm','critical'].includes(state))
+     return 'fault';
+   return null;
+ };
  const choose=(node,live,backup)=>{
    const forceTest=node?.energy_mode==='test'||
      (node?.energy_mode==null&&node?.inverter?.mode==='manual');
@@ -2939,14 +2954,19 @@ const HASSStudioInverterReadings=(()=>{
      c.manual_enabled?.temperature===true?c.manual.temperature:null);
    const alarm=choose(node,alarmState(h,c.entities.alarm),
      c.manual_enabled?.alarm===true?(c.manual.alarm?'alarm':'ok'):null);
-   const status=alarmState(h,c.entities.status);
+   const status=choose(node,statusState(h,c.entities.status),
+     c.manual_enabled?.status===true?c.manual.status:null);
    const inputs=c.inputs.map(q=>pvInput(node,h,c,q));
    return {power:ac.kw,temperature:temperature.value,alarm:alarm.value,
-     statusAlarm:status,inputs,manual,
+     status:status.value,
+     // Compatibility field; callers should prefer "status" and "sources.status".
+     statusAlarm:status.value==='fault'?'alarm':status.value===null?null:'ok',
+     inputs,manual,
      sources:{power:ac.source,temperature:temperature.source,
-       alarm:alarm.source,inputs:inputs.map(q=>q.provenance)}};
+       alarm:alarm.source,status:status.source,
+       inputs:inputs.map(q=>q.provenance)}};
  };
- return Object.freeze({measured,alarmState,choose,power,pvMode,pvInput,resolve});
+ return Object.freeze({measured,alarmState,statusState,choose,power,pvMode,pvInput,resolve});
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioInverterReadings;
 
@@ -3182,13 +3202,14 @@ const HASSStudioInverter=(()=>{
  };
  const data=(node,h)=>{
    const c=normalize(node),resolved=HASSStudioInverterReadings.resolve(node,h,c);
-   const {power,temperature,alarm,inputs,manual}=resolved;
-   const fault=alarm==='alarm'||(manual&&c.manual_enabled?.status===true&&c.manual.status==='fault')||
-     (!manual&&resolved.statusAlarm==='alarm');
+   const {power,temperature,alarm,status,inputs,manual}=resolved;
+   const fault=alarm==='alarm'||status==='fault';
    const generating=power===null?null:((c.positive_power?power:-power)*1000>c.production_threshold_w);
-   return {c,power,temperature,fault,generating,inputs,manual,
-      state:fault?'alarm':manual&&c.manual_enabled?.status===true&&c.manual.status!=='auto'?
-        c.manual.status:generating===null?'unknown':generating?'generating':'standby'};
+   // An explicit, recognized operating status controls only the SVG state.
+   // Neither status nor alarm rewrites measured AC power or the energy balance.
+   const state=fault?'alarm':status!==null&&status!=='auto'?status:
+     generating===null?'unknown':generating?'generating':'standby';
+   return {c,power,temperature,fault,generating,inputs,manual,state};
  };
  const esc=x=>String(x).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));
  const fmt=(v,d=0)=>v===null?'—':Number(v).toFixed(d);
