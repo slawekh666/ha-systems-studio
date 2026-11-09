@@ -36,7 +36,7 @@ Power balance is an informational visualization, not a control system. Data mark
 
 For development builds, choose the repository's default `main` branch in HACS and use **Redownload / Pobierz ponownie**. Refresh the browser after updating. HACS may cache the JavaScript bundle.
 
-Installed development build: **0.4.42-dev**.
+Installed development build: **0.4.43-dev**.
 
 ## Package layout
 

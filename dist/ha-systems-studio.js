@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.42-dev';
+const VERSION = '0.4.43-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2769,7 +2769,7 @@ const HASSStudioEnergyStorage=(()=>{
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyStorage;
 
 
-/* Stage 05: immutable device parameter declarations (inverter family first).
+/* Stage 05/08: immutable device parameter declarations (inverter family first).
  * These describe configuration, labels and defaults; source resolution stays
  * in HASSStudioHA and HASSStudioInverter until a later reviewed stage.
  */
@@ -2784,9 +2784,14 @@ const HASSStudioDeviceParameters=(()=>{
     role:'telemetry',entityPath:'entities.temperature',manualPath:'manual.temperature',testDefault:32,min:-40,max:150}],
   ['status',{label:'Stan pracy falownika',unit:'',kind:'enum',role:'status',
     entityPath:'entities.status',manualPath:'manual.status',testDefault:'auto',
-    options:Object.freeze(['auto','generating','standby','off','fault'])}],
+    options:Object.freeze(['auto','generating','standby','off','fault']),
+    formOptions:Object.freeze([['auto','Automatycznie z mocy AC'],
+      ['generating','Produkcja'],['standby','Czuwanie'],['off','Wyłączony'],
+      ['fault','Awaria']].map(row=>Object.freeze(row)))}],
   ['alarm',{label:'Alarm falownika',unit:'',kind:'boolean',role:'alarm',
-    entityPath:'entities.alarm',manualPath:'manual.alarm',testDefault:false}]
+    entityPath:'entities.alarm',manualPath:'manual.alarm',testDefault:false,
+    formOptions:Object.freeze([['false','Brak alarmu'],['true','Alarm']]
+      .map(row=>Object.freeze(row)))}]
  ]);
  const pv=fields([
   ['voltage',{label:'Napięcie',unit:'V',kind:'number',role:'pv_input',
@@ -6093,6 +6098,36 @@ const HASSStudioCanvas = (() => {
 })();
 
 
+/* Stage 08: reusable, presentation-only HA/TEST metric fields.
+ * Devices supply stable data-field IDs; readout policy stays in resolvers.
+ */
+const HASSStudioMetricForm=(()=>{
+ const render=(definition,o)=>{
+  if(!definition||!['number','enum','boolean'].includes(definition.kind))
+    throw new Error('Invalid metric field definition');
+  const {field,esc,entityKey,entityValue,testKey,testValue,showTest=false}=o;
+  if(typeof field!=='function'||typeof esc!=='function'||
+     typeof entityKey!=='string'||typeof testKey!=='string')
+    throw new Error('Invalid metric form bindings');
+  const title=o.title??definition.label;
+  const label=definition.kind==='number'?'Czujnik Home Assistant':'Encja Home Assistant';
+  let html='<div class="ss-metric-group"><strong>'+esc(title)+'</strong>'+
+    field(label,entityKey,entityValue||'','search',null,'list="ss-entity-list"');
+  if(showTest){
+   const control=definition.kind==='number'?
+     field(title+' — TEST',testKey,testValue??'','number',null,
+       'step="'+(o.step??'0.1')+'"'):
+     field(title+' — TEST',testKey,testValue??'','text',
+       definition.formOptions||(definition.options||[]).map(value=>[value,value]));
+   html+='<div class="ss-metric-test">'+control+'</div>';
+  }
+  return html+'</div>';
+ };
+ return Object.freeze({render});
+})();
+if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioMetricForm;
+
+
 /* Dedicated right-hand device/pipe inspector, extracted without changing
  * existing properties or saved configuration fields. Event updates stay in
  * studio-custom.js for now; the panel only renders and wires HA suggestions.
@@ -6150,17 +6185,9 @@ const HASSStudioEditorInspector = (() => {
           (openSections.has(id)?(openSections.get(id)?' open':''):(initial?' open':''))+
           '><summary>'+sectionIcon(icon)+'<span>'+label+'</span>'+
           sectionIcon('mdi:chevron-down')+'</summary><section>'+body+'</section></details>';
-        const numeric=(title,entityKey,entityId,testKey,manual,step='0.1')=>
-          '<div class="ss-metric-group"><strong>'+esc(title)+'</strong>'+
-          field('Czujnik Home Assistant',entityKey,entityId||'','search',null,'list="ss-entity-list"')+
-          (test?'<div class="ss-metric-test">'+
-            field(title+' — TEST',testKey,manual??'','number',null,'step="'+step+'"')+'</div>':'')+
-          '</div>';
-        const selectMetric=(title,entityKey,entityId,testKey,val,choices)=>
-          '<div class="ss-metric-group"><strong>'+esc(title)+'</strong>'+
-          field('Encja Home Assistant',entityKey,entityId||'','search',null,'list="ss-entity-list"')+
-          (test?'<div class="ss-metric-test">'+field(title+' — TEST',testKey,val,'text',choices)+'</div>':'')+
-          '</div>';
+        const metric=(definition,entityKey,entityValue,testKey,testValue,title=definition.label)=>
+          HASSStudioMetricForm.render(definition,{field,esc,title,entityKey,entityValue,
+            testKey,testValue,showTest:test});
         markup+='<div class="ss-inspector-heading">'+sectionIcon('mdi:solar-power')+
           '<span>'+esc(obj.label||deviceName)+'</span></div>';
         let basics=field('Nazwa falownika','label',obj.label)+
@@ -6200,20 +6227,17 @@ const HASSStudioEditorInspector = (() => {
         markup+=sect('inverter-basics','1. Podstawowe ustawienia i wygląd','mdi:tune-variant',basics,true);
 
         const pvResolved=HASSStudioInverterReadings.resolve(obj,editor._hass,c);
-        let readings=numeric(inverterFields.core.ac_power.label,'inv_entity_ac_power',
+        let readings=metric(inverterFields.core.ac_power,'inv_entity_ac_power',
           c.entities.ac_power,'inv_manual_ac_power',c.manual_enabled?.ac_power?
           c.manual.ac_power:'')+
           field('Jednostka odczytu AC z HA','inv_ac_input_unit',c.ac_input_unit||'auto','text',
             [['auto','Automatycznie z HA'],['W','W'],['kW','kW'],['MW','MW']])+
-          numeric(inverterFields.core.temperature.label,'inv_entity_temperature',
+          metric(inverterFields.core.temperature,'inv_entity_temperature',
             c.entities.temperature,'inv_manual_temperature',c.manual.temperature)+
-          selectMetric(inverterFields.core.status.label,'inv_entity_status',c.entities.status,
-            'inv_manual_status',c.manual.status,[
-              ['auto','Automatycznie z mocy AC'],['generating','Produkcja'],['standby','Czuwanie'],['off','Wyłączony'],
-              ['fault','Awaria']])+
-          selectMetric(inverterFields.core.alarm.label,'inv_entity_alarm',c.entities.alarm,
-            'inv_manual_alarm',c.manual.alarm?'true':'false',[
-              ['false','Brak alarmu'],['true','Alarm']]);
+          metric(inverterFields.core.status,'inv_entity_status',c.entities.status,
+            'inv_manual_status',c.manual.status)+
+          metric(inverterFields.core.alarm,'inv_entity_alarm',c.entities.alarm,
+            'inv_manual_alarm',c.manual.alarm?'true':'false');
         readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
         if(selectedHybrid){
           const index=HASSStudioEnergyTopology.index(model),
@@ -6240,12 +6264,15 @@ const HASSStudioEditorInspector = (() => {
               input.visible?'true':'false','text',[['true','Tak'],['false','Nie']])+
             field('Wymagaj poprawnego odczytu mocy','inv_pv_'+i+'_required',
               input.required?'true':'false','text',[['true','Tak'],['false','Nie']])+
-            numeric(inverterFields.pv.voltage.label+' '+input.name+' ('+inverterFields.pv.voltage.unit+')','inv_pv_'+i+'_entity_voltage',
-              input.entities.voltage,'inv_pv_'+i+'_manual_voltage',manualValue('voltage'))+
-            numeric(inverterFields.pv.current.label+' '+input.name+' ('+inverterFields.pv.current.unit+')','inv_pv_'+i+'_entity_current',
-              input.entities.current,'inv_pv_'+i+'_manual_current',manualValue('current'))+
-            numeric(inverterFields.pv.power.label+' '+input.name+' ('+inverterFields.pv.power.unit+')','inv_pv_'+i+'_entity_power',
-              input.entities.power,'inv_pv_'+i+'_manual_power',manualValue('power'));
+            metric(inverterFields.pv.voltage,'inv_pv_'+i+'_entity_voltage',
+              input.entities.voltage,'inv_pv_'+i+'_manual_voltage',manualValue('voltage'),
+              inverterFields.pv.voltage.label+' '+input.name+' ('+inverterFields.pv.voltage.unit+')')+
+            metric(inverterFields.pv.current,'inv_pv_'+i+'_entity_current',
+              input.entities.current,'inv_pv_'+i+'_manual_current',manualValue('current'),
+              inverterFields.pv.current.label+' '+input.name+' ('+inverterFields.pv.current.unit+')')+
+            metric(inverterFields.pv.power,'inv_pv_'+i+'_entity_power',
+              input.entities.power,'inv_pv_'+i+'_manual_power',manualValue('power'),
+              inverterFields.pv.power.label+' '+input.name+' ('+inverterFields.pv.power.unit+')');
           const sourceName={measured:'HA — moc',simulated:'TEST — moc',
             calculated_ha:'Obliczone: HA V × A',calculated_test:'Obliczone: TEST V × A',
             missing:'Brak danych'}[resolved.power_source];
@@ -6359,10 +6386,7 @@ const HASSStudioEditorInspector = (() => {
             metric('Częstotliwość sieci (Hz)','grid_entity_frequency',grid.entities.frequency,
               'grid_manual_frequency',grid.manual.frequency,'Hz');
             markup+='<p class="ss-note">Słup wyświetla tylko parametry sieci. Bilans automatycznie oblicza import i eksport z mocy falownika, magazynu i odbiorników.</p>';
-          }else if(obj.type==='inverter')
-            metric('Moc chwilowa falownika (kW)','inv_entity_ac_power',c.entities.ac_power,
-              'inv_manual_ac_power',c.manual_enabled?.ac_power?c.manual.ac_power:'');
-          else if(obj.type==='building'){
+          }else if(obj.type==='building'){
             metric('Pobór budynku (kW)','building_power_entity',c.power_entity,
               'building_power_kw',HASSStudioBuilding.manualPower(c),'kW','Encja mocy (W/kW)');
             if(c.measurement==='individual')
@@ -6501,47 +6525,6 @@ const HASSStudioEditorInspector = (() => {
             markup+=field('Test alarmu','ev_manual_alarm',d.manual.alarm?'true':'false','text',[['false','Brak'],['true','Alarm']]);
           }
           markup+='<p class="ss-note">Historia sesji wymaga liczników/rekordów w HA. Panel tylko odczytuje dane; nie steruje ładowaniem.</p>';
-        }
-        if(isInverter){
-          const c=HASSStudioInverter.normalize(obj);
-          const bool=(k,label)=>field(label,'inv_'+k,c[k]?'true':'false','text',[['true','Tak'],['false','Nie']]);
-          markup+=
-            field('Skala ekranu (%)','inv_display_scale',Math.round(c.display_scale*100),'range',null,'min="40" max="150" step="5"')+
-            field('Liczba wejść PV / MPPT','inv_count',c.count,'number',null,'min="1" max="12" step="1"')+
-            field('Moc znamionowa (kW)','inv_rated_kw',c.rated_kw,'number',null,'min="0.1" max="500" step="0.1"')+
-            field('Próg produkcji (W)','inv_production_threshold_w',c.production_threshold_w,'number',null,'min="0" max="1000" step="1"')+
-            bool('positive_power','Moc dodatnia = produkcja AC')+
-            bool('show_extra','Pokaż panel parametrów')+
-            field('Pozycja panelu','inv_extra_position',c.extra_position,'text',[['right','Prawo'],['left','Lewo']])+
-            field('Skala dodatkowego panelu (%)','inv_extra_scale',Math.round(c.extra_scale*100),'range',null,'min="40" max="150" step="5"');
-          for(const [k,title] of [['temperature','Temperatura falownika'],['status','Status falownika'],['alarm','Alarm falownika']])
-            markup+=field(title,'inv_entity_'+k,c.entities[k]||'','search',null,'list="ss-entity-list"');
-          if(c.mode==='manual')markup+=field('Test temperatury (°C)','inv_manual_temperature',c.manual.temperature,'number',null,'step="0.1"');
-          markup+='<h4>Wejścia fotowoltaiczne</h4>';
-          c.inputs.forEach((q,i)=>{
-            markup+='<details><summary>PV / MPPT '+(i+1)+'</summary>';
-            markup+=field('Nazwa (maks. 12 znaków)','inv_pv_'+i+'_name',q.name,'text')+
-              field('Na małym ekranie','inv_pv_'+i+'_visible',q.visible?'true':'false','text',[['true','Tak'],['false','Nie']]);
-            for(const [key,label] of [['voltage','Napięcie (V)'],['current','Natężenie (A)'],['power','Moc (W/kW)']]){
-              markup+=field('Encja '+label,'inv_pv_'+i+'_entity_'+key,q.entities[key]||'','search',null,'list="ss-entity-list"');
-              if(c.mode==='manual')markup+=field('Test '+label,'inv_pv_'+i+'_manual_'+key,q.manual[key]??'','number',null,'step="0.1"');
-            }
-            markup+='</details>';
-          });
-          markup+='<h4>Panel parametrów</h4>'+field('Nagłówek','inv_panel_title',c.panel_title,'text');
-          const rowTypes=HASSStudioInverter.DEFAULT_KEYS.map(k=>[k,({ac_power:'Moc AC',temperature:'Temperatura',status:'Status',alarm:'Alarm',pv_summary:'PV — V/A/W',pv_voltage:'Napięcie PV',pv_current:'Prąd PV',pv_power:'Moc PV',custom:'Dowolna encja'})[k]]);
-          c.panel_rows.forEach((row,i)=>{
-            markup+='<details><summary>'+esc((i+1)+'. '+HASSStudioInverter.labelFor(row,c))+'</summary>';
-            markup+=field('Parametr','inv_row_'+i+'_key',row.key,'text',rowTypes)+field('Opis','inv_row_'+i+'_label',row.label,'text');
-            if(row.key.startsWith('pv_'))markup+=field('Numer wejścia (0=PV1)','inv_row_'+i+'_input',row.input,'number',null,'min="0" max="'+(c.count-1)+'"');
-            if(row.key==='custom')markup+=field('Encja','inv_row_'+i+'_entity',row.entity,'search',null,'list="ss-entity-list"')+
-              (c.mode==='manual'?field('Wartość testowa','inv_row_'+i+'_manual_value',row.manual_value,'text'):'');
-            markup+=field('Jednostka','inv_row_'+i+'_unit',row.unit,'text',['auto','W','kW','Wh','kWh','MWh','V','A','°C','%','Hz'].map(v=>[v,v]))+
-              field('Miejsca po przecinku','inv_row_'+i+'_decimals',row.decimals,'number',null,'min="0" max="3"')+
-              '<div class="ss-actions"><button type="button" data-inv-row-up="'+i+'">↑</button><button type="button" data-inv-row-down="'+i+'">↓</button><button type="button" data-inv-row-delete="'+i+'">Usuń</button></div></details>';
-          });
-          markup+='<button type="button" data-inv-row-add="true">+ Dodaj parametr</button>'+
-            '<p class="ss-note">Brak odczytu: —. Mały ekran pokazuje do trzech wejść PV. Wykres jest ozdobny.</p>';
         }
         if(isStorage){
           const c=HASSStudioEnergyStorage.normalize(obj);
