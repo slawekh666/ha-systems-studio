@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.47-dev';
+const VERSION = '0.4.48-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -3034,14 +3034,44 @@ const HASSStudioInverter=(()=>{
  // import; the runtime converter still receives its existing internal shape.
  const percent=x=>x!==null&&x!==undefined&&x!==''&&
    Number.isFinite(Number(x))&&Number(x)>0&&Number(x)<=100?Number(x):null;
+ // Read-only compatibility boundary: historical values are interpreted when
+ // normalizing, but all saved layouts use canonical kind/conversion and flags.
+ // Keep legacy.mode and energy_test_configured until power-source semantics
+ // are reviewed independently of configuration migration.
+ const legacy=Object.freeze({
+   kind:raw=>raw.hybrid?.enabled===true&&raw.hybrid.converter?.enabled===true?
+     'hybrid':'grid_tied',
+   conversion:raw=>{
+     const old=raw.hybrid?.converter;
+     return {pv_observation_enabled:raw.hybrid?.enabled===true,
+       pv_absent:old?.pv_mode==='none',
+       dc_ac_efficiency_percent:percent(old?.efficiency_percent),
+       dc_dc_efficiency_percent:percent(old?.battery_efficiency_percent)};
+   },
+   manualEnabled:(raw,node)=>({
+     ac_power:raw.manual_enabled?.ac_power===true||
+       raw.manual_enabled?.ac_power==null&&node?.energy_test_configured===true,
+     ...Object.fromEntries(['temperature','status','alarm'].map(key=>[key,
+       typeof raw.manual_enabled?.[key]==='boolean'?raw.manual_enabled[key]:
+         Object.prototype.hasOwnProperty.call(raw.manual||{},key)
+     ]))
+   }),
+   pvEnabled:original=>Object.fromEntries(['voltage','current','power'].map(key=>[key,
+     typeof original.manual_enabled?.[key]==='boolean'?original.manual_enabled[key]:
+       Object.prototype.hasOwnProperty.call(original.manual||{},key)&&
+       original.manual[key]!==null&&original.manual[key]!==''&&
+       Number.isFinite(Number(original.manual[key]))
+   ]))
+ });
  const conversion=node=>{
-   const raw=node?.inverter||node||{},old=raw.hybrid?.converter,
+   const raw=node?.inverter||node||{},
      c=raw.conversion&&typeof raw.conversion==='object'?raw.conversion:null;
-   return {pv_observation_enabled:c?c.pv_observation_enabled===true:
-       raw.hybrid?.enabled===true,
-     pv_absent:c?c.pv_absent===true:old?.pv_mode==='none',
-     dc_ac_efficiency_percent:percent(c?c.dc_ac_efficiency_percent:old?.efficiency_percent),
-     dc_dc_efficiency_percent:percent(c?c.dc_dc_efficiency_percent:old?.battery_efficiency_percent)};
+   return c?{
+     pv_observation_enabled:c.pv_observation_enabled===true,
+     pv_absent:c.pv_absent===true,
+     dc_ac_efficiency_percent:percent(c.dc_ac_efficiency_percent),
+     dc_dc_efficiency_percent:percent(c.dc_dc_efficiency_percent)
+   }:legacy.conversion(raw);
  };
  const runtimeHybrid=(raw,node)=>{
    if(raw.kind==='grid_tied'&&raw.conversion?.pv_observation_enabled===true)
@@ -3076,16 +3106,7 @@ const HASSStudioInverter=(()=>{
     panel_title:String(raw.panel_title??'Parametry falownika').slice(0,46),
     panel_rows:panelRows(raw,node),
     entities:parameters.entities(parameters.core,raw.entities),
-    manual_enabled:{
-      ac_power:raw.manual_enabled?.ac_power===true||
-        raw.manual_enabled?.ac_power==null&&node?.energy_test_configured===true,
-      ...Object.fromEntries(['temperature','status','alarm'].map(key=>[key,
-        typeof raw.manual_enabled?.[key]==='boolean'?raw.manual_enabled[key]:
-          // Preserve the behavior of older stored configurations where
-          // explicitly persisted manual fields had no activation flag.
-          Object.prototype.hasOwnProperty.call(raw.manual||{},key)
-      ]))
-    },
+    manual_enabled:legacy.manualEnabled(raw,node),
     ac_input_unit:['auto','W','kW','MW'].includes(raw.ac_input_unit)?raw.ac_input_unit:'auto',
     manual:{ac_power:parameters.manualValue(parameters.core.ac_power,raw.manual?.ac_power,null),
        temperature:parameters.manualValue(parameters.core.temperature,raw.manual?.temperature),
@@ -3095,11 +3116,7 @@ const HASSStudioInverter=(()=>{
       const original=raw.inputs?.[i]||{},d=defaultInput(i);
       // Legacy saved numbers without flags remain active; new defaults are not.
       const keys=['voltage','current','power'];
-      const manualEnabled=Object.fromEntries(keys.map(k=>[k,
-        typeof original.manual_enabled?.[k]==='boolean'?original.manual_enabled[k]:
-          Object.prototype.hasOwnProperty.call(original.manual||{},k)&&
-          original.manual[k]!==null&&original.manual[k]!==''&&
-          Number.isFinite(Number(original.manual[k]))]));
+      const manualEnabled=legacy.pvEnabled(original);
       return {name:String(original.name??d.name).slice(0,12),
         visible:original.visible!==false,required:original.required===true,
         entities:parameters.entities(parameters.pv,original.entities),
@@ -3113,8 +3130,7 @@ const HASSStudioInverter=(()=>{
  const kind=node=>{
    const raw=node?.inverter||node||{};
    if(raw.kind==='grid_tied'||raw.kind==='hybrid')return raw.kind;
-   return raw.hybrid?.enabled===true&&raw.hybrid.converter?.enabled===true?
-     'hybrid':'grid_tied';
+   return legacy.kind(raw);
  };
  // Persist only the canonical fields; topology and old port IDs are
  // preserved separately by the layout normalizer.
