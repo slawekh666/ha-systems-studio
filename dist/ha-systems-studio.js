@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.43-dev';
+const VERSION = '0.4.45-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -2769,7 +2769,7 @@ const HASSStudioEnergyStorage=(()=>{
 if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioEnergyStorage;
 
 
-/* Stage 05/08: immutable device parameter declarations (inverter family first).
+/* Stage 05/08/09A: immutable inverter field declarations and normalization.
  * These describe configuration, labels and defaults; source resolution stays
  * in HASSStudioHA and HASSStudioInverter until a later reviewed stage.
  */
@@ -2785,12 +2785,12 @@ const HASSStudioDeviceParameters=(()=>{
   ['status',{label:'Stan pracy falownika',unit:'',kind:'enum',role:'status',
     entityPath:'entities.status',manualPath:'manual.status',testDefault:'auto',
     options:Object.freeze(['auto','generating','standby','off','fault']),
-    formOptions:Object.freeze([['auto','Automatycznie z mocy AC'],
+    formOptions:Object.freeze([['','Nie ustawiono'],['auto','Automatycznie z mocy AC'],
       ['generating','Produkcja'],['standby','Czuwanie'],['off','Wyłączony'],
       ['fault','Awaria']].map(row=>Object.freeze(row)))}],
   ['alarm',{label:'Alarm falownika',unit:'',kind:'boolean',role:'alarm',
     entityPath:'entities.alarm',manualPath:'manual.alarm',testDefault:false,
-    formOptions:Object.freeze([['false','Brak alarmu'],['true','Alarm']]
+    formOptions:Object.freeze([['','Nie ustawiono'],['false','Brak alarmu'],['true','Alarm']]
       .map(row=>Object.freeze(row)))}]
  ]);
  const pv=fields([
@@ -2804,11 +2804,24 @@ const HASSStudioDeviceParameters=(()=>{
  const entity=x=>typeof x==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(x)?x:'';
  const entities=(definitions,raw)=>Object.fromEntries(Object.keys(definitions).map(k=>[k,entity(raw?.[k])]));
  const manualDefaults=definitions=>Object.fromEntries(Object.keys(definitions).map(k=>[k,definitions[k].testDefault]));
+ // Canonical manual value validation; keep legacy defaults and stored keys.
+ // Never infer whether TEST is active from a placeholder or normalized value.
+ const manualValue=(definition,value,fallback=definition.testDefault)=>{
+   if(definition.kind==='number'){
+     if(value===null||value===undefined||value===''||!Number.isFinite(Number(value)))
+       return fallback;
+     return Math.max(definition.min,Math.min(definition.max,Number(value)));
+   }
+   if(definition.kind==='enum')
+     return definition.options.includes(value)?value:fallback;
+   if(definition.kind==='boolean')return value===true;
+   throw new Error('Unsupported inverter parameter kind: '+definition.kind);
+ };
  // Default examples are placeholders, not active TEST readings.
  const inputDefaults=i=>({name:'PV'+(i+1),visible:i<3,required:false,
    entities:entities(pv),manual:manualDefaults(pv),
    manual_enabled:{voltage:false,current:false,power:false}});
- const inverter=Object.freeze({core,pv,entity,entities,manualDefaults,inputDefaults,
+ const inverter=Object.freeze({core,pv,entity,entities,manualDefaults,manualValue,inputDefaults,
   coreKeys:Object.freeze(Object.keys(core)),pvKeys:Object.freeze(Object.keys(pv))});
  return Object.freeze({inverter});
 })();
@@ -2921,8 +2934,11 @@ const HASSStudioInverterReadings=(()=>{
  const resolve=(node,h,c)=>{
    const manual=node?.energy_mode==='test'||(node?.energy_mode==null&&c.mode==='manual');
    const ac=power(node,h,c);
-   const temperature=choose(node,measured(h,c.entities.temperature,['°C','C',''],-40,150),c.manual.temperature);
-   const alarm=choose(node,alarmState(h,c.entities.alarm),c.manual.alarm?'alarm':'ok');
+   const temperature=choose(node,
+     measured(h,c.entities.temperature,['°C','C',''],-40,150),
+     c.manual_enabled?.temperature===true?c.manual.temperature:null);
+   const alarm=choose(node,alarmState(h,c.entities.alarm),
+     c.manual_enabled?.alarm===true?(c.manual.alarm?'alarm':'ok'):null);
    const status=alarmState(h,c.entities.status);
    const inputs=c.inputs.map(q=>pvInput(node,h,c,q));
    return {power:ac.kw,temperature:temperature.value,alarm:alarm.value,
@@ -3025,7 +3041,8 @@ const HASSStudioInverter=(()=>{
  const defaults=()=>({kind:'grid_tied',mode:'live',count:2,display_scale:1,show_extra:false,extra_position:'right',extra_scale:1,
    panel_title:'Parametry falownika',panel_rows:[],
    rated_kw:10,production_threshold_w:10,positive_power:true,export_allowed:true,entities:parameters.entities(parameters.core),
-   manual:{...parameters.manualDefaults(parameters.core),ac_power:null},inputs:[]});
+   manual:{...parameters.manualDefaults(parameters.core),ac_power:null},
+   manual_enabled:{ac_power:false,temperature:false,status:false,alarm:false},inputs:[]});
  const normalize=node=>{
    const raw=node?.inverter||node||{},d=defaults(),count=Math.round(clamp(raw.count,1,MAX_INPUTS,2)),
       {hybrid:oldHybrid,...savedRaw}=raw,hybrid=runtimeHybrid(raw,node);
@@ -3039,12 +3056,21 @@ const HASSStudioInverter=(()=>{
     panel_title:String(raw.panel_title??'Parametry falownika').slice(0,46),
     panel_rows:panelRows(raw,node,count),
     entities:parameters.entities(parameters.core,raw.entities),
-    manual_enabled:{ac_power:raw.manual_enabled?.ac_power===true||raw.manual_enabled?.ac_power==null&&node?.energy_test_configured===true},
+    manual_enabled:{
+      ac_power:raw.manual_enabled?.ac_power===true||
+        raw.manual_enabled?.ac_power==null&&node?.energy_test_configured===true,
+      ...Object.fromEntries(['temperature','status','alarm'].map(key=>[key,
+        typeof raw.manual_enabled?.[key]==='boolean'?raw.manual_enabled[key]:
+          // Preserve the behavior of older stored configurations where
+          // explicitly persisted manual fields had no activation flag.
+          Object.prototype.hasOwnProperty.call(raw.manual||{},key)
+      ]))
+    },
     ac_input_unit:['auto','W','kW','MW'].includes(raw.ac_input_unit)?raw.ac_input_unit:'auto',
-    manual:{ac_power:raw.manual?.ac_power==null||raw.manual?.ac_power===''?null:clamp(raw.manual.ac_power,-500,500,null),
-       temperature:clamp(raw.manual?.temperature,-40,150,32),
-       status:['auto','generating','standby','off','fault'].includes(raw.manual?.status)?raw.manual.status:'auto',
-       alarm:raw.manual?.alarm===true},
+    manual:{ac_power:parameters.manualValue(parameters.core.ac_power,raw.manual?.ac_power,null),
+       temperature:parameters.manualValue(parameters.core.temperature,raw.manual?.temperature),
+       status:parameters.manualValue(parameters.core.status,raw.manual?.status),
+       alarm:parameters.manualValue(parameters.core.alarm,raw.manual?.alarm)},
     inputs:Array.from({length:count},(_,i)=>{
       const original=raw.inputs?.[i]||{},d=defaultInput(i);
       // Legacy saved numbers without flags remain active; new defaults are not.
@@ -3157,11 +3183,12 @@ const HASSStudioInverter=(()=>{
  const data=(node,h)=>{
    const c=normalize(node),resolved=HASSStudioInverterReadings.resolve(node,h,c);
    const {power,temperature,alarm,inputs,manual}=resolved;
-   const fault=alarm==='alarm'||(manual&&c.manual.status==='fault')||
+   const fault=alarm==='alarm'||(manual&&c.manual_enabled?.status===true&&c.manual.status==='fault')||
      (!manual&&resolved.statusAlarm==='alarm');
    const generating=power===null?null:((c.positive_power?power:-power)*1000>c.production_threshold_w);
    return {c,power,temperature,fault,generating,inputs,manual,
-      state:fault?'alarm':manual&&c.manual.status!=='auto'?c.manual.status:generating===null?'unknown':generating?'generating':'standby'};
+      state:fault?'alarm':manual&&c.manual_enabled?.status===true&&c.manual.status!=='auto'?
+        c.manual.status:generating===null?'unknown':generating?'generating':'standby'};
  };
  const esc=x=>String(x).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));
  const fmt=(v,d=0)=>v===null?'—':Number(v).toFixed(d);
@@ -6233,11 +6260,12 @@ const HASSStudioEditorInspector = (() => {
           field('Jednostka odczytu AC z HA','inv_ac_input_unit',c.ac_input_unit||'auto','text',
             [['auto','Automatycznie z HA'],['W','W'],['kW','kW'],['MW','MW']])+
           metric(inverterFields.core.temperature,'inv_entity_temperature',
-            c.entities.temperature,'inv_manual_temperature',c.manual.temperature)+
+            c.entities.temperature,'inv_manual_temperature',c.manual_enabled?.temperature?
+              c.manual.temperature:'')+
           metric(inverterFields.core.status,'inv_entity_status',c.entities.status,
-            'inv_manual_status',c.manual.status)+
+            'inv_manual_status',c.manual_enabled?.status?c.manual.status:'')+
           metric(inverterFields.core.alarm,'inv_entity_alarm',c.entities.alarm,
-            'inv_manual_alarm',c.manual.alarm?'true':'false');
+            'inv_manual_alarm',c.manual_enabled?.alarm?(c.manual.alarm?'true':'false'):'');
         readings+='<h4>Wejścia fotowoltaiczne / MPPT</h4>';
         if(selectedHybrid){
           const index=HASSStudioEnergyTopology.index(model),
@@ -7702,9 +7730,13 @@ const HASSStudioEditorLibrary=(()=>{
             c.manual[f]=val.trim()===''?null:clamp(val,-500,500,0);
             obj.energy_test_configured=c.manual_enabled.ac_power;
           }
-          if(f==='temperature')c.manual[f]=clamp(val,-40,150,25);
-           if(f==='status')c.manual[f]=['auto','generating','standby','off','fault'].includes(val)?val:'auto';
-           if(f==='alarm')c.manual[f]=val==='true';
+          if(f==='temperature'||f==='status'||f==='alarm'){
+            c.manual_enabled=c.manual_enabled||{};
+            c.manual_enabled[f]=val.trim()!=='';
+            const definition=HASSStudioDeviceParameters.inverter.core[f];
+            c.manual[f]=HASSStudioDeviceParameters.inverter.manualValue(
+              definition,f==='alarm'?val==='true':val);
+          }
         }else if(k==='ac_input_unit'){
           c.ac_input_unit=['auto','W','kW','MW'].includes(val)?val:'auto';
         }else if(k==='kind'){
