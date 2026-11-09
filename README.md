@@ -38,6 +38,23 @@ For development builds, choose the repository's default `main` branch in HACS an
 
 Installed development build: **0.4.43-dev**.
 
+## Historia aktualizacji
+
+<!-- HASS-STUDIO-CHANGELOG-BEGIN -->
+<!-- HASS-STUDIO-SOURCE: 6425ddb1c5a13a8c0b6b16efd60a5d138ac84387 -->
+
+### 0.4.43-dev — od 0.4.43-dev
+
+**Nowe funkcje**
+- generate traceable changelog from last GitHub publication
+
+**Dokumentacja, testy i narzędzia**
+- verify history-based changelog and safe publisher import
+
+**Do przetestowania ręcznie w Home Assistant**
+- Brak zmian w kodzie karty; nie jest wymagany nowy odbiór funkcjonalny HA.
+<!-- HASS-STUDIO-CHANGELOG-END -->
+
 ## Package layout
 
 - `dist/ha-systems-studio.js` — complete browser-ready card, including bundled SVG illustrations
