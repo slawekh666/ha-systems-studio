@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.55-dev';
+const VERSION = '0.4.56-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -8451,56 +8451,148 @@ const HASSStudioStateWatch=(()=>{
   };
 })();
 
-/* Stage 11: opt-in independent test card. No inherited Warmwasser runtime,
- * editor, SVG renderer or Home Assistant write operations.
- * Stage 12 will replace this diagnostics-only view with independent rendering.
+/* Stage 12: standalone adapter for the existing Systems Studio canvas.
+ * Owns only presentation and viewport. Device SVG/AC-DC logic stays in the
+ * existing modules; no Warmwasser class or editor is referenced here.
+ */
+const HASSStudioTestViewer = (() => {
+  const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[char]);
+  const pickLang = (config, hass) => {
+    if (config?.studio_language === 'pl' || config?.studio_language === 'en')
+      return config.studio_language;
+    return String(hass?.language || hass?.locale?.language || '').toLowerCase()
+      .startsWith('pl') ? 'pl' : 'en';
+  };
+  const words = {
+    pl: { editor: 'Projektant instalacji', pump: 'Pompa', valve: 'Zawór' },
+    en: { editor: 'System diagram designer', pump: 'Pump', valve: 'Valve' }
+  };
+  const canvas = HASSStudioCanvas.create({
+    W: 1200, H: 720,
+    colors: { hot:'#ed835a', cold:'#57a6db', solar:'#e5b35e', return:'#778cbe' },
+    normalized: HASSStudioLayout.normalized, pickLang, words,
+    clamp: (n, lo, hi, fallback) => Number.isFinite(Number(n))
+      ? Math.max(lo, Math.min(hi, Number(n))) : fallback,
+    validEntity: value => typeof value === 'string' && /^[a-z_]+\.[a-z0-9_]+$/i.test(value),
+    esc: escape
+  });
+  const render = (config, hass, graphicsState) => {
+    const { width, height } = HASSStudioViewport.dimensions(config);
+    const language = pickLang(config, hass);
+    const schemeName = String(config?.studio_layout?.name || '').trim().slice(0,64);
+    const title = escape('Home Assistant System Studio') +
+      (schemeName ? ' - ' + escape(schemeName) : '');
+    const css = '<style>' +
+      '.ss-card-viewport{position:relative;display:flex;flex-direction:column;width:100%;aspect-ratio:'+
+        width+'/'+height+';min-height:0;overflow:hidden;background:var(--secondary-background-color,#17222d);touch-action:pan-y;user-select:none}' +
+      '.ss-card-viewport svg{display:block;flex:1 1 auto;min-height:0;width:100%;height:100%;max-width:none;max-height:none;touch-action:none}' +
+      '.ss-card-viewport:fullscreen{width:100vw;height:100vh;aspect-ratio:auto;background:#17222d;touch-action:none}' +
+      '.ss-card-viewport:fullscreen svg{touch-action:none}' +
+      HASSStudioEnergyDiagnostics.styles +
+      '.ss-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap;padding:8px 12px;background:var(--card-background-color,#1c1c1c)}' +
+      '.ss-card-header .ss-card-title{font-size:16px;font-weight:600;color:var(--primary-text-color);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.ss-card-header .ss-view-tools{display:flex;align-items:center;gap:4px;flex-shrink:0}' +
+      '.ss-view-tools button{appearance:none;background:var(--secondary-background-color,#293949);border:1px solid var(--divider-color,#53677c);border-radius:5px;color:var(--primary-text-color,#fff);min-width:28px;min-height:28px;padding:3px;cursor:pointer;font:600 14px sans-serif}' +
+      '.ss-view-tools button:focus-visible{outline:2px solid #52bfff}' +
+      '.ss-card-viewport:fullscreen{display:flex;flex-direction:column}' +
+      '.ss-card-viewport:fullscreen .ss-card-header{flex:0 0 auto}' +
+      '.ss-card-viewport:fullscreen svg{flex:1 1 auto;min-height:0}' +
+      '@media(max-width:600px){.ss-card-header{gap:4px;padding:6px}.ss-card-header .ss-card-title{font-size:12px}.ss-view-tools{gap:2px}.ss-view-tools button{min-width:27px;min-height:27px}}' +
+      '</style>';
+    return css+'<div class="ss-card-viewport" id="ss-card-viewport" tabindex="0" aria-label="'+
+      escape(words[language].editor)+'">'+
+      '<div class="ss-card-header"><div class="ss-card-title">'+title+
+      '</div><div class="ss-view-tools">'+
+      '<button type="button" data-view-action="out" title="Zoom −" aria-label="Zoom out">−</button>'+
+      '<button type="button" data-view-action="in" title="Zoom +" aria-label="Zoom in">+</button>'+
+      '<button type="button" data-view-action="fit" title="Dopasuj cały schemat" aria-label="Fit diagram">⤢</button>'+
+      '<button type="button" data-view-action="full" title="Pełny ekran" aria-label="Fullscreen">⛶</button></div></div>'+
+      canvas.canvasSvg(config,hass,false,null,graphicsState)+
+      HASSStudioEnergyDiagnostics.render(config,hass,language,'viewer')+'</div>';
+  };
+  const updateCamera = card => {
+    const view = card._box?.querySelector('#ss-card-viewport');
+    const svg = view?.querySelector('svg');
+    if (!svg) return;
+    const { width, height } = HASSStudioViewport.dimensions(card._cfg);
+    if (!card._camera || card._shape !== width+'x'+height) {
+      card._camera = HASSStudioViewport.fresh(width,height);
+      card._shape = width+'x'+height;
+    }
+    const rect = svg.getBoundingClientRect();
+    const box = HASSStudioViewport.box(card._camera,
+      Math.max(1,rect.width),Math.max(1,rect.height),width,height);
+    svg.setAttribute('viewBox',[box.x,box.y,box.width,box.height].join(' '));
+    svg.setAttribute('preserveAspectRatio','none');
+    const fullscreen = typeof document !== 'undefined' && document.fullscreenElement === view;
+    view.style.touchAction = fullscreen ? 'none' : 'pan-y';
+    svg.style.touchAction = 'none';
+    if (card._resizeTarget !== view) {
+      card._resizeObserver?.disconnect();
+      card._resizeObserver = null;
+      if (typeof ResizeObserver !== 'undefined') {
+        card._resizeObserver = new ResizeObserver(() => updateCamera(card));
+        card._resizeObserver.observe(view);
+      }
+      card._resizeTarget = view;
+    }
+  };
+  return Object.freeze({ render, updateCamera, pickLang });
+})();
+
+
+/* Stage 12: opt-in independent SVG/HA card.
+ * No inheritance from Warmwasser, no editor, no service calls and no YAML writes.
+ * The existing canvas, energy balance, SVG assets and gesture implementations
+ * are reused without rewriting their proven algorithms.
  */
 (() => {
   const tag = 'ha-systems-studio-test';
   const prepareConfig = config => {
     if (!config || typeof config !== 'object' || Array.isArray(config))
       throw new Error('Systems Studio test card: config must be an object');
-    // Single read-only boundary for the future versioned configuration adapter.
-    // Do not rewrite user YAML or modify any nested source arrays.
     const source = { ...config };
+    // A read-only compatibility boundary. Nothing is persisted until the
+    // separate editor/migration phase.
     const layout = HASSStudioLayout.normalized(source);
     if (!layout || !Array.isArray(layout.nodes) || !Array.isArray(layout.connections))
       throw new Error('Systems Studio test card: invalid normalized layout');
-    return {
-      source,
-      view: Object.freeze({
-        name: typeof layout.name === 'string' ? layout.name.slice(0, 100) : '',
-        nodes: layout.nodes.length,
-        connections: layout.connections.length,
-        custom: source.layout_mode === 'custom'
-      })
-    };
+    return { source, layout };
   };
-
   class HASSStudioTestCard extends HTMLElement {
     static getStubConfig() {
       return {
-        type: 'custom:ha-systems-studio-test',
-        layout_mode: 'custom',
+        type: 'custom:ha-systems-studio-test', layout_mode: 'custom',
         studio_readonly: true,
-        studio_layout: { width: 1200, height: 720, nodes: [], connections: [] }
+        studio_layout: { width:1200, height:720, nodes:[], connections:[] }
       };
     }
     constructor() {
       super();
-      this._config = null;
-      this._view = null;
+      this._cfg = null;
+      this._ents = [];
       this._hass = null;
-      this._active = false;
-      this._elements = null;
+      this._connected = false;
+      this._dirty = true;
+      this._box = null;
+      this._graphicsState = null;
+      this._viewerDispose = null;
+      this._resizeObserver = null;
+      this._resizeTarget = null;
+      this._rootClick = null;
+      this._languageKey = null;
     }
-    getCardSize() { return 2; }
-    getGridOptions() { return { columns: 6, min_columns: 4 }; }
-
+    getCardSize() { return 10; }
+    getGridOptions() { return { columns: 'full', min_columns: 6 }; }
     setConfig(config) {
       const prepared = prepareConfig(config);
-      this._config = prepared.source;
-      this._view = prepared.view;
+      this._cfg = prepared.source;
+      this._ents = [];
+      this._studioStateWatch = null;
+      this._graphicsState?.clear();
+      this._dirty = true;
       this._update();
     }
     set hass(hass) {
@@ -8508,50 +8600,88 @@ const HASSStudioStateWatch=(()=>{
       this._update();
     }
     connectedCallback() {
-      this._active = true;
+      this._connected = true;
+      this._dirty = true;
       this._update();
     }
     disconnectedCallback() {
-      this._active = false;
-      // The diagnostic view installs no listeners, timers or observers.
-      // All state and DOM belong to the component instance.
+      this._connected = false;
+      this._teardown();
     }
-    _ensureView() {
-      if (this._elements) return;
-      const root = this.shadowRoot || this.attachShadow({ mode: 'open' });
-      // Fixed markup only. User-controlled values are assigned via textContent.
-      root.innerHTML =
-        '<style>:host{display:block}ha-card{padding:16px;color:var(--primary-text-color)}' +
-        '.ss-test-heading{font-weight:600;font-size:16px;margin-bottom:8px}' +
-        '.ss-test-note{color:var(--secondary-text-color);font-size:13px;line-height:1.5}' +
-        '.ss-test-data{margin-top:12px;font-size:14px;line-height:1.7}' +
-        '</style><ha-card><div class="ss-test-heading">Systems Studio — karta testowa (etap 11)</div>' +
-        '<div class="ss-test-note">Niezależny komponent. Renderowanie schematu: etap 12.</div>' +
-        '<div class="ss-test-data"><div id="ss-test-name"></div>' +
-        '<div id="ss-test-counts"></div><div id="ss-test-mode"></div>' +
-        '<div id="ss-test-ha"></div></div></ha-card>';
-      this._elements = {
-        name: root.getElementById('ss-test-name'),
-        counts: root.getElementById('ss-test-counts'),
-        mode: root.getElementById('ss-test-mode'),
-        ha: root.getElementById('ss-test-ha')
+    _teardown() {
+      this._viewerDispose?.();
+      this._viewerDispose = null;
+      this._resizeObserver?.disconnect();
+      this._resizeObserver = null;
+      this._resizeTarget = null;
+      if (this._rootClick && this.shadowRoot)
+        this.shadowRoot.removeEventListener('click',this._rootClick);
+      this._rootClick = null;
+      this._graphicsState?.clear();
+      this._graphicsState = null;
+    }
+    _ensureRoot() {
+      if (this._box) return;
+      const root = this.shadowRoot || this.attachShadow({ mode:'open' });
+      root.innerHTML = '<style>:host{display:block}ha-card{overflow:hidden}</style>'+
+        '<ha-card><div id="c"></div></ha-card>';
+      this._box = root.getElementById('c');
+      this._rootClick = event => {
+        // The test card stays read-only, even if an imported layout contains
+        // an actuator data-act attribute.
+        const el = event.composedPath().find(node => node?.dataset?.more);
+        if (!el || !this._hass) return;
+        event.stopPropagation();
+        const more = new Event('hass-more-info',{ bubbles:true, composed:true });
+        more.detail = { entityId:el.dataset.more };
+        this.dispatchEvent(more);
       };
+      root.addEventListener('click',this._rootClick);
     }
     _update() {
-      if (!this._active || !this._view) return;
-      this._ensureView();
-      const view = this._view, el = this._elements;
-      el.name.textContent = 'Schemat: ' + (view.name || 'bez nazwy');
-      el.counts.textContent = 'Urządzenia: ' + view.nodes + ' | Połączenia: ' + view.connections;
-      el.mode.textContent = view.custom
-        ? 'Tryb: własny układ (podgląd diagnostyczny)'
-        : 'Tryb automatyczny: użyj dotychczasowej karty';
-      el.ha.textContent = this._hass && this._hass.states
-        ? 'Home Assistant: dane udostępnione'
-        : 'Home Assistant: oczekiwanie na dane';
+      if (!this._connected || !this._cfg) return;
+      const hasHass = !!this._hass?.states;
+      const language = HASSStudioTestViewer.pickLang(this._cfg,this._hass);
+      const changed = HASSStudioStateWatch.changed(this);
+      if (!this._dirty && !changed && this._languageKey === language) return;
+      this._dirty = false;
+      this._languageKey = language;
+      this._ensureRoot();
+      // Replacing the SVG invalidates its old observer target.
+      this._resizeObserver?.disconnect();
+      this._resizeObserver = null;
+      this._resizeTarget = null;
+      if (!hasHass)
+        this._box.textContent = 'Systems Studio: oczekiwanie na dane Home Assistant';
+      else if (this._cfg.layout_mode !== 'custom')
+        this._box.textContent = 'Ten podgląd obsługuje wyłącznie własny układ Systems Studio.';
+      else {
+        if (!this._graphicsState)
+          this._graphicsState = HASSStudioGraphics.createState();
+        this._box.innerHTML = HASSStudioTestViewer.render(
+          this._cfg,this._hass,this._graphicsState);
+      }
+      if (!hasHass || this._cfg.layout_mode !== 'custom') {
+        this._viewerDispose?.();
+        this._viewerDispose = null;
+        return;
+      }
+      if (!this._viewerDispose) {
+        const root = this.shadowRoot;
+        this._viewerDispose = HASSStudioViewerGestures.install({
+          root, host:this, viewport:HASSStudioViewport,
+          getView:() => this._box?.querySelector('#ss-card-viewport'),
+          getDimensions:() => HASSStudioViewport.dimensions(this._cfg),
+          getCamera:() => this._camera,
+          setCamera: camera => {
+            this._camera = camera;
+            HASSStudioTestViewer.updateCamera(this);
+          }
+        });
+      }
+      HASSStudioTestViewer.updateCamera(this);
     }
   }
-
   if (!customElements.get(tag))
-    customElements.define(tag, HASSStudioTestCard);
+    customElements.define(tag,HASSStudioTestCard);
 })();
