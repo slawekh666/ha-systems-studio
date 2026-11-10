@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.54-dev';
+const VERSION = '0.4.55-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -8449,4 +8449,109 @@ const HASSStudioStateWatch=(()=>{
     });
     renderProps();
   };
+})();
+
+/* Stage 11: opt-in independent test card. No inherited Warmwasser runtime,
+ * editor, SVG renderer or Home Assistant write operations.
+ * Stage 12 will replace this diagnostics-only view with independent rendering.
+ */
+(() => {
+  const tag = 'ha-systems-studio-test';
+  const prepareConfig = config => {
+    if (!config || typeof config !== 'object' || Array.isArray(config))
+      throw new Error('Systems Studio test card: config must be an object');
+    // Single read-only boundary for the future versioned configuration adapter.
+    // Do not rewrite user YAML or modify any nested source arrays.
+    const source = { ...config };
+    const layout = HASSStudioLayout.normalized(source);
+    if (!layout || !Array.isArray(layout.nodes) || !Array.isArray(layout.connections))
+      throw new Error('Systems Studio test card: invalid normalized layout');
+    return {
+      source,
+      view: Object.freeze({
+        name: typeof layout.name === 'string' ? layout.name.slice(0, 100) : '',
+        nodes: layout.nodes.length,
+        connections: layout.connections.length,
+        custom: source.layout_mode === 'custom'
+      })
+    };
+  };
+
+  class HASSStudioTestCard extends HTMLElement {
+    static getStubConfig() {
+      return {
+        type: 'custom:ha-systems-studio-test',
+        layout_mode: 'custom',
+        studio_readonly: true,
+        studio_layout: { width: 1200, height: 720, nodes: [], connections: [] }
+      };
+    }
+    constructor() {
+      super();
+      this._config = null;
+      this._view = null;
+      this._hass = null;
+      this._active = false;
+      this._elements = null;
+    }
+    getCardSize() { return 2; }
+    getGridOptions() { return { columns: 6, min_columns: 4 }; }
+
+    setConfig(config) {
+      const prepared = prepareConfig(config);
+      this._config = prepared.source;
+      this._view = prepared.view;
+      this._update();
+    }
+    set hass(hass) {
+      this._hass = hass;
+      this._update();
+    }
+    connectedCallback() {
+      this._active = true;
+      this._update();
+    }
+    disconnectedCallback() {
+      this._active = false;
+      // The diagnostic view installs no listeners, timers or observers.
+      // All state and DOM belong to the component instance.
+    }
+    _ensureView() {
+      if (this._elements) return;
+      const root = this.shadowRoot || this.attachShadow({ mode: 'open' });
+      // Fixed markup only. User-controlled values are assigned via textContent.
+      root.innerHTML =
+        '<style>:host{display:block}ha-card{padding:16px;color:var(--primary-text-color)}' +
+        '.ss-test-heading{font-weight:600;font-size:16px;margin-bottom:8px}' +
+        '.ss-test-note{color:var(--secondary-text-color);font-size:13px;line-height:1.5}' +
+        '.ss-test-data{margin-top:12px;font-size:14px;line-height:1.7}' +
+        '</style><ha-card><div class="ss-test-heading">Systems Studio — karta testowa (etap 11)</div>' +
+        '<div class="ss-test-note">Niezależny komponent. Renderowanie schematu: etap 12.</div>' +
+        '<div class="ss-test-data"><div id="ss-test-name"></div>' +
+        '<div id="ss-test-counts"></div><div id="ss-test-mode"></div>' +
+        '<div id="ss-test-ha"></div></div></ha-card>';
+      this._elements = {
+        name: root.getElementById('ss-test-name'),
+        counts: root.getElementById('ss-test-counts'),
+        mode: root.getElementById('ss-test-mode'),
+        ha: root.getElementById('ss-test-ha')
+      };
+    }
+    _update() {
+      if (!this._active || !this._view) return;
+      this._ensureView();
+      const view = this._view, el = this._elements;
+      el.name.textContent = 'Schemat: ' + (view.name || 'bez nazwy');
+      el.counts.textContent = 'Urządzenia: ' + view.nodes + ' | Połączenia: ' + view.connections;
+      el.mode.textContent = view.custom
+        ? 'Tryb: własny układ (podgląd diagnostyczny)'
+        : 'Tryb automatyczny: użyj dotychczasowej karty';
+      el.ha.textContent = this._hass && this._hass.states
+        ? 'Home Assistant: dane udostępnione'
+        : 'Home Assistant: oczekiwanie na dane';
+    }
+  }
+
+  if (!customElements.get(tag))
+    customElements.define(tag, HASSStudioTestCard);
 })();
