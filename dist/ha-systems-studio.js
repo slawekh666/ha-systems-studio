@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.57-dev';
+const VERSION = '0.4.58-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -7167,6 +7167,76 @@ const HASSStudioDesignerBridge=(()=>{
 })();
 
 
+/* Stage 14: explicit, non-destructive migration of custom Systems Studio cards.
+ * No automatic Warmwasser layout conversion or configuration persistence.
+ */
+const HASSStudioEditorMigration=(()=>{
+  const LEGACY_TYPE='custom:ha-systems-studio';
+  const NEW_TYPE='custom:ha-systems-studio-test';
+  const fail=reason=>Object.freeze({ok:false,reason});
+  const own=(obj,key)=>Object.prototype.hasOwnProperty.call(obj,key);
+  const preflight=config=>{
+    if(!config||typeof config!=='object'||Array.isArray(config))
+      return fail('Nieprawidłowa konfiguracja karty.');
+    if(config.type&&config.type!==LEGACY_TYPE)
+      return fail('To nie jest karta starego projektanta Systems Studio.');
+    if(config.layout_mode!=='custom')
+      return fail('Migracja dotyczy wyłącznie własnych układów Systems Studio.');
+    const layout=config.studio_layout;
+    if(!layout||typeof layout!=='object'||Array.isArray(layout)||
+       !Array.isArray(layout.nodes))
+      return fail('Brak prawidłowego studio_layout.nodes. Oryginalny projekt pozostał bez zmian.');
+    let connectionCount=0;
+    if(own(layout,'connections')){
+      if(!Array.isArray(layout.connections))
+        return fail('Nieprawidłowe studio_layout.connections. Nie zmieniono konfiguracji.');
+      connectionCount=layout.connections.length;
+    }else if(own(layout,'pipes')){
+      if(!Array.isArray(layout.pipes))
+        return fail('Nieprawidłowe historyczne studio_layout.pipes.');
+      connectionCount=layout.pipes.length;
+    }else if(own(layout,'edges')){
+      if(!Array.isArray(layout.edges))
+        return fail('Nieprawidłowe historyczne studio_layout.edges.');
+      connectionCount=layout.edges.length;
+    }
+    try{
+      const normalized=HASSStudioLayout.normalized(config);
+      if(!normalized||!Array.isArray(normalized.nodes)||!Array.isArray(normalized.connections))
+        return fail('Nowy silnik nie rozpoznaje struktury schematu.');
+      // Never silently discard unknown nodes, malformed connections or excess items.
+      if(normalized.nodes.length!==layout.nodes.length||
+         normalized.connections.length!==connectionCount)
+        return fail('Część urządzeń lub połączeń nie jest rozpoznawana przez nowy silnik. Migracja przerwana.');
+      return Object.freeze({ok:true,nodes:normalized.nodes.length,
+        connections:normalized.connections.length});
+    }catch(error){
+      return fail('Nie udało się zweryfikować schematu: '+
+        String(error?.message||'błąd danych').slice(0,160));
+    }
+  };
+  const migrate=config=>{
+    const status=preflight(config);
+    if(!status.ok)throw new Error(status.reason);
+    // Preserve all existing properties and the original studio_layout object.
+    // Do not persist a normalized graph during the editor switch.
+    return {...config,type:NEW_TYPE,layout_mode:'custom',studio_editor:'standalone'};
+  };
+  const apply=editor=>{
+    if(!editor||typeof editor.dispatchEvent!=='function')
+      throw new TypeError('Expected a Home Assistant card editor');
+    const next=migrate(editor._config);
+    editor._config=next;
+    // Only HA's native Save commits this config; Cancel discards it.
+    editor.dispatchEvent(new CustomEvent('config-changed',{
+      detail:{config:next},bubbles:true,composed:true
+    }));
+    return next;
+  };
+  return Object.freeze({LEGACY_TYPE,NEW_TYPE,preflight,migrate,apply});
+})();
+
+
 /* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
  * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
  * No external dependencies or service calls in the designer.
@@ -7513,6 +7583,10 @@ const HASSStudioDesignerBridge=(()=>{
       '.ss-entities{max-height:210px;overflow-y:auto;border:1px solid var(--divider-color,#555);border-radius:8px}'+
       '.ss-entity-choice{width:100%;text-align:left;border:0;background:transparent;padding:8px;cursor:pointer;display:block;font-size:12px}'+
       '.ss-entity-choice:hover{background:var(--secondary-background-color)}'+
+      '.ss-migration{margin:0 12px 12px;padding:12px;border:1px solid var(--divider-color,#555);border-radius:8px;color:var(--primary-text-color)}'+
+      '.ss-migration-text{font-size:12px;line-height:1.5;margin-bottom:8px;color:var(--secondary-text-color)}'+
+      '.ss-migration button{font:inherit;cursor:pointer;padding:8px 12px;border-radius:7px;border:1px solid var(--primary-color,#168bce);color:var(--primary-text-color);background:var(--card-background-color,#29323c)}'+
+      '.ss-migration button:disabled{opacity:.6;cursor:default}#ss-migrate-status{font-size:12px;margin-top:8px}'+
       '@media(max-width:900px){.ss-grid{grid-template-columns:110px minmax(230px,1fr) 220px}.ss-library button{font-size:11px;gap:4px}.ss-library button span{font-size:15px}}'+
       '</style>';
     root.innerHTML=style+
@@ -7520,6 +7594,13 @@ const HASSStudioDesignerBridge=(()=>{
         '<label>'+esc(L.mode)+'<select id="ss-mode">'+opts([['automatic',L.auto],['custom',L.custom]],'custom')+'</select></label>')+
       '<label>'+esc(L.language)+'<select id="ss-lang">'+opts(langs,this._config.studio_language||'auto')+'</select></label>'+
       '<button type="button" id="ss-open">'+esc(L.open)+'</button></div>'+
+      (this._studioStandalone?'':('<section class="ss-migration" aria-label="Migracja projektanta">'+
+        '<div class="ss-migration-text">'+(pickLang(this._config,this._hass)==='en'
+          ?'The current editor will be removed in a future release. No removal date is set. Older projects may stop working. Back up your HA card configuration before migrating.'
+          :'Dotychczasowy edytor zostanie usunięty w jednym z przyszłych wydań. Nie ustalono daty. Starsze schematy mogą przestać działać. Przed migracją wykonaj kopię konfiguracji karty HA.')+
+        '</div><button type="button" id="ss-migrate">'+
+          (pickLang(this._config,this._hass)==='en'?'Switch to the new editor':'Przejdź do nowego edytora')+
+        '</button><div id="ss-migrate-status" role="status" aria-live="polite"></div></section>'))+
       '<dialog class="ss-modal ss-fullscreen" id="ss-modal"><div class="ss-bar"><strong>'+esc(L.editor)+' · v'+esc(VERSION)+'</strong>'+
       '<label>'+esc(L.zoom)+' <select id="ss-zoom">'+opts([['0.25','25%'],['0.5','50%'],['0.65','65%'],['0.8','80%'],['1','100%'],['1.25','125%'],['1.5','150%'],['2','200%'],['4','400%']],'1')+'</select></label>'+
        '<div class="ss-viewport-buttons">'+
@@ -7751,6 +7832,19 @@ const HASSStudioDesignerBridge=(()=>{
       }
       commit(model);render();
     };
+    if(!this._studioStandalone)listen(root.getElementById('ss-migrate'),'click',()=>{
+      const status=root.getElementById('ss-migrate-status');
+      try{
+        HASSStudioEditorMigration.apply(this);
+        const button=root.getElementById('ss-migrate');
+        if(button)button.disabled=true;
+        if(status)status.textContent=pickLang(this._config,this._hass)==='en'
+          ?'New editor selected. Save the card in Home Assistant to complete the switch.'
+          :'Wybrano nowy edytor. Zapisz kartę w Home Assistant, aby zakończyć przejście.';
+      }catch(error){
+        if(status)status.textContent=String(error?.message||'Błąd migracji');
+      }
+    });
     listen(root.getElementById('ss-open'),'click',()=>{
       if(typeof modal.showModal==='function')modal.showModal();
       else modal.setAttribute('open','');
@@ -8730,6 +8824,7 @@ const HASSStudioTestViewer = (() => {
       this._config=null;
       this._hass=null;
       this._studioStandalone=true;
+      this._studioAutoOpened=false;
       this._studioAttached=false;
       this._studioEditorDispose=null;
       this._studioEditorObserver=null;
@@ -8770,6 +8865,15 @@ const HASSStudioTestViewer = (() => {
       this._dispose();
       if(!this._studioAttached||!this._config)return;
       HASSStudioDesignerBridge.render(this);
+      // Automatically launch once per editor instance, not on every HA update,
+      // designer rebuild, disconnect/reconnect, or closing the modal.
+      if(!this._studioAutoOpened){
+        const open=this.shadowRoot?.getElementById?.('ss-open');
+        if(open){
+          this._studioAutoOpened=true;
+          open.click();
+        }
+      }
     }
     _renderStudioEditor(){
       return HASSStudioDesignerBridge.render(this);
