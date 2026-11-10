@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.53-dev';
+const VERSION = '0.4.54-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -6268,6 +6268,24 @@ const HASSStudioEditorInspector = (() => {
     const styleOptions=[['warmwasser','Warmwasser (default)'],['studio','Studio (simple)']];
     const sides=[['left',L.left],['right',L.right],['inside',L.inside]];
     const colorsList=[['hot',L.hot],['cold',L.cold],['solar',L.solarFlow],['return',L.returnFlow]];
+    // Only physical ports are user-defined; attachment inference follows wires.
+    const portEditor=node=>{
+      const rows=HASSStudioEnergyTopology.ports(node).map((port,i)=>
+        '<div class="ss-energy-port-edit"><strong>'+esc(port.label||port.id)+
+        ' ('+port.medium.toUpperCase()+')</strong>'+
+        field('Nazwa','energy_port_label',port.label,'text',null,'data-index="'+i+'"')+
+        field('AC / DC','energy_port_medium',port.medium,'text',
+          [['ac','AC'],['dc','DC']],'data-index="'+i+'"')+
+        field('Szyna','energy_port_bus',port.bus,'text',null,'data-index="'+i+'"')+
+        field('Położenie X (%)','energy_port_x',port.x,'number',null,'data-index="'+i+'"')+
+        field('Położenie Y (%)','energy_port_y',port.y,'number',null,'data-index="'+i+'"')+
+        '<button type="button" data-remove-energy-port="'+i+'">Usuń port</button></div>').join('');
+      return '<p class="ss-note">Ręcznie definiuj porty AC/DC. Powiązania i bilans '+
+        'wynikają z końcówek przewodów; ID istniejących portów pozostają bez zmian.</p>'+
+        rows+'<div class="ss-actions">'+
+        '<button type="button" data-add-energy-port="ac">+ Dodaj port AC</button>'+
+        '<button type="button" data-add-energy-port="dc">+ Dodaj port DC</button></div>';
+    };
     const openSections=new Map();
     const sectionAttr=id=>openSections.get(id)===false?'':' open';
     const sectionIcon=(name)=>'<ha-icon icon="'+name+'" aria-hidden="true"></ha-icon>';
@@ -6425,13 +6443,12 @@ const HASSStudioEditorInspector = (() => {
 
         const graph=HASSStudioEnergyTopology.index(model),
           discovered=HASSStudioEnergyTopology.hybridAttachments(graph,obj.id);
-        const ports='<p class="ss-note">Połączenia AC/DC są rozpoznawane z końcówek przewodów. '+
-          'Zachowano istniejące porty i ich identyfikatory.</p>'+
-          '<p class="ss-note">Port AC: '+esc(discovered.ac_ambiguous?'Niejednoznaczny':
-          discovered.ac_port_id||'Brak przewodu')+
-          '; magazyn DC: '+esc(discovered.battery_ambiguous?'Niejednoznaczny':
-          discovered.battery_port_id||'Brak przewodu')+'</p>';
-        markup+=sect('inverter-ports','3. Połączenia automatyczne','mdi:connection',ports,false);
+        const ports='<p class="ss-note">Rozpoznane: AC — '+
+          esc(discovered.ac_ambiguous?'Niejednoznaczny':discovered.ac_port_id||'Brak przewodu')+
+          '; magazyn DC — '+
+          esc(discovered.battery_ambiguous?'Niejednoznaczny':discovered.battery_port_id||'Brak przewodu')+'</p>'+
+          portEditor(obj);
+        markup+=sect('inverter-ports','3. Porty AC/DC i połączenia','mdi:connection',ports,false);
 
         let extra='<p class="ss-note">Tutaj dodajesz wyłącznie własne odczyty HA. PV1/PV2, moc i temperatura są już skonfigurowane w „Dane urządzenia”.</p>';
         c.panel_rows.forEach((row,i)=>{
@@ -6530,19 +6547,11 @@ const HASSStudioEditorInspector = (() => {
          if(electrical)markup+='<details class="ss-section-details" data-section="electrical-advanced"'+
           (openSections.get('electrical-advanced')===true?' open':'')+
           '><summary>'+sectionIcon('mdi:tune')+'<span>Dodatkowe parametry i wygląd</span></summary><section>';
-        if(electrical&&!['inverter','energy_storage'].includes(obj.type)){
-          markup+='<details data-section="energy-ports"'+
+        if(electrical){
+          markup+='<details class="ss-section-details" data-section="energy-ports"'+
             (openSections.get('energy-ports')===true?' open':'')+
-            '><summary>Porty — ustawienia zaawansowane</summary>';
-          markup+=(obj.energy_ports||[]).map((port,i)=>'<div class="ss-energy-port-edit">'+
-            '<strong>'+esc(port.label||port.id)+'</strong>'+
-            field('Nazwa','energy_port_label',port.label,'text',null,'data-index="'+i+'"')+
-            field('AC / DC','energy_port_medium',port.medium,'text',[['ac','AC'],['dc','DC']],'data-index="'+i+'"')+
-            field('Szyna','energy_port_bus',port.bus,'text',null,'data-index="'+i+'"')+
-            field('Położenie X (%)','energy_port_x',port.x,'number',null,'data-index="'+i+'"')+
-            field('Położenie Y (%)','energy_port_y',port.y,'number',null,'data-index="'+i+'"')+
-            '<button type="button" data-remove-energy-port="'+i+'">Usuń port</button></div>').join('');
-          markup+='<button type="button" data-add-energy-port>+ Dodaj port AC/DC</button></details>';
+            '><summary>Porty AC/DC — ustawienia zaawansowane</summary>'+
+            portEditor(obj)+'</details>';
         }
          markup+=field(L.graphic,'variant',obj.variant,'text',variantOptions(obj));
         if(!(obj.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(obj.variant)))markup+=field(L.visual||'Graphic style','visual',obj.visual,'text',styleOptions);
@@ -8246,13 +8255,19 @@ const HASSStudioStateWatch=(()=>{
         commit(model);render();return;
       }
       if(selection.type==='node'&&button.hasAttribute('data-add-energy-port')){
-        if(obj.energy_ports.length>=HASSStudioEnergyTopology.MAX_PORTS)return;
-        let i=1;while(obj.energy_ports.some(p=>p.id==='port'+i))i++;
-        obj.energy_ports.push({id:'port'+i,label:'',medium:'ac',bus:'main',x:50,y:50});
-        commit(model);render();return;
-      }
-      if(selection.type==='node'&&button.hasAttribute('data-remove-energy-port')){
-        const index=Number(button.dataset.removeEnergyPort);
+         obj.energy_ports=Array.isArray(obj.energy_ports)?obj.energy_ports:
+           HASSStudioEnergyTopology.ports(obj);
+         if(obj.energy_ports.length>=HASSStudioEnergyTopology.MAX_PORTS)return;
+         let i=1;while(obj.energy_ports.some(p=>p.id==='port'+i))i++;
+         const medium=button.dataset.addEnergyPort==='dc'?'dc':'ac';
+         obj.energy_ports.push({id:'port'+i,label:'',medium,
+           bus:medium==='dc'?'port'+i:'main',x:50,y:50});
+         commit(model);render();return;
+       }
+       if(selection.type==='node'&&button.hasAttribute('data-remove-energy-port')){
+         obj.energy_ports=Array.isArray(obj.energy_ports)?obj.energy_ports:
+           HASSStudioEnergyTopology.ports(obj);
+         const index=Number(button.dataset.removeEnergyPort);
         if(!Number.isInteger(index)||index<0||index>=obj.energy_ports.length)return;
         const removed=obj.energy_ports.splice(index,1)[0];
         for(const c of model.connections)for(const side of ['start','end']){
