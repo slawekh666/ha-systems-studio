@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.56-dev';
+const VERSION = '0.4.57-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -7146,6 +7146,27 @@ const HASSStudioStateWatch=(()=>{
 })();
 
 
+/* Stage 13: shared Systems Studio designer implementation bridge.
+ * Stores one stateless render function; each editor owns its own listeners,
+ * modal state and configuration. Later stages will extract the implementation
+ * from the legacy adapter without changing this invocation contract.
+ */
+const HASSStudioDesignerBridge=(()=>{
+  let renderImpl=null;
+  const install=fn=>{
+    if(typeof fn!=='function')throw new TypeError('Designer renderer must be callable');
+    if(renderImpl&&renderImpl!==fn)throw new Error('Designer renderer already registered');
+    renderImpl=fn;
+  };
+  const render=editor=>{
+    if(typeof renderImpl!=='function')
+      throw new Error('Systems Studio designer is not available');
+    return renderImpl.call(editor);
+  };
+  return Object.freeze({install,render});
+})();
+
+
 /* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
  * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
  * No external dependencies or service calls in the designer.
@@ -7495,7 +7516,8 @@ const HASSStudioStateWatch=(()=>{
       '@media(max-width:900px){.ss-grid{grid-template-columns:110px minmax(230px,1fr) 220px}.ss-library button{font-size:11px;gap:4px}.ss-library button span{font-size:15px}}'+
       '</style>';
     root.innerHTML=style+
-      '<div class="ss-launch"><label>'+esc(L.mode)+'<select id="ss-mode">'+opts([['automatic',L.auto],['custom',L.custom]],'custom')+'</select></label>'+
+      '<div class="ss-launch">'+(this._studioStandalone?'':
+        '<label>'+esc(L.mode)+'<select id="ss-mode">'+opts([['automatic',L.auto],['custom',L.custom]],'custom')+'</select></label>')+
       '<label>'+esc(L.language)+'<select id="ss-lang">'+opts(langs,this._config.studio_language||'auto')+'</select></label>'+
       '<button type="button" id="ss-open">'+esc(L.open)+'</button></div>'+
       '<dialog class="ss-modal ss-fullscreen" id="ss-modal"><div class="ss-bar"><strong>'+esc(L.editor)+' · v'+esc(VERSION)+'</strong>'+
@@ -7742,7 +7764,7 @@ const HASSStudioStateWatch=(()=>{
     listen(root.getElementById('ss-close'),'click',closeDesigner);
     listen(modal,'cancel',()=>{drag=null;});
 
-    listen(root.getElementById('ss-mode'),'change',event=>{
+    if(!this._studioStandalone)listen(root.getElementById('ss-mode'),'change',event=>{
       this._config={...this._config,layout_mode:event.target.value};this._fire();
     });
     listen(root.getElementById('ss-lang'),'change',event=>{
@@ -8449,6 +8471,10 @@ const HASSStudioStateWatch=(()=>{
     });
     renderProps();
   };
+  // Shared implementation: a separate HTMLElement owns the new editor lifecycle.
+  // The renderer itself moves out of this legacy adapter in later stages.
+  if(typeof HASSStudioDesignerBridge!=='undefined')
+    HASSStudioDesignerBridge.install(WarmwasserSchemaCardEditor.prototype._renderStudioEditor);
 })();
 
 /* Stage 12: standalone adapter for the existing Systems Studio canvas.
@@ -8562,6 +8588,9 @@ const HASSStudioTestViewer = (() => {
     return { source, layout };
   };
   class HASSStudioTestCard extends HTMLElement {
+    static getConfigElement() {
+      return document.createElement('ha-systems-studio-test-editor');
+    }
     static getStubConfig() {
       return {
         type: 'custom:ha-systems-studio-test', layout_mode: 'custom',
@@ -8684,4 +8713,77 @@ const HASSStudioTestViewer = (() => {
   }
   if (!customElements.get(tag))
     customElements.define(tag,HASSStudioTestCard);
+})();
+
+
+/* Stage 13: independent Home Assistant visual editor for the opt-in card.
+ * This class never inherits/patches Warmwasser editor prototypes; it invokes
+ * the existing Systems Studio designer through the shared renderer bridge.
+ * No automatic migration or forced switch of the production card in this stage.
+ */
+(() => {
+  const tag='ha-systems-studio-test-editor';
+  const type='custom:ha-systems-studio-test';
+  class HASSStudioTestEditor extends HTMLElement {
+    constructor(){
+      super();
+      this._config=null;
+      this._hass=null;
+      this._studioStandalone=true;
+      this._studioAttached=false;
+      this._studioEditorDispose=null;
+      this._studioEditorObserver=null;
+    }
+    setConfig(config){
+      if(!config||typeof config!=='object'||Array.isArray(config))
+        throw new Error('Systems Studio editor: configuration must be an object');
+      if(config.layout_mode!=='custom')
+        throw new Error('Systems Studio editor: only custom layouts are supported');
+      // Validate on read, but do not persist normalized data or mutate YAML.
+      const model=HASSStudioLayout.normalized(config);
+      if(!model||!Array.isArray(model.nodes)||!Array.isArray(model.connections))
+        throw new Error('Systems Studio editor: invalid layout');
+      this._config={...config,type,layout_mode:'custom'};
+      // Home Assistant calls setConfig again on each config-changed event.
+      // Rebuilding here would close the dialog and destroy undo/selection state.
+      if(this._studioAttached&&!this._studioEditorDispose)this._build();
+    }
+    set hass(hass){
+      this._hass=hass;
+      // Do not discard a running edit session on ordinary HA state updates.
+      // The designer reads this._hass for its next redraw/interaction.
+    }
+    connectedCallback(){
+      this._studioAttached=true;
+      if(this._config&&!this._studioEditorDispose)this._build();
+    }
+    disconnectedCallback(){
+      this._studioAttached=false;
+      this._dispose();
+    }
+    _dispose(){
+      this._studioEditorDispose?.();
+      this._studioEditorDispose=null;
+      this._studioEditorObserver=null;
+    }
+    _build(){
+      this._dispose();
+      if(!this._studioAttached||!this._config)return;
+      HASSStudioDesignerBridge.render(this);
+    }
+    _renderStudioEditor(){
+      return HASSStudioDesignerBridge.render(this);
+    }
+    _fire(){
+      if(!this._config)return;
+      // User edits are saved through the standard Lovelace Save button.
+      // Do not rewrite an existing production card or add a schema flag.
+      const config={...this._config,type,layout_mode:'custom'};
+      this.dispatchEvent(new CustomEvent('config-changed',{
+        detail:{config},bubbles:true,composed:true
+      }));
+    }
+  }
+  if(!customElements.get(tag))
+    customElements.define(tag,HASSStudioTestEditor);
 })();

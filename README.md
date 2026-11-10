@@ -36,12 +36,23 @@ Power balance is an informational visualization, not a control system. Data mark
 
 For development builds, choose the repository's default `main` branch in HACS and use **Redownload / Pobierz ponownie**. Refresh the browser after updating. HACS may cache the JavaScript bundle.
 
-Installed development build: **0.4.56-dev**.
+Installed development build: **0.4.57-dev**.
 
 ## Historia aktualizacji
 
 <!-- HASS-STUDIO-CHANGELOG-BEGIN -->
-<!-- HASS-STUDIO-SOURCE: 7f471c9b7e17c00e45bf8561cba5fb18fc90c80a -->
+<!-- HASS-STUDIO-SOURCE: 63e915ff0bf6017f492d6aeee4837d6a1ae94a39 -->
+
+### 0.4.57-dev — od 0.4.56-dev
+
+**Nowe funkcje**
+- introduce independent visual editor sharing existing designer
+
+**Do przetestowania ręcznie w Home Assistant**
+- Po ponownym pobraniu w HACS sprawdzić załadowanie karty i brak błędów konsoli.
+- Sprawdzić edycję właściwości, zapis konfiguracji i ponowne otwarcie projektu.
+
+---
 
 ### 0.4.56-dev — od 0.4.55-dev
 
