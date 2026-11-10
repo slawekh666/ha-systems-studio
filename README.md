@@ -36,12 +36,41 @@ Power balance is an informational visualization, not a control system. Data mark
 
 For development builds, choose the repository's default `main` branch in HACS and use **Redownload / Pobierz ponownie**. Refresh the browser after updating. HACS may cache the JavaScript bundle.
 
-Installed development build: **0.4.48-dev**.
+Installed development build: **0.4.53-dev**.
 
 ## Historia aktualizacji
 
 <!-- HASS-STUDIO-CHANGELOG-BEGIN -->
-<!-- HASS-STUDIO-SOURCE: e82ddc60100af752c5ce46210009a196c512f1da -->
+<!-- HASS-STUDIO-SOURCE: 9d402b6a9ff75ffd313074e10e51a0244da8a49c -->
+
+### 0.4.53-dev — od 0.4.48-dev
+
+**Poprawki**
+- preserve legacy manual AC on save and respect explicit disabled TEST
+- unify inverter AC HA/TEST priority and migrate legacy manual intent
+- rerender card when watched HA units or state change
+- isolate Warmwasser hysteresis per card and editor instance
+- dispose card and editor resources on detach, rebuild, reconnect
+- permit bounded SVG x/y geometry used by manifold flowmeters
+- avoid newline after return in SVG paint validation
+- keep SVG transform validator return expression on one line
+- allowlist safe bindings for owned SVG templates
+
+**Dokumentacja, testy i narzędzia**
+- require all six architecture and HA quality gates in main CI
+- supply HA state watcher in isolated-card harness
+- supply state watch dependency in lifecycle harness
+- correct unavailable collector state regex assertion
+- verify viewer toolbar before state-aware canvas invocation
+- accept explicit graphics state in canvas renderer contract
+
+**Do przetestowania ręcznie w Home Assistant**
+- Po ponownym pobraniu w HACS sprawdzić załadowanie karty i brak błędów konsoli.
+- Sprawdzić edycję właściwości, zapis konfiguracji i ponowne otwarcie projektu.
+- Sprawdzić falownik: encje HA, TEST 0/puste, MPPT oraz odczyty SVG.
+- Sprawdzić wyświetlanie SVG, animacje i połączenia urządzeń.
+
+---
 
 ### 0.4.48-dev — od 0.4.47-dev
 

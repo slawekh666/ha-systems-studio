@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.48-dev';
+const VERSION = '0.4.53-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -1075,13 +1075,37 @@ const HASSStudioGraphics = (() => {
   const sensorState=(h,e)=>e&&h?.states?.[e]?h.states[e].state:'unknown';
   const numeric=v=>v!==''&&v!==null&&v!==undefined&&Number.isFinite(Number(v));
   const on=(h,e)=>['on','open','active','running','heating'].includes(String(sensorState(h,e)).toLowerCase());
-  const burningStates=new Map(),collectorStates=new Map();
   const thresholdActive=(states,id,value,onAt,offAt)=>{
     if(!numeric(value)){states.delete(id);return false;}
     const active=states.get(id)===true;
     const next=active?Number(value)>offAt:Number(value)>=onAt;
     states.set(id,next);return next;
   };
+  // Hysteresis belongs to a specific card/editor, never to a module-wide node ID.
+  // The graphics/threshold algorithms remain unchanged; only state ownership moves.
+  const createState=()=>{
+    const burning=new Map(),collectors=new Map();
+    return Object.freeze({
+      threshold:(kind,id,value,onAt,offAt)=>{
+        if(kind!=='boiler'&&kind!=='solar')throw new Error('Unknown hysteresis kind: '+kind);
+        return thresholdActive(kind==='boiler'?burning:collectors,id,value,onAt,offAt);
+      },
+      retain:nodes=>{
+        const boilers=new Set(),solar=new Set();
+        for(const node of nodes||[]){
+          if(node.visual!=='warmwasser')continue;
+          if(node.type==='boiler')boilers.add(node.id);
+          if(node.type==='solar')solar.add(node.id);
+        }
+        for(const id of burning.keys())if(!boilers.has(id))burning.delete(id);
+        for(const id of collectors.keys())if(!solar.has(id))collectors.delete(id);
+      },
+      clear:()=>{burning.clear();collectors.clear();}
+    });
+  };
+  const scopedThreshold=(state,kind,id,value,onAt,offAt)=>
+    state?state.threshold(kind,id,value,onAt,offAt):
+      numeric(value)&&Number(value)>=onAt;
   const color=value=>{
     if(!numeric(value))return 'rgb(138,144,153)';
     const x=Math.max(0,Math.min(1,Number(value)/90));
@@ -1178,9 +1202,9 @@ const HASSStudioGraphics = (() => {
     return out;
   };
   // Warmwasser-inspired tall boiler with full chimney and an enclosed firebox.
-  const boiler=(n,h)=>{
+  const boiler=(n,h,state)=>{
     const v=n.variant,temp=sensorState(h,n.entity);
-    const fallbackTemp=thresholdActive(burningStates,n.id,temp,
+    const fallbackTemp=scopedThreshold(state,'boiler',n.id,temp,
       Number(n.burner_on_temp??35),Math.min(Number(n.burner_off_temp??32),Number(n.burner_on_temp??35)-0.5));
     const burning=n.burner_mode==='on'||(n.burner_mode!=='off'&&
       (n.burner_entity?on(h,n.burner_entity):fallbackTemp));
@@ -1240,13 +1264,13 @@ const HASSStudioGraphics = (() => {
       (burning?(isWood?'Burning':isGas?'Burner on':electric?'Heating':'Running'):'Off')+'</text></g>';
     return out;
   };
-  const solar=(n,h)=>{
+  const solar=(n,h,state)=>{
     const collectorPart=(n.parts||[]).find(p=>p.kind==='sensor'&&p.entity&&/kolektor|collector/i.test(p.label||''))||
       (n.parts||[]).find(p=>p.kind==='sensor'&&p.entity);
     const collectorTemp=sensorState(h,collectorPart?.entity||n.entity);
     const tankTemp=sensorState(h,n.tank_entity);
     const delta=numeric(collectorTemp)&&numeric(tankTemp)?Number(collectorTemp)-Number(tankTemp):null;
-    const lit=thresholdActive(collectorStates,n.id,delta,Number(n.solar_on_delta??6),
+    const lit=scopedThreshold(state,'solar',n.id,delta,Number(n.solar_on_delta??6),
       Math.min(Number(n.solar_off_delta??3),Number(n.solar_on_delta??6)-0.5));
     const cx=101,cy=27;
     const rays=Array.from({length:8},(_,i)=>{
@@ -1282,7 +1306,8 @@ const HASSStudioGraphics = (() => {
     '<circle cx="59" cy="83" r="13" fill="'+color(sensorState(h,n.entity))+'" stroke="#a8bccb" stroke-width="1.5"/>'+
     '<path d="M59 52V83" stroke="'+color(sensorState(h,n.entity))+'" stroke-width="5" stroke-linecap="round"/>';
   const shapes={tank,boiler,solar,pump,valve,sensor};
-  const render=(n,h)=>shapes[n.type]?shapes[n.type](n,h):'';
+  // Without an explicit owner rendering is stateless, not silently global.
+  const render=(n,h,state)=>shapes[n.type]?shapes[n.type](n,h,state):'';
   const styles='<style>'+
     '@keyframes ssWWPulse{0%{opacity:.8;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}'+
     '@keyframes ssWWFire{33%{opacity:.8;transform:scale(1.04,.92)}66%{opacity:.95;transform:scale(.96,1.06)}}'+
@@ -1298,7 +1323,7 @@ const HASSStudioGraphics = (() => {
     '.ss-flow{stroke:#fff;stroke-width:2.5;stroke-dasharray:1 13;animation:ssWWFlow var(--ss-speed,1s) linear infinite;fill:none;stroke-linecap:round}'+
     '.ss-flow-power{animation-name:ssElectricFlow}'+
     '</style>';
-  return {defs,render,styles,on};
+  return Object.freeze({defs,render,styles,on,createState});
 })();
 
 
@@ -1602,6 +1627,40 @@ const HASSStudioSvg = (() => {
     return match[1];
   };
 
+  /* Only attributes actually required by our owned SVG templates may be bound.
+   * This is NOT a general sanitizer for imported SVG; external SVG remains unsupported.
+   */
+  const allowedAttributes=new Set([
+    'fill','stroke','opacity','stroke-opacity','fill-opacity','visibility',
+    'transform','x','y','width','height','font-size','stroke-dasharray',
+    'class','style','data-more'
+  ]);
+  const validateAttribute=(name,value)=>{
+    if(!allowedAttributes.has(name))
+      throw new Error('Invalid SVG attribute: '+name);
+    const s=String(value);
+    const number=/^-?(?:\d+\.?\d*|\.\d+)$/;
+    if(['opacity','stroke-opacity','fill-opacity'].includes(name))
+      return number.test(s)&&Number(s)>=0&&Number(s)<=1;
+    if(['x','y'].includes(name))
+      return number.test(s)&&Number(s)>=-5000&&Number(s)<=5000;
+    if(['width','height','font-size'].includes(name))
+      return number.test(s)&&Number(s)>=0&&Number(s)<=5000;
+    if(name==='visibility')return ['visible','hidden','collapse'].includes(s);
+    if(name==='class')return /^[A-Za-z_][A-Za-z0-9_ -]{0,127}$/.test(s);
+    if(name==='data-more')return s===''||/^[a-z_]+\.[a-z0-9_]+$/.test(s);
+    if(name==='style')return s==='animation:none;'||
+      /^animation-duration:(?:\d+\.?\d*|\.\d+)s;$/.test(s);
+    if(name==='stroke-dasharray')return /^[\d.,\s-]+$/.test(s);
+    if(name==='transform')return /^[\d.eE+\-\s(),A-Za-z]+$/.test(s)&&
+      [...s.matchAll(/\b([A-Za-z]+)\s*\(/g)].every(m=>
+        ['translate','scale','rotate','matrix','skewX','skewY'].includes(m[1]))&&
+      !/[A-Za-z]{2,}/.test(s.replace(/\b(?:translate|scale|rotate|matrix|skewX|skewY)\s*\(/g,''));
+    // Colors may be solid, HSL/RGB from our owned formatters, or a local SVG paint reference.
+    if(name==='fill'||name==='stroke')return /^(?:#[0-9a-fA-F]{3,8}|url\(#[-\w]+\)|(?:hsl|rgb)\([\d.\s%,]+\)|none|transparent|black|white|currentColor)$/.test(s);
+    return false;
+  };
+
   /** Replace attributes/text of explicitly named SVG elements, never hand-edit paths. */
   const apply = (template, bindings) => {
     const found = new Set();
@@ -1612,7 +1671,7 @@ const HASSStudioSvg = (() => {
       const updates = bindings[id];
       for (const [name, value] of Object.entries(updates)) {
         if (name === 'text') continue;
-        if (!/^[a-z][a-z-]*$/.test(name)) throw new Error('Invalid SVG attribute: ' + name);
+        if (!validateAttribute(name,value)) throw new Error('Invalid SVG attribute: ' + name);
         const attr = new RegExp('(\\s)' + name + '="[^"]*"');
         const replacement = ' ' + name + '="' + escapeXml(value) + '"';
         if (attr.test(attributes)) attributes = attributes.replace(attr, replacement);
@@ -2865,22 +2924,27 @@ const HASSStudioInverterReadings=(()=>{
      return {value:backup,source:backup===null||backup===undefined?'missing':'simulated'};
    return {value:null,source:'missing'};
  };
+ // One source policy for grid-tied and hybrid inverters. Device kind and DC
+ // conversion must not change the observed/manual AC measurement provenance.
  const power=(node,h,c)=>{
-   if(c.hybrid?.enabled!==true||c.hybrid.converter?.enabled!==true)
-     return HASSStudioHA.powerInput(node,h,c.entities.ac_power,c.manual.ac_power,c.mode,true);
-   const mode=['auto','ha','test'].includes(node?.energy_mode)?node.energy_mode:
-     c.mode==='manual'?'test':'auto';
-   const kw=HASSStudioHA.powerReading(h,c.entities.ac_power,c.ac_input_unit,true);
-   const live=kw!==null&&Math.abs(kw)<=500?kw:null;
+   const mode=pvMode(node,c);
+   // Keep the legacy generic power-unit override, but a specific inverter
+   // override (when set) is authoritative for both inverter kinds.
+   const unit=c.ac_input_unit!=='auto'?c.ac_input_unit:
+     node?.energy_power_unit||'auto';
+   const measured=HASSStudioHA.powerReading(h,c.entities.ac_power,unit,true);
+   const live=measured!==null&&Math.abs(measured)<=500?measured:null;
+   // Old cards with inverter.mode=manual and no modern energy_mode used the
+   // manual value without an explicit activation flag. Preserve that path.
+   const legacyManual=mode==='test'&&node?.energy_mode==null&&
+     node?.inverter?.manual_enabled?.ac_power==null;
    const manual=c.manual?.ac_power;
-   const test=typeof manual==='number'&&Number.isFinite(manual)&&
-     (c.manual_enabled?.ac_power===true||
-       c.manual_enabled?.ac_power==null&&node?.energy_test_configured===true)?
-     manual:null;
-   if(mode==='test')return {kw:test,source:test===null?'missing':'simulated'};
-   if(live!==null)return {kw:live,source:'measured'};
-   if(mode==='auto'&&test!==null)return {kw:test,source:'simulated'};
-   return {kw:null,source:'missing'};
+   const test=(c.manual_enabled?.ac_power===true||legacyManual)&&
+     typeof manual==='number'&&Number.isFinite(manual)&&Math.abs(manual)<=500?
+       manual:null;
+   const selected=choose({energy_mode:mode,
+     energy_fallback_enabled:node?.energy_fallback_enabled===true},live,test);
+   return {kw:selected.value,source:selected.source};
  };
  const pvMode=(node,c)=>{
    if(['auto','ha','test'].includes(node?.energy_mode))return node.energy_mode;
@@ -3049,8 +3113,16 @@ const HASSStudioInverter=(()=>{
        dc_dc_efficiency_percent:percent(old?.battery_efficiency_percent)};
    },
    manualEnabled:(raw,node)=>({
-     ac_power:raw.manual_enabled?.ac_power===true||
-       raw.manual_enabled?.ac_power==null&&node?.energy_test_configured===true,
+     // Older configurations had no activation flag. A stored number plus
+     // explicit TEST or enabled fallback was intentional; migrate it to true
+     // so read -> save -> reload retains the same source. Explicit false wins.
+     ac_power:typeof raw.manual_enabled?.ac_power==='boolean'?
+       raw.manual_enabled.ac_power:
+       node?.energy_test_configured===true||
+       (raw.manual?.ac_power!==null&&raw.manual?.ac_power!==undefined&&
+         raw.manual?.ac_power!==''&&Number.isFinite(Number(raw.manual.ac_power))&&
+         (node?.energy_mode==='test'||node?.energy_fallback_enabled===true||
+           (node?.energy_mode==null&&raw.mode==='manual'))),
      ...Object.fromEntries(['temperature','status','alarm'].map(key=>[key,
        typeof raw.manual_enabled?.[key]==='boolean'?raw.manual_enabled[key]:
          Object.prototype.hasOwnProperty.call(raw.manual||{},key)
@@ -6027,8 +6099,9 @@ const HASSStudioCanvas = (() => {
       (!isPump?'<text x="0" y="31" font-size="11" font-weight="600" text-anchor="middle" fill="'+color+'">'+(reading.position===null?'—':Math.round(reading.position)+'%')+'</text>':'')+
       '</g>';
   };
-  const canvasSvg=(config,hass,editable=false,selected=null)=>{
+  const canvasSvg=(config,hass,editable=false,selected=null,graphicsState=null)=>{
     const data=normalized(config),language=pickLang(config,hass),L=words[language];
+    graphicsState?.retain(data.nodes);
     const energyFlow=HASSStudioEnergyFlow.resolve(data,hass);
     const w=data.width,h=data.height;
     const wwDefs=data.nodes.filter(node=>node.visual==='warmwasser' && !['radiator','manifold','power_grid','energy_storage','inverter','distribution_board','ev_charger','building'].includes(node.type) && !(node.type==='tank'&&node.variant==='modular') && !(node.type==='boiler'&&['solid_fuel','pellet_modern','heatpump_modern','gas_modern','electric_modern','fireplace_modern'].includes(node.variant)))
@@ -6113,7 +6186,7 @@ const HASSStudioCanvas = (() => {
         heatpump_modern:['displayBlock',986,371],gas_modern:['displayFrame',574,1097],
         electric_modern:['controlPanelGroup',560,946],fireplace_modern:['displayGroup',634,332]
       };
-      const visual=(building?HASSStudioBuilding.render(node,hass):distributionBoard?HASSStudioDistributionBoard.render(node,hass):evCharger?HASSStudioEVCharger.render(node,hass):inverter?HASSStudioInverter.render(node,hass):energyStorage?HASSStudioEnergyStorage.render(node,hass):radiator?HASSStudioRadiator.render(node,hass):manifold?HASSStudioManifold.render(node,hass):powerGrid?HASSStudioPowerGrid.render(node,hass):node.type==='tank'&&node.variant==='modular'?HASSStudioTank.render(node,hass):node.type==='boiler'&&node.variant==='solid_fuel'?HASSStudioSolidFuel.render(node,hass):modernPellet?HASSStudioPellet.render(node,hass):modernHP?HASSStudioHeatPump.render(node,hass):modernGas?HASSStudioGasBoiler.render(node,hass):modernElectric?HASSStudioElectricBoiler.render(node,hass):modernFireplace?HASSStudioFireplace.render(node,hass):node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass):variantShape(node));
+      const visual=(building?HASSStudioBuilding.render(node,hass):distributionBoard?HASSStudioDistributionBoard.render(node,hass):evCharger?HASSStudioEVCharger.render(node,hass):inverter?HASSStudioInverter.render(node,hass):energyStorage?HASSStudioEnergyStorage.render(node,hass):radiator?HASSStudioRadiator.render(node,hass):manifold?HASSStudioManifold.render(node,hass):powerGrid?HASSStudioPowerGrid.render(node,hass):node.type==='tank'&&node.variant==='modular'?HASSStudioTank.render(node,hass):node.type==='boiler'&&node.variant==='solid_fuel'?HASSStudioSolidFuel.render(node,hass):modernPellet?HASSStudioPellet.render(node,hass):modernHP?HASSStudioHeatPump.render(node,hass):modernGas?HASSStudioGasBoiler.render(node,hass):modernElectric?HASSStudioElectricBoiler.render(node,hass):modernFireplace?HASSStudioFireplace.render(node,hass):node.visual==='warmwasser'?HASSStudioGraphics.render(node,hass,graphicsState):variantShape(node));
       const panel=panels[node.variant];
       const displayMarkup=(panel?HASSStudioReadoutScale.namedGroup(visual,panel[0],panel[1],panel[2],node.readout_scale):visual)+
         (['pump','valve'].includes(node.type)?equipmentOverlay(node,hass):'');
@@ -6978,6 +7051,92 @@ const HASSStudioEditorLibrary=(()=>{
 })();
 
 
+/* Owned component resources: explicit listeners, observers and cleanup.
+ * Reusable for the independent card/editor introduced in stage 11.
+ */
+const HASSStudioLifecycle=(()=>{
+  const create=()=>{
+    let disposed=false;
+    const cleanup=[];
+    const own=dispose=>{
+      if(typeof dispose!=='function')throw new TypeError('Cleanup must be a function');
+      if(disposed)dispose();
+      else cleanup.push(dispose);
+      return dispose;
+    };
+    const listen=(target,type,handler,options)=>{
+      if(disposed)throw new Error('Cannot listen after disposal');
+      target.addEventListener(type,handler,options);
+      own(()=>target.removeEventListener(type,handler,options));
+      return handler;
+    };
+    const observe=(observer,target)=>{
+      if(disposed)throw new Error('Cannot observe after disposal');
+      own(()=>observer.disconnect());
+      observer.observe(target);
+      return observer;
+    };
+    const dispose=()=>{
+      if(disposed)return;
+      disposed=true;
+      const errors=[];
+      while(cleanup.length){
+        try{cleanup.pop()();}
+        catch(error){errors.push(error);}
+      }
+      // Cleanup must run to completion even if a browser API throws on teardown.
+      if(errors.length&&typeof console!=='undefined')console.warn(
+        'Systems Studio lifecycle cleanup:',errors.length,'errors',errors[0]);
+    };
+    return Object.freeze({own,listen,observe,dispose,get disposed(){return disposed;}});
+  };
+  return Object.freeze({create});
+})();
+if(typeof module!=='undefined'&&module.exports)module.exports=HASSStudioLifecycle;
+
+
+/* Attribute-aware HA update tracking, scoped to a single card instance.
+ * An unchanged state with a changed unit must invalidate the SVG.
+ * No global HA subscriptions, storage, service calls or expensive full-state scan.
+ */
+const HASSStudioStateWatch=(()=>{
+  const isEntity=value=>typeof value==='string'&&/^[a-z_]+\.[a-z0-9_]+$/i.test(value);
+  const entities=(config,inherited=[])=>{
+    const ids=new Set();
+    for(const id of inherited||[])if(isEntity(id))ids.add(id);
+    if(config?.layout_mode==='custom'){
+      const stack=[config.studio_layout],seen=new WeakSet();
+      while(stack.length){
+        const value=stack.pop();
+        if(isEntity(value)){ids.add(value);continue;}
+        if(!value||typeof value!=='object'||seen.has(value))continue;
+        seen.add(value);
+        for(const item of Object.values(value))stack.push(item);
+      }
+    }
+    return [...ids].sort();
+  };
+  const snapshot=(hass,ids)=>JSON.stringify(ids.map(id=>{
+    const item=hass?.states?.[id];
+    return [item?.state??null,item?.attributes?.unit_of_measurement??null];
+  }));
+  const changed=card=>{
+    if(!card?._cfg||!card?._hass)return false;
+    let watch=card._studioStateWatch;
+    if(!watch||watch.config!==card._cfg||watch.inherited!==card._ents){
+      watch={config:card._cfg,inherited:card._ents,
+        ids:entities(card._cfg,card._ents),snapshot:undefined};
+      card._studioStateWatch=watch;
+    }
+    const next=snapshot(card._hass,watch.ids);
+    if(next===watch.snapshot)return false;
+    watch.snapshot=next;
+    return true;
+  };
+  return Object.freeze({entities,snapshot,changed});
+})();
+
+
 /* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
  * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
  * No external dependencies or service calls in the designer.
@@ -7061,10 +7220,38 @@ const HASSStudioEditorLibrary=(()=>{
   // Card viewer: fit entire scheme at every responsive width, only zoom after explicit interaction.
   const nativeRender=WarmwasserSchemaCard.prototype._render;
   const nativeUpdate=WarmwasserSchemaCard.prototype._update;
+  const nativeCardConnected=WarmwasserSchemaCard.prototype.connectedCallback;
+  const nativeCardDisconnected=WarmwasserSchemaCard.prototype.disconnectedCallback;
+  const disposeCard=function(){
+    this._studioViewerDispose?.();
+    this._studioViewerDispose=null;
+    this._studioCardObserver?.disconnect();
+    this._studioCardObserver=null;
+    this._studioCardResizeTarget=null;
+    this._studioGraphicsState?.clear();
+    this._studioGraphicsState=null;
+  };
+  WarmwasserSchemaCard.prototype.disconnectedCallback=function(){
+    this._studioSuspended=true;
+    disposeCard.call(this);
+    nativeCardDisconnected?.call(this);
+  };
+  WarmwasserSchemaCard.prototype.connectedCallback=function(){
+    nativeCardConnected?.call(this);
+    const wasSuspended=this._studioSuspended===true;
+    this._studioSuspended=false;
+    if(wasSuspended&&this._cfg&&this._hass){
+      // The inherited state key can stay unchanged while the card was detached.
+      this._key=null;
+      this._update();
+    }
+  };
   WarmwasserSchemaCard.prototype._render=function(){
     if(this._cfg?.layout_mode!=='custom')return nativeRender.call(this);
     const {width,height}=viewport.dimensions(this._cfg);
     const L=words[pickLang(this._cfg,this._hass)];
+    const graphicsState=this._studioGraphicsState||(
+      this._studioGraphicsState=HASSStudioGraphics.createState());
     const schemeName=String(this._cfg.studio_layout?.name||'').trim().slice(0,64);
     const label=esc('Home Assistant System Studio')+(schemeName?' - '+esc(schemeName):'');
     const viewerCss='<style>'+
@@ -7089,7 +7276,7 @@ const HASSStudioEditorLibrary=(()=>{
       '<button type="button" data-view-action="in" title="Zoom +" aria-label="Zoom in">+</button>'+
       '<button type="button" data-view-action="fit" title="Dopasuj cały schemat" aria-label="Fit diagram">⤢</button>'+
       '<button type="button" data-view-action="full" title="Pełny ekran" aria-label="Fullscreen">⛶</button></div></div>'+
-      canvasSvg(this._cfg,this._hass)+
+      canvasSvg(this._cfg,this._hass,false,null,graphicsState)+
       HASSStudioEnergyDiagnostics.render(this._cfg,this._hass,pickLang(this._cfg,this._hass),'viewer')+'</div>';
   };
   const updateCardCamera=function(){
@@ -7120,8 +7307,15 @@ const HASSStudioEditorLibrary=(()=>{
     }
   };
   WarmwasserSchemaCard.prototype._update=function(){
+    if(this._studioSuspended===true)return;
+    // The inherited key tracks only HA state, not the measurement unit.
+    // Also watch the device entities used by custom layouts (not just _ents).
+    if(HASSStudioStateWatch.changed(this))this._key=null;
     nativeUpdate.call(this);
-    if(this._cfg?.layout_mode!=='custom')return;
+    if(this._cfg?.layout_mode!=='custom'){
+      disposeCard.call(this);
+      return;
+    }
     const root=this.shadowRoot;
     if(root&&!this._studioViewerDispose){
       this._studioViewerDispose=HASSStudioViewerGestures.install({
@@ -7153,7 +7347,21 @@ const HASSStudioEditorLibrary=(()=>{
     if(changed)this._build();
   };
   const nativeBuild=WarmwasserSchemaCardEditor.prototype._build;
+  const nativeEditorConnected=WarmwasserSchemaCardEditor.prototype.connectedCallback;
+  const nativeEditorDisconnected=WarmwasserSchemaCardEditor.prototype.disconnectedCallback;
+  WarmwasserSchemaCardEditor.prototype.disconnectedCallback=function(){
+    this._studioEditorDispose?.();
+    this._studioEditorDispose=null;
+    nativeEditorDisconnected?.call(this);
+  };
+  WarmwasserSchemaCardEditor.prototype.connectedCallback=function(){
+    nativeEditorConnected?.call(this);
+    if(this._config?.layout_mode==='custom'&&!this._studioEditorDispose)
+      this._build();
+  };
   WarmwasserSchemaCardEditor.prototype._build=function(){
+    this._studioEditorDispose?.();
+    this._studioEditorDispose=null;
     this._studioMode=this._config?.layout_mode||'automatic';
     if(this._studioMode!=='custom')return nativeBuild.call(this);
     this._forms=[]; // Keeps inherited setConfig from recreating the designer on every edit.
@@ -7162,6 +7370,21 @@ const HASSStudioEditorLibrary=(()=>{
   WarmwasserSchemaCardEditor.prototype._renderStudioEditor=function(){
     if(!this.shadowRoot)this.attachShadow({mode:'open'});
     const root=this.shadowRoot;
+    const lifecycle=HASSStudioLifecycle.create();
+    const graphicsState=HASSStudioGraphics.createState();
+    lifecycle.own(()=>graphicsState.clear());
+    // Store teardown before allocating resources: repeated builds and detach
+    // always terminate the previous designer before replacing its DOM.
+    this._studioEditorDispose=()=>{
+      lifecycle.dispose();
+      const dialog=root.getElementById?.('ss-modal');
+      if(dialog?.open){
+        try{dialog.close?.();}catch(_error){dialog.removeAttribute?.('open');}
+      }
+      this._studioEditorObserver=null;
+    };
+    const listen=(target,type,handler,options)=>
+      lifecycle.listen(target,type,handler,options);
     const L=words[pickLang(this._config,this._hass)];
     const langs=[['auto',L.automatic],['pl','Polski'],['en','English']];
     const opts=(options,selected)=>options.map(row=>
@@ -7303,7 +7526,7 @@ const HASSStudioEditorLibrary=(()=>{
     const modal=root.getElementById('ss-modal'),stage=root.getElementById('ss-stage'),properties=root.getElementById('ss-props');
     const splitterGrid=root.getElementById('ss-grid');
     for(const grip of root.querySelectorAll('.ss-splitter')){
-      grip.addEventListener('pointerdown',event=>{
+      listen(grip,'pointerdown',event=>{
         if(event.button!==0)return;
         grip.setPointerCapture(event.pointerId);
         const move=e=>{
@@ -7314,9 +7537,9 @@ const HASSStudioEditorLibrary=(()=>{
             clamp(Math.round(span),110,500,200)+'px');
         };
         const end=()=>{grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',end);grip.removeEventListener('pointercancel',end);};
-        grip.addEventListener('pointermove',move);
-        grip.addEventListener('pointerup',end);
-        grip.addEventListener('pointercancel',end);
+        listen(grip,'pointermove',move);
+        listen(grip,'pointerup',end);
+        listen(grip,'pointercancel',end);
       });
     }
     let selection=null,drag=null,selectedPartId=null,expandedPartId=null,lastConnectionPointer=null,clipboard=null;
@@ -7360,11 +7583,11 @@ const HASSStudioEditorLibrary=(()=>{
     };
     const balanceToggle=root.getElementById('ss-balance-toggle');
     const balancePopover=root.getElementById('ss-energy-popover');
-    balanceToggle.addEventListener('click',()=>{
+    listen(balanceToggle,'click',()=>{
       balancePopover.hidden=!balancePopover.hidden;
       balanceToggle.setAttribute('aria-expanded',String(!balancePopover.hidden));
     });
-    balancePopover.addEventListener('click',event=>{
+    listen(balancePopover,'click',event=>{
       const jump=event.target.closest?.('[data-energy-jump]');
       if(!jump)return;
       const kind=jump.dataset.energyJumpKind,id=jump.dataset.energyJump;
@@ -7374,7 +7597,7 @@ const HASSStudioEditorLibrary=(()=>{
         setSelected(kind,id);
       }
     });
-    properties.addEventListener('change',event=>{
+    listen(properties,'change',event=>{
       if(!event.target.matches('[data-diagnostics-enable],[data-diagnostics-devices],[data-diagnostics-cables],[data-diagnostics-warnings]'))return;
       const el=event.target,model=get(),e=model.energy_balance;
       if(el.matches('[data-diagnostics-enable]'))model.energy_diagnostics.enabled=el.checked;
@@ -7419,12 +7642,15 @@ const HASSStudioEditorLibrary=(()=>{
     };
     const render=()=>{
       ({width:sceneW,height:sceneH}=dimensions());
-      stage.innerHTML=canvasSvg(this._config,this._hass,true,selection);
+      stage.innerHTML=canvasSvg(this._config,this._hass,true,selection,graphicsState);
       applyCamera();renderProps();
       properties.insertAdjacentHTML('beforeend','<div id="ss-energy-controls"></div>');
       renderBalance();
     };
-    if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>applyCamera()).observe(stage);
+    if(typeof ResizeObserver!=='undefined'){
+      this._studioEditorObserver=lifecycle.observe(
+        new ResizeObserver(()=>applyCamera()),stage);
+    }
     const setSelected=(type,id)=>{
       selection={type,id};selectedPartId=type==='node'?get().nodes.find(n=>n.id===id)?.parts?.[0]?.id||null:null;expandedPartId=selectedPartId;render();
     };
@@ -7494,7 +7720,7 @@ const HASSStudioEditorLibrary=(()=>{
       }
       commit(model);render();
     };
-    root.getElementById('ss-open').addEventListener('click',()=>{
+    listen(root.getElementById('ss-open'),'click',()=>{
       if(typeof modal.showModal==='function')modal.showModal();
       else modal.setAttribute('open','');
       render();
@@ -7504,22 +7730,22 @@ const HASSStudioEditorLibrary=(()=>{
       else modal.removeAttribute('open');
       drag=null;
     };
-    root.getElementById('ss-close').addEventListener('click',closeDesigner);
-    modal.addEventListener('cancel',()=>{drag=null;});
+    listen(root.getElementById('ss-close'),'click',closeDesigner);
+    listen(modal,'cancel',()=>{drag=null;});
 
-    root.getElementById('ss-mode').addEventListener('change',event=>{
+    listen(root.getElementById('ss-mode'),'change',event=>{
       this._config={...this._config,layout_mode:event.target.value};this._fire();
     });
-    root.getElementById('ss-lang').addEventListener('change',event=>{
+    listen(root.getElementById('ss-lang'),'change',event=>{
       const open=modal.open;
       this._config={...this._config,studio_language:event.target.value};this._fire();this._build();
       if(open)this.shadowRoot.getElementById('ss-open')?.click();
     });
-    root.getElementById('ss-zoom').addEventListener('change',event=>{
+    listen(root.getElementById('ss-zoom'),'change',event=>{
       camera={...camera,zoom:Number(event.target.value)||1,autoFit:false};applyCamera();
     });
-    root.getElementById('ss-fit').addEventListener('click',fit);
-    root.getElementById('ss-all').addEventListener('click',()=>{
+    listen(root.getElementById('ss-fit'),'click',fit);
+    listen(root.getElementById('ss-all'),'click',()=>{
       const model=get(),bounds=[{x:0,y:0},{x:sceneW,y:sceneH}];
       model.nodes.forEach(n=>{bounds.push({x:n.x-60*n.scale,y:n.y-110*n.scale},{x:n.x+220*n.scale,y:n.y+350*n.scale});});
       model.connections.forEach(connection=>bounds.push(...connection.points));
@@ -7529,20 +7755,20 @@ const HASSStudioEditorLibrary=(()=>{
       camera={cx:(maxX+minX)/2,cy:(maxY+minY)/2,zoom:Math.max(.2,Math.min(8,scale/Math.min(rect.width/sceneW,rect.height/sceneH))),autoFit:false};
       applyCamera();
     });
-    root.getElementById('ss-undo').addEventListener('click',()=>historyStep(undo,redo));
-    root.getElementById('ss-redo').addEventListener('click',()=>historyStep(redo,undo));
+    listen(root.getElementById('ss-undo'),'click',()=>historyStep(undo,redo));
+    listen(root.getElementById('ss-redo'),'click',()=>historyStep(redo,undo));
     const settings=root.getElementById('ss-settings'),help=root.getElementById('ss-help');
-    root.getElementById('ss-size').addEventListener('click',()=>{
+    listen(root.getElementById('ss-size'),'click',()=>{
       settings.hidden=!settings.hidden;help.hidden=true;
       root.getElementById('ss-width').value=String(dimensions().width);
       root.getElementById('ss-height').value=String(dimensions().height);
       root.getElementById('ss-scheme-name').value=get().name;
     });
-    root.getElementById('ss-shortcuts').addEventListener('click',()=>{
+    listen(root.getElementById('ss-shortcuts'),'click',()=>{
       help.hidden=!help.hidden;settings.hidden=true;
       root.getElementById('ss-shortcuts').setAttribute('aria-expanded',String(!help.hidden));
     });
-    root.getElementById('ss-apply-size').addEventListener('click',()=>{
+    listen(root.getElementById('ss-apply-size'),'click',()=>{
       const width=Number(root.getElementById('ss-width').value),height=Number(root.getElementById('ss-height').value);
       if(!Number.isInteger(width)||!Number.isInteger(height)||width<300||height<300||width>5000||height>5000)return;
       const model=get();model.width=width;model.height=height;
@@ -7556,9 +7782,9 @@ const HASSStudioEditorLibrary=(()=>{
       else model.connections=model.connections.filter(n=>n.id!==selection.id);
       commit(model);selection=null;selectedPartId=null;expandedPartId=null;render();
     };
-    root.getElementById('ss-delete').addEventListener('click',deleteSelection);
-    stage.addEventListener('wheel',event=>{event.preventDefault();zoomAt(event.deltaY<0?1.12:1/1.12,event);},{passive:false});
-    modal.addEventListener('keydown',event=>{
+    listen(root.getElementById('ss-delete'),'click',deleteSelection);
+    listen(stage,'wheel',event=>{event.preventDefault();zoomAt(event.deltaY<0?1.12:1/1.12,event);},{passive:false});
+    listen(modal,'keydown',event=>{
       const tag=event.target?.tagName?.toLowerCase();
       if(['input','textarea','select'].includes(tag)||event.target?.isContentEditable)return;
       if(event.key===' '){spaceHeld=true;event.preventDefault();return;}
@@ -7583,8 +7809,8 @@ const HASSStudioEditorLibrary=(()=>{
         commit(model);render();
       }
     });
-    modal.addEventListener('keyup',event=>{if(event.key===' ')spaceHeld=false;});
-    window.addEventListener('blur',()=>{spaceHeld=false;});
+    listen(modal,'keyup',event=>{if(event.key===' ')spaceHeld=false;});
+    listen(window,'blur',()=>{spaceHeld=false;});
     const library=root.querySelector('.ss-library'),search=root.getElementById('ss-library-search'),results=root.getElementById('ss-lib-results'),recent=root.getElementById('ss-lib-recent'),catalog=root.getElementById('ss-lib-catalog');
     const lang=pickLang(this._config,this._hass),entries=registry.libraryEntries(lang);
     const makeButton=item=>'<button type="button" class="ss-lib-item" draggable="true" data-lib-type="'+esc(item.type)+'" data-lib-variant="'+esc(item.variant)+'"><ha-icon class="ss-lib-icon" icon="'+esc(item.icon)+'"></ha-icon><span class="ss-lib-label">'+esc(item.label)+'</span></button>';
@@ -7601,17 +7827,17 @@ const HASSStudioEditorLibrary=(()=>{
       search.value='';catalog.querySelectorAll('details[open]').forEach(x=>{x.open=false;});refreshLibrary();
     };
     const choice=button=>({kind:button.dataset.libType||(button.dataset.addPreset?'boiler':button.dataset.add),preset:button.dataset.libVariant||button.dataset.addPreset||button.dataset.variant||''});
-    search.addEventListener('input',refreshLibrary);
-    library.addEventListener('click',event=>{const btn=event.target.closest('button[data-lib-type],button[data-add],button[data-add-preset]');if(btn){const x=choice(btn);addLibrary(x.kind,x.preset);}});
+    listen(search,'input',refreshLibrary);
+    listen(library,'click',event=>{const btn=event.target.closest('button[data-lib-type],button[data-add],button[data-add-preset]');if(btn){const x=choice(btn);addLibrary(x.kind,x.preset);}});
     const desktop=()=>!window.matchMedia?.('(pointer: coarse)').matches;
-    library.addEventListener('dragstart',event=>{
+    listen(library,'dragstart',event=>{
       const btn=event.target.closest('button[data-lib-type],button[data-add],button[data-add-preset]');
       if(!btn||!desktop()){event.preventDefault();return;}
       const x=choice(btn);if(!entries.some(e=>e.type===x.kind&&e.variant===x.preset)){event.preventDefault();return;}
       event.dataTransfer.setData('application/x-ha-studio-device',JSON.stringify(x));event.dataTransfer.effectAllowed='copy';
     });
-    stage.addEventListener('dragover',event=>{if(desktop()&&Array.from(event.dataTransfer.types).includes('application/x-ha-studio-device')){event.preventDefault();event.dataTransfer.dropEffect='copy';}});
-    stage.addEventListener('drop',event=>{
+    listen(stage,'dragover',event=>{if(desktop()&&Array.from(event.dataTransfer.types).includes('application/x-ha-studio-device')){event.preventDefault();event.dataTransfer.dropEffect='copy';}});
+    listen(stage,'drop',event=>{
       if(!desktop())return;const data=event.dataTransfer.getData('application/x-ha-studio-device');if(!data)return;
       event.preventDefault();try{const x=JSON.parse(data),rect=stage.getBoundingClientRect();
         const pos=viewport.worldAt(camera,event.clientX-rect.left,event.clientY-rect.top,Math.max(1,rect.width),Math.max(1,rect.height),sceneW,sceneH,1.06);
@@ -7633,8 +7859,8 @@ const HASSStudioEditorLibrary=(()=>{
       commit(model);selection={type:source.type,id:obj.id};selectedPartId=null;expandedPartId=null;render();
     };
     const duplicateSelection=()=>{if(!selection||!selectedObject(get()))return;copySelection();pasteSelection(clipboard);};
-    root.getElementById('ss-duplicate').addEventListener('click',duplicateSelection);
-    properties.addEventListener('change',event=>{
+    listen(root.getElementById('ss-duplicate'),'click',duplicateSelection);
+    listen(properties,'change',event=>{
       const el=event.target,key=el.dataset.field;
       if(!key||!selection)return;
       const model=get(),obj=selectedObject(model);if(!obj)return;
@@ -7955,7 +8181,7 @@ const HASSStudioEditorLibrary=(()=>{
         obj.accessories[index].label=val.slice(0,64);
       commit(model);render();
     });
-    properties.addEventListener('click',event=>{
+    listen(properties,'click',event=>{
       const button=event.target.closest('button');
       if(!button||!selection)return;
       const model=get(),obj=selectedObject(model);if(!obj)return;
@@ -8074,7 +8300,7 @@ const HASSStudioEditorLibrary=(()=>{
       }else return;
       commit(model);render();
     });
-    stage.addEventListener('pointerdown',event=>{
+    listen(stage,'pointerdown',event=>{
       lastConnectionPointer=null;
       if((event.button===0||event.button===1)&&(event.button===1||spaceHeld||event.target===stage||event.target.tagName?.toLowerCase()==='svg'||event.target.classList?.contains('ss-project-boundary'))){
         const rect=stage.getBoundingClientRect();
@@ -8124,7 +8350,7 @@ const HASSStudioEditorLibrary=(()=>{
       stage.querySelector('svg')?.setPointerCapture(event.pointerId);
       renderProps();
     });
-    stage.addEventListener('pointermove',event=>{
+    listen(stage,'pointermove',event=>{
       if(!drag||event.pointerId!==drag.pointer)return;
       const svg=stage.querySelector('svg');
       if(drag.type==='pan'){
@@ -8185,9 +8411,9 @@ const HASSStudioEditorLibrary=(()=>{
       }
       render();
     };
-    stage.addEventListener('pointerup',end);
-    stage.addEventListener('pointercancel',end);
-    stage.addEventListener('dblclick',event=>{
+    listen(stage,'pointerup',end);
+    listen(stage,'pointercancel',end);
+    listen(stage,'dblclick',event=>{
       const el=event.target.closest?.('.ss-connection');
       const fallback=lastConnectionPointer&&Math.hypot(event.clientX-lastConnectionPointer.x,event.clientY-lastConnectionPointer.y)<10&&event.timeStamp-lastConnectionPointer.time<800
         ?lastConnectionPointer.id:null;
