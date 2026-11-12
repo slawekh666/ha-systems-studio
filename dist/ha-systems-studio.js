@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.59-dev';
+const VERSION = '0.4.61-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -7243,237 +7243,19 @@ const HASSStudioEditorMigration=(()=>{
 })();
 
 
-/* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
- * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
- * No external dependencies or service calls in the designer.
+/* Stage 15: Systems Studio's own designer controller.
+ * The existing working designer logic was moved here without behavioral
+ * changes, shared by both the legacy editor and editor_version: 1.
+ * No prototype patching or references to Warmwasser classes in this module.
  */
-(() => {
-  const W=1200,H=720,MAX_NODES=60,MAX_CONNECTIONS=80;
-  const viewport=HASSStudioViewport;
-  const registry=HASSStudioDeviceRegistry;
-  const types=registry.listTypes();
-  const words={
-    pl:{sensorScale:'Skala odczytu',accessoryLabel:'Podpis przy ikonie',boilerState:'Praca palnika / grzania',burnerEntity:'Encja palnika (opcjonalna; inaczej temperatura)',burnerOnTemp:'Kocioł aktywny powyżej (°C)',burnerOffTemp:'Kocioł nieaktywny poniżej (°C)',solarTank:'Temperatura zbiornika (do porównania)',solarOnDelta:'Kolektor aktywny – różnica (°C)',solarOffDelta:'Kolektor nieaktywny – różnica (°C)',solarSensors:'Czujniki kolektora',solarPump:'Encja pompy solarnej',pipeStart:'Króciec na początku',pipeEnd:'Króciec na końcu',yes:'Tak',no:'Nie',compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
-      flowOn:'Włączona (podgląd)',flowAuto:'Według encji',flowDirection:'Kierunek przepływu',
-      flowSpeed:'Czas animacji (s)',flowEntity:'Encja sterująca przepływem',
-      forward:'Początek → koniec',reverse:'Koniec → początek',mode:'Tryb układu',auto:'Automatyczny (Warmwasser)',custom:'Własny układ',language:'Język',
-      automatic:'Automatyczny',open:'Otwórz projektant',close:'Zamknij',add:'Dodaj',remove:'Usuń',
-      library:'BIBLIOTEKA SVG',properties:'WŁAŚCIWOŚCI',canvas:'SCHEMAT',choose:'Zaznacz element na schemacie',
-      name:'Nazwa',graphic:'Rodzaj / grafika',scale:'Skala',position:'Pozycja',entity:'Encja HA',
-      entities:'Dodatkowe encje',sensors:'Elementy wewnętrzne',height:'Wysokość od dołu (%)',
-      side:'Strona',left:'Lewa',right:'Prawa',inside:'Wewnątrz',sensor:'Czujnik',
-      heater:'Grzałka',coil:'Wężownica',accessories:'Elementy na rurze',
-      pump:'Pompa',valve:'Zawór',connection:'Rura',pipeColor:'Rodzaj rury',pipeWidth:'Grubość',
-      hot:'Ciepła woda',cold:'Zimna woda',solarFlow:'Obieg solarny',returnFlow:'Powrót',
-      newBend:'Dodaj punkt załamania',removeBend:'Usuń ostatni punkt',
-      pipeHelp:'Przeciągnij linię, aby przesunąć całą rurę. Przeciągnij punkt, aby zmienić jej kształt. Dwuklik dodaje załamanie.',
-      accessoryPos:'Położenie na rurze (%)',editHelp:'Wybierz element po lewej i ustaw jego właściwości po prawej.',
-      boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',connections:'Rury',
-      link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
-      zoom:'Powiększenie',noValues:'Bez pomiaru',editor:'Projektant instalacji'},
-    en:{sensorScale:'Reading scale',accessoryLabel:'Icon caption',boilerState:'Burner / heating state',burnerEntity:'Burner entity (optional; otherwise temperature)',burnerOnTemp:'Boiler on above (°C)',burnerOffTemp:'Boiler off below (°C)',solarTank:'Tank temperature (reference)',solarOnDelta:'Collector active – delta (°C)',solarOffDelta:'Collector inactive – delta (°C)',solarSensors:'Collector sensors',solarPump:'Solar pump entity',pipeStart:'Start connector',pipeEnd:'End connector',yes:'Yes',no:'No',compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
-      flowOn:'On (preview)',flowAuto:'Controlled by entity',flowDirection:'Flow direction',
-      flowSpeed:'Animation duration (s)',flowEntity:'Flow control entity',
-      forward:'Start → end',reverse:'End → start',mode:'Layout mode',auto:'Automatic (Warmwasser)',custom:'Custom layout',language:'Language',
-      automatic:'Automatic',open:'Open designer',close:'Close',add:'Add',remove:'Delete',
-      library:'SVG LIBRARY',properties:'PROPERTIES',canvas:'DIAGRAM',choose:'Select an element in the diagram',
-      name:'Name',graphic:'Type / graphic',scale:'Scale',position:'Position',entity:'HA entity',
-      entities:'Additional entities',sensors:'Internal components',height:'Height from bottom (%)',
-      side:'Side',left:'Left',right:'Right',inside:'Inside',sensor:'Sensor',
-      heater:'Heating element',coil:'Coil',accessories:'On-connection equipment',
-      pump:'Pump',valve:'Valve',connection:'Pipe',pipeColor:'Pipe type',pipeWidth:'Width',
-      hot:'Hot water',cold:'Cold water',solarFlow:'Solar circuit',returnFlow:'Return',
-      newBend:'Add bend point',removeBend:'Remove last point',
-      pipeHelp:'Drag the connection line to move the whole connection. Drag a handle to change its shape. Double-click to add a bend.',
-      accessoryPos:'Position on connection (%)',editHelp:'Pick a component on the left; configure it on the right.',
-      boiler:'Boilers',tank:'Tanks',solar:'Solar',pumps:'Pumps',valves:'Valves',sensorsMenu:'Sensors',connections:'Pipes',
-      link:'Assign entity',addEntity:'Add entity',label:'Description',default:'Default',
-      zoom:'Zoom',noValues:'No data',editor:'System diagram designer'}
-  };
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{canvasSettings:'Ustawienia schematu',schemeName:'Nazwa schematu (opcjonalna)',canvasWidth:'Szerokość',canvasHeight:'Wysokość',apply:'Zastosuj',fit:'Dopasuj schemat',all:'Pokaż wszystkie',help:'Skróty klawiaturowe',undo:'Cofnij',redo:'Ponów',shortcutTitle:'Sterowanie edytorem',shortcutHint:'Skróty nie działają podczas pisania w polach formularzy.',outside:'Zmniejszenie obszaru nie usuwa urządzeń ani rur.'}:{canvasSettings:'Diagram settings',schemeName:'Diagram name (optional)',canvasWidth:'Width',canvasHeight:'Height',apply:'Apply',fit:'Fit diagram',all:'Show all',help:'Keyboard shortcuts',undo:'Undo',redo:'Redo',shortcutTitle:'Editor controls',shortcutHint:'Shortcuts are disabled while editing form fields.',outside:'Shrinking the canvas does not remove devices or connections.'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankGlow:'Efekt cieplny grzałek (%)',heaterMode:'Stan grzałki',heaterPower:'Intensywność (%)',heaterWatts:'Encja mocy (W/kW)',partX:'Pozycja pozioma (%)',partLength:'Wysokość / długość (%)',partWidth:'Szerokość (%)',partTurns:'Liczba zwojów',permeability:'Przepuszczalność 0–1',partContainer:'Strefa czujnika',partFlowMode:'Przepływ wężownicy',baffle_horizontal:'Przegroda pozioma',baffle_vertical:'Przegroda pionowa',inner_tank:'Zbiornik wewnętrzny'}:{tankGlow:'Heater visual glow (%)',heaterMode:'Heater status',heaterPower:'Glow intensity (%)',heaterWatts:'Power entity (W/kW)',partX:'Horizontal position (%)',partLength:'Height / length (%)',partWidth:'Width (%)',partTurns:'Coil turns',permeability:'Permeability 0–1',partContainer:'Sensor compartment',partFlowMode:'Coil flow',baffle_horizontal:'Horizontal baffle',baffle_vertical:'Vertical baffle',inner_tank:'Inner tank'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankScaleMode:'Skalowanie zbiornika',tankScaleProportional:'Proporcjonalne',tankScaleFree:'Osobna szerokość i wysokość',tankWidthScale:'Szerokość zbiornika',tankHeightScale:'Wysokość zbiornika'}:{tankScaleMode:'Tank scaling',tankScaleProportional:'Proportional',tankScaleFree:'Independent width and height',tankWidthScale:'Tank width',tankHeightScale:'Tank height'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{partLayer:'Warstwa',partLayerUp:'Przenieś wyżej',partLayerDown:'Przenieś niżej'}:{partLayer:'Layer',partLayerUp:'Move up',partLayerDown:'Move down'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidModel:'Piec węgiel / drewno',solidFuel:'Rodzaj opału',solidWood:'Drewno',solidCoal:'Węgiel',solidState:'Stan paleniska (wizualizacja)',solidAuto:'Automatycznie wg encji / temperatury',solidBurning:'Palenie',solidEmbers:'Żarzenie',solidOff:'Wygaszenie',solidGlow:'Intensywność efektu (%)',solidHelp:'Animacja jest wizualna, bez sterowania urządzeniem. Encja stanu spalania ma pierwszeństwo nad progami temperatury.'}:{solidModel:'Wood / coal boiler',solidFuel:'Fuel type',solidWood:'Wood',solidCoal:'Coal',solidState:'Combustion state (visual only)',solidAuto:'Auto from entity / temperature',solidBurning:'Burning',solidEmbers:'Embers',solidOff:'Extinguished',solidGlow:'Effect intensity (%)',solidHelp:'Animation only, no device control. Combustion entity takes precedence over temperature thresholds.'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidWidth:'Szerokość pieca',solidHeight:'Wysokość pieca'}:{solidWidth:'Boiler width',solidHeight:'Boiler height'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{pelletModel:'Piec na pellet (nowoczesny)'}:{pelletModel:'Modern pellet boiler'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{
-    pelletLevelEntity:'Encja poziomu pelletu (%)',pelletLevelMode:'Źródło poziomu pelletu',
-    pelletLevelHA:'Home Assistant',pelletLevelManual:'Ręczny / testowy',
-    pelletLevelTest:'Poziom ręczny (%)',pelletAlarm:'Alarm przy poziomie ≤ (%)'
-  }:{
-    pelletLevelEntity:'Pellet level entity (%)',pelletLevelMode:'Pellet level source',
-    pelletLevelHA:'Home Assistant',pelletLevelManual:'Manual / test',
-    pelletLevelTest:'Manual level (%)',pelletAlarm:'Alarm at or below (%)'
-  });
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{hpModel:'Pompa ciepła (nowoczesna)',hpPower:'Encja poboru mocy (W/kW)',hpFan:'Encja prędkości wentylatora (%/RPM)',hpMaxRpm:'Maksymalne obroty (RPM)',hpGlow:'Podświetlenie (%)'}:{hpModel:'Modern heat pump',hpPower:'Electrical power entity (W/kW)',hpFan:'Fan speed entity (%/RPM)',hpMaxRpm:'Max fan speed (RPM)',hpGlow:'Glow (%)'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{gasModel:'Piec gazowy (nowoczesny)',gasDraw:'Encja modulacji palnika (%)',gasGlow:'Intensywność podświetlenia (%)',gasHelp:'Modulacja to procent mocy palnika, nie zmierzony przepływ gazu. Brak danych wyłącza płomień.'}:{gasModel:'Modern gas boiler',gasDraw:'Burner modulation entity (%)',gasGlow:'Lighting intensity (%)',gasHelp:'Modulation is burner load, not measured gas flow. Missing data disables the flame.'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{electricModel:'Piec elektryczny (nowoczesny)',electricPower:'Encja poboru mocy (W/kW)',electricLoad:'Encja obciążenia (%) — opcjonalna',electricMax:'Moc znamionowa pieca (kW)',electricGlow:'Podświetlenie (%)',electricHelp:'Bez osobnej encji % obciążenie wynika z poboru mocy / mocy znamionowej. Brak odczytu nie jest zastępowany wartością demo.'}:{electricModel:'Modern electric boiler',electricPower:'Electrical power entity (W/kW)',electricLoad:'Load entity (%) — optional',electricMax:'Rated boiler power (kW)',electricGlow:'Lighting (%)',electricHelp:'If no % entity is set, load derives from measured power divided by rated power. Missing data never uses demo values.'});
-  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{fireplaceModel:'Kominek (nowoczesny)',fireplaceHelp:'Ogień i żar są wizualizacją, automatyka zależy od encji lub temperatury.'}:{fireplaceModel:'Modern fireplace',fireplaceHelp:'Fire and embers are visual only; auto stage uses HA status or temperature.'});
-  const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
-  const pickLang=(config,hass)=>{
-    const setting=config?.studio_language;
-    return setting==='pl'||setting==='en'?setting:
-      (String(hass?.language||'').toLowerCase().startsWith('pl')?'pl':'en');
-  };
-  const clamp=(n,lo,hi,fallback)=>Number.isFinite(Number(n))?Math.max(lo,Math.min(hi,Number(n))):fallback;
-  const validEntity=(value)=>typeof value==='string' && isEnt(value);
-  const freshId=(prefix)=>prefix+Math.random().toString(36).slice(2,10);
-  const normalized=HASSStudioLayout.normalized;
-  const {canvasSvg,connectionPath,onConnection,variantShape,translateConnectionPoints}=HASSStudioCanvas.create({
-    W,H,colors,normalized,pickLang,words,clamp,validEntity,esc
-  });
-  // Card viewer: fit entire scheme at every responsive width, only zoom after explicit interaction.
-  const nativeRender=WarmwasserSchemaCard.prototype._render;
-  const nativeUpdate=WarmwasserSchemaCard.prototype._update;
-  const nativeCardConnected=WarmwasserSchemaCard.prototype.connectedCallback;
-  const nativeCardDisconnected=WarmwasserSchemaCard.prototype.disconnectedCallback;
-  const disposeCard=function(){
-    this._studioViewerDispose?.();
-    this._studioViewerDispose=null;
-    this._studioCardObserver?.disconnect();
-    this._studioCardObserver=null;
-    this._studioCardResizeTarget=null;
-    this._studioGraphicsState?.clear();
-    this._studioGraphicsState=null;
-  };
-  WarmwasserSchemaCard.prototype.disconnectedCallback=function(){
-    this._studioSuspended=true;
-    disposeCard.call(this);
-    nativeCardDisconnected?.call(this);
-  };
-  WarmwasserSchemaCard.prototype.connectedCallback=function(){
-    nativeCardConnected?.call(this);
-    const wasSuspended=this._studioSuspended===true;
-    this._studioSuspended=false;
-    if(wasSuspended&&this._cfg&&this._hass){
-      // The inherited state key can stay unchanged while the card was detached.
-      this._key=null;
-      this._update();
-    }
-  };
-  WarmwasserSchemaCard.prototype._render=function(){
-    if(this._cfg?.layout_mode!=='custom')return nativeRender.call(this);
-    const {width,height}=viewport.dimensions(this._cfg);
-    const L=words[pickLang(this._cfg,this._hass)];
-    const graphicsState=this._studioGraphicsState||(
-      this._studioGraphicsState=HASSStudioGraphics.createState());
-    const schemeName=String(this._cfg.studio_layout?.name||'').trim().slice(0,64);
-    const label=esc('Home Assistant System Studio')+(schemeName?' - '+esc(schemeName):'');
-    const viewerCss='<style>'+
-      '.ss-card-viewport{position:relative;display:flex;flex-direction:column;width:100%;aspect-ratio:'+width+'/'+height+';min-height:0;overflow:hidden;background:var(--secondary-background-color,#17222d);touch-action:pan-y;user-select:none}'+
-      '.ss-card-viewport svg{display:block;flex:1 1 auto;min-height:0;width:100%;height:100%;max-width:none;max-height:none;touch-action:none}'+
-      '.ss-card-viewport:fullscreen{width:100vw;height:100vh;aspect-ratio:auto;background:#17222d;touch-action:none}'+
-      '.ss-card-viewport:fullscreen svg{touch-action:none}'+
-      HASSStudioEnergyDiagnostics.styles+
-      '.ss-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap;padding:8px 12px;background:var(--card-background-color,#1c1c1c)}'+
-      '.ss-card-header .ss-card-title{font-size:16px;font-weight:600;color:var(--primary-text-color);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
-      '.ss-card-header .ss-view-tools{display:flex;align-items:center;gap:4px;flex-shrink:0}'+
-      '.ss-view-tools button{appearance:none;background:var(--secondary-background-color,#293949);border:1px solid var(--divider-color,#53677c);border-radius:5px;color:var(--primary-text-color,#fff);min-width:28px;min-height:28px;padding:3px;cursor:pointer;font:600 14px sans-serif}'+
-      '.ss-view-tools button:focus-visible{outline:2px solid #52bfff}'+
-      '.ss-card-viewport:fullscreen{display:flex;flex-direction:column}'+
-      '.ss-card-viewport:fullscreen .ss-card-header{flex:0 0 auto}'+
-      '.ss-card-viewport:fullscreen svg{flex:1 1 auto;min-height:0}'+
-      '@media(max-width:600px){.ss-card-header{gap:4px;padding:6px}.ss-card-header .ss-card-title{font-size:12px}.ss-view-tools{gap:2px}.ss-view-tools button{min-width:27px;min-height:27px}}'+
-      '</style>';
-    return viewerCss+'<div class="ss-card-viewport" id="ss-card-viewport" tabindex="0" aria-label="'+esc(L.editor)+'">'+
-      '<div class="ss-card-header"><div class="ss-card-title">'+label+'</div><div class="ss-view-tools">'+
-      '<button type="button" data-view-action="out" title="Zoom −" aria-label="Zoom out">−</button>'+
-      '<button type="button" data-view-action="in" title="Zoom +" aria-label="Zoom in">+</button>'+
-      '<button type="button" data-view-action="fit" title="Dopasuj cały schemat" aria-label="Fit diagram">⤢</button>'+
-      '<button type="button" data-view-action="full" title="Pełny ekran" aria-label="Fullscreen">⛶</button></div></div>'+
-      canvasSvg(this._cfg,this._hass,false,null,graphicsState)+
-      HASSStudioEnergyDiagnostics.render(this._cfg,this._hass,pickLang(this._cfg,this._hass),'viewer')+'</div>';
-  };
-  const updateCardCamera=function(){
-    const view=this._box?.querySelector('#ss-card-viewport'),svg=view?.querySelector('svg');
-    if(!svg)return;
-    const {width,height}=viewport.dimensions(this._cfg);
-    const rect=svg.getBoundingClientRect(),w=Math.max(1,rect.width),h=Math.max(1,rect.height);
-    if(!this._studioCardCamera || this._studioCardShape!==width+'x'+height){
-      this._studioCardCamera=viewport.fresh(width,height);
-      this._studioCardShape=width+'x'+height;
-    }
-    const box=viewport.box(this._studioCardCamera,w,h,width,height);
-    svg.setAttribute('viewBox',[box.x,box.y,box.width,box.height].join(' '));
-    svg.setAttribute('preserveAspectRatio','none');
-    // The diagram must own touch input before the first pinch, at ALL zooms.
-    // Only the header/non-drawing area retains dashboard vertical scrolling.
-    const fullscreen=typeof document!=='undefined'&&document.fullscreenElement===view;
-    const viewTouchMode=fullscreen?'none':'pan-y';
-    if(view.style.touchAction!==viewTouchMode)view.style.touchAction=viewTouchMode;
-    if(svg.style.touchAction!=='none')svg.style.touchAction='none';
-    if(this._studioCardResizeTarget!==view){
-      this._studioCardObserver?.disconnect();
-      if(typeof ResizeObserver!=='undefined'){
-        this._studioCardObserver=new ResizeObserver(()=>updateCardCamera.call(this));
-        this._studioCardObserver.observe(view);
-      }
-      this._studioCardResizeTarget=view;
-    }
-  };
-  WarmwasserSchemaCard.prototype._update=function(){
-    if(this._studioSuspended===true)return;
-    // The inherited key tracks only HA state, not the measurement unit.
-    // Also watch the device entities used by custom layouts (not just _ents).
-    if(HASSStudioStateWatch.changed(this))this._key=null;
-    nativeUpdate.call(this);
-    if(this._cfg?.layout_mode!=='custom'){
-      disposeCard.call(this);
-      return;
-    }
-    const root=this.shadowRoot;
-    if(root&&!this._studioViewerDispose){
-      this._studioViewerDispose=HASSStudioViewerGestures.install({
-        root,host:this,viewport,
-        getView:()=>root.getElementById('ss-card-viewport'),
-        getDimensions:()=>viewport.dimensions(this._cfg),
-        getCamera:()=>this._studioCardCamera,
-        setCamera:camera=>{this._studioCardCamera=camera;updateCardCamera.call(this);}
-      });
-    }
-    updateCardCamera.call(this);
-  };
-  // In automatic mode, retain the complete original Warmwasser settings.
-  const nativeSchema=WarmwasserSchemaCardEditor.prototype._mainSchema;
-  WarmwasserSchemaCardEditor.prototype._mainSchema=function(){
-    const L=words[pickLang(this._config,this._hass)];
-    return [F_('layout_mode',sel.opt([['automatic',L.auto],['custom',L.custom]])),...nativeSchema.call(this)];
-  };
-  const nativeSet=WarmwasserSchemaCardEditor.prototype.setConfig;
-  WarmwasserSchemaCardEditor.prototype.setConfig=function(config){
-    nativeSet.call(this,config);
-    const mode=this._config?.layout_mode||'automatic';
-    if(this._studioMode && mode!==this._studioMode)this._build();
-  };
-  const nativeFire=WarmwasserSchemaCardEditor.prototype._fire;
-  WarmwasserSchemaCardEditor.prototype._fire=function(){
-    const changed=this._studioMode && this._studioMode!==(this._config?.layout_mode||'automatic');
-    nativeFire.call(this);
-    if(changed)this._build();
-  };
-  const nativeBuild=WarmwasserSchemaCardEditor.prototype._build;
-  const nativeEditorConnected=WarmwasserSchemaCardEditor.prototype.connectedCallback;
-  const nativeEditorDisconnected=WarmwasserSchemaCardEditor.prototype.disconnectedCallback;
-  WarmwasserSchemaCardEditor.prototype.disconnectedCallback=function(){
-    this._studioEditorDispose?.();
-    this._studioEditorDispose=null;
-    nativeEditorDisconnected?.call(this);
-  };
-  WarmwasserSchemaCardEditor.prototype.connectedCallback=function(){
-    nativeEditorConnected?.call(this);
-    if(this._config?.layout_mode==='custom'&&!this._studioEditorDispose)
-      this._build();
-  };
-  WarmwasserSchemaCardEditor.prototype._build=function(){
-    this._studioEditorDispose?.();
-    this._studioEditorDispose=null;
-    this._studioMode=this._config?.layout_mode||'automatic';
-    if(this._studioMode!=='custom')return nativeBuild.call(this);
-    this._forms=[]; // Keeps inherited setConfig from recreating the designer on every edit.
-    this._renderStudioEditor();
-  };
-  WarmwasserSchemaCardEditor.prototype._renderStudioEditor=function(){
+const HASSStudioDesignerController=(()=>{
+  let renderer=null;
+  const install=dependencies=>{
+    if(renderer)throw new Error('Designer controller already installed');
+    if(!dependencies||typeof dependencies!=='object')
+      throw new TypeError('Designer dependencies are required');
+    const {W,H,MAX_NODES,MAX_CONNECTIONS,viewport,registry,types,words,pickLang,clamp,validEntity,freshId,normalized,canvasSvg,connectionPath,onConnection,variantShape,translateConnectionPoints,esc,VERSION,colors}=dependencies;
+    renderer=function(){
     if(!this.shadowRoot)this.attachShadow({mode:'open'});
     const root=this.shadowRoot;
     const lifecycle=HASSStudioLifecycle.create();
@@ -8571,6 +8353,254 @@ const HASSStudioEditorMigration=(()=>{
     });
     renderProps();
   };
+  };
+  const render=editor=>{
+    if(!renderer)throw new Error('Designer controller has not been installed');
+    if(!editor||typeof editor!=='object')throw new TypeError('Designer editor instance is required');
+    return renderer.call(editor);
+  };
+  return Object.freeze({install,render});
+})();
+
+
+/* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
+ * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
+ * No external dependencies or service calls in the designer.
+ */
+(() => {
+  const W=1200,H=720,MAX_NODES=60,MAX_CONNECTIONS=80;
+  const viewport=HASSStudioViewport;
+  const registry=HASSStudioDeviceRegistry;
+  const types=registry.listTypes();
+  const words={
+    pl:{sensorScale:'Skala odczytu',accessoryLabel:'Podpis przy ikonie',boilerState:'Praca palnika / grzania',burnerEntity:'Encja palnika (opcjonalna; inaczej temperatura)',burnerOnTemp:'Kocioł aktywny powyżej (°C)',burnerOffTemp:'Kocioł nieaktywny poniżej (°C)',solarTank:'Temperatura zbiornika (do porównania)',solarOnDelta:'Kolektor aktywny – różnica (°C)',solarOffDelta:'Kolektor nieaktywny – różnica (°C)',solarSensors:'Czujniki kolektora',solarPump:'Encja pompy solarnej',pipeStart:'Króciec na początku',pipeEnd:'Króciec na końcu',yes:'Tak',no:'Nie',compact:'Kompaktowy',extended:'Rozbudowany',widthScale:'Szerokość',heightScale:'Wysokość',visual:'Wygląd grafiki',flowMode:'Animacja przepływu',flowOff:'Wyłączona',
+      flowOn:'Włączona (podgląd)',flowAuto:'Według encji',flowDirection:'Kierunek przepływu',
+      flowSpeed:'Czas animacji (s)',flowEntity:'Encja sterująca przepływem',
+      forward:'Początek → koniec',reverse:'Koniec → początek',mode:'Tryb układu',auto:'Automatyczny (Warmwasser)',custom:'Własny układ',language:'Język',
+      automatic:'Automatyczny',open:'Otwórz projektant',close:'Zamknij',add:'Dodaj',remove:'Usuń',
+      library:'BIBLIOTEKA SVG',properties:'WŁAŚCIWOŚCI',canvas:'SCHEMAT',choose:'Zaznacz element na schemacie',
+      name:'Nazwa',graphic:'Rodzaj / grafika',scale:'Skala',position:'Pozycja',entity:'Encja HA',
+      entities:'Dodatkowe encje',sensors:'Elementy wewnętrzne',height:'Wysokość od dołu (%)',
+      side:'Strona',left:'Lewa',right:'Prawa',inside:'Wewnątrz',sensor:'Czujnik',
+      heater:'Grzałka',coil:'Wężownica',accessories:'Elementy na rurze',
+      pump:'Pompa',valve:'Zawór',connection:'Rura',pipeColor:'Rodzaj rury',pipeWidth:'Grubość',
+      hot:'Ciepła woda',cold:'Zimna woda',solarFlow:'Obieg solarny',returnFlow:'Powrót',
+      newBend:'Dodaj punkt załamania',removeBend:'Usuń ostatni punkt',
+      pipeHelp:'Przeciągnij linię, aby przesunąć całą rurę. Przeciągnij punkt, aby zmienić jej kształt. Dwuklik dodaje załamanie.',
+      accessoryPos:'Położenie na rurze (%)',editHelp:'Wybierz element po lewej i ustaw jego właściwości po prawej.',
+      boiler:'Kotły',tank:'Zbiorniki',solar:'Solary',pumps:'Pompy',valves:'Zawory',sensorsMenu:'Czujniki',connections:'Rury',
+      link:'Przypisz encję',addEntity:'Dodaj encję',label:'Opis',default:'Domyślna',
+      zoom:'Powiększenie',noValues:'Bez pomiaru',editor:'Projektant instalacji'},
+    en:{sensorScale:'Reading scale',accessoryLabel:'Icon caption',boilerState:'Burner / heating state',burnerEntity:'Burner entity (optional; otherwise temperature)',burnerOnTemp:'Boiler on above (°C)',burnerOffTemp:'Boiler off below (°C)',solarTank:'Tank temperature (reference)',solarOnDelta:'Collector active – delta (°C)',solarOffDelta:'Collector inactive – delta (°C)',solarSensors:'Collector sensors',solarPump:'Solar pump entity',pipeStart:'Start connector',pipeEnd:'End connector',yes:'Yes',no:'No',compact:'Compact',extended:'Extended',widthScale:'Width',heightScale:'Height',visual:'Graphic style',flowMode:'Flow animation',flowOff:'Off',
+      flowOn:'On (preview)',flowAuto:'Controlled by entity',flowDirection:'Flow direction',
+      flowSpeed:'Animation duration (s)',flowEntity:'Flow control entity',
+      forward:'Start → end',reverse:'End → start',mode:'Layout mode',auto:'Automatic (Warmwasser)',custom:'Custom layout',language:'Language',
+      automatic:'Automatic',open:'Open designer',close:'Close',add:'Add',remove:'Delete',
+      library:'SVG LIBRARY',properties:'PROPERTIES',canvas:'DIAGRAM',choose:'Select an element in the diagram',
+      name:'Name',graphic:'Type / graphic',scale:'Scale',position:'Position',entity:'HA entity',
+      entities:'Additional entities',sensors:'Internal components',height:'Height from bottom (%)',
+      side:'Side',left:'Left',right:'Right',inside:'Inside',sensor:'Sensor',
+      heater:'Heating element',coil:'Coil',accessories:'On-connection equipment',
+      pump:'Pump',valve:'Valve',connection:'Pipe',pipeColor:'Pipe type',pipeWidth:'Width',
+      hot:'Hot water',cold:'Cold water',solarFlow:'Solar circuit',returnFlow:'Return',
+      newBend:'Add bend point',removeBend:'Remove last point',
+      pipeHelp:'Drag the connection line to move the whole connection. Drag a handle to change its shape. Double-click to add a bend.',
+      accessoryPos:'Position on connection (%)',editHelp:'Pick a component on the left; configure it on the right.',
+      boiler:'Boilers',tank:'Tanks',solar:'Solar',pumps:'Pumps',valves:'Valves',sensorsMenu:'Sensors',connections:'Pipes',
+      link:'Assign entity',addEntity:'Add entity',label:'Description',default:'Default',
+      zoom:'Zoom',noValues:'No data',editor:'System diagram designer'}
+  };
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{canvasSettings:'Ustawienia schematu',schemeName:'Nazwa schematu (opcjonalna)',canvasWidth:'Szerokość',canvasHeight:'Wysokość',apply:'Zastosuj',fit:'Dopasuj schemat',all:'Pokaż wszystkie',help:'Skróty klawiaturowe',undo:'Cofnij',redo:'Ponów',shortcutTitle:'Sterowanie edytorem',shortcutHint:'Skróty nie działają podczas pisania w polach formularzy.',outside:'Zmniejszenie obszaru nie usuwa urządzeń ani rur.'}:{canvasSettings:'Diagram settings',schemeName:'Diagram name (optional)',canvasWidth:'Width',canvasHeight:'Height',apply:'Apply',fit:'Fit diagram',all:'Show all',help:'Keyboard shortcuts',undo:'Undo',redo:'Redo',shortcutTitle:'Editor controls',shortcutHint:'Shortcuts are disabled while editing form fields.',outside:'Shrinking the canvas does not remove devices or connections.'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankGlow:'Efekt cieplny grzałek (%)',heaterMode:'Stan grzałki',heaterPower:'Intensywność (%)',heaterWatts:'Encja mocy (W/kW)',partX:'Pozycja pozioma (%)',partLength:'Wysokość / długość (%)',partWidth:'Szerokość (%)',partTurns:'Liczba zwojów',permeability:'Przepuszczalność 0–1',partContainer:'Strefa czujnika',partFlowMode:'Przepływ wężownicy',baffle_horizontal:'Przegroda pozioma',baffle_vertical:'Przegroda pionowa',inner_tank:'Zbiornik wewnętrzny'}:{tankGlow:'Heater visual glow (%)',heaterMode:'Heater status',heaterPower:'Glow intensity (%)',heaterWatts:'Power entity (W/kW)',partX:'Horizontal position (%)',partLength:'Height / length (%)',partWidth:'Width (%)',partTurns:'Coil turns',permeability:'Permeability 0–1',partContainer:'Sensor compartment',partFlowMode:'Coil flow',baffle_horizontal:'Horizontal baffle',baffle_vertical:'Vertical baffle',inner_tank:'Inner tank'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{tankScaleMode:'Skalowanie zbiornika',tankScaleProportional:'Proporcjonalne',tankScaleFree:'Osobna szerokość i wysokość',tankWidthScale:'Szerokość zbiornika',tankHeightScale:'Wysokość zbiornika'}:{tankScaleMode:'Tank scaling',tankScaleProportional:'Proportional',tankScaleFree:'Independent width and height',tankWidthScale:'Tank width',tankHeightScale:'Tank height'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{partLayer:'Warstwa',partLayerUp:'Przenieś wyżej',partLayerDown:'Przenieś niżej'}:{partLayer:'Layer',partLayerUp:'Move up',partLayerDown:'Move down'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidModel:'Piec węgiel / drewno',solidFuel:'Rodzaj opału',solidWood:'Drewno',solidCoal:'Węgiel',solidState:'Stan paleniska (wizualizacja)',solidAuto:'Automatycznie wg encji / temperatury',solidBurning:'Palenie',solidEmbers:'Żarzenie',solidOff:'Wygaszenie',solidGlow:'Intensywność efektu (%)',solidHelp:'Animacja jest wizualna, bez sterowania urządzeniem. Encja stanu spalania ma pierwszeństwo nad progami temperatury.'}:{solidModel:'Wood / coal boiler',solidFuel:'Fuel type',solidWood:'Wood',solidCoal:'Coal',solidState:'Combustion state (visual only)',solidAuto:'Auto from entity / temperature',solidBurning:'Burning',solidEmbers:'Embers',solidOff:'Extinguished',solidGlow:'Effect intensity (%)',solidHelp:'Animation only, no device control. Combustion entity takes precedence over temperature thresholds.'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{solidWidth:'Szerokość pieca',solidHeight:'Wysokość pieca'}:{solidWidth:'Boiler width',solidHeight:'Boiler height'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{pelletModel:'Piec na pellet (nowoczesny)'}:{pelletModel:'Modern pellet boiler'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{
+    pelletLevelEntity:'Encja poziomu pelletu (%)',pelletLevelMode:'Źródło poziomu pelletu',
+    pelletLevelHA:'Home Assistant',pelletLevelManual:'Ręczny / testowy',
+    pelletLevelTest:'Poziom ręczny (%)',pelletAlarm:'Alarm przy poziomie ≤ (%)'
+  }:{
+    pelletLevelEntity:'Pellet level entity (%)',pelletLevelMode:'Pellet level source',
+    pelletLevelHA:'Home Assistant',pelletLevelManual:'Manual / test',
+    pelletLevelTest:'Manual level (%)',pelletAlarm:'Alarm at or below (%)'
+  });
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{hpModel:'Pompa ciepła (nowoczesna)',hpPower:'Encja poboru mocy (W/kW)',hpFan:'Encja prędkości wentylatora (%/RPM)',hpMaxRpm:'Maksymalne obroty (RPM)',hpGlow:'Podświetlenie (%)'}:{hpModel:'Modern heat pump',hpPower:'Electrical power entity (W/kW)',hpFan:'Fan speed entity (%/RPM)',hpMaxRpm:'Max fan speed (RPM)',hpGlow:'Glow (%)'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{gasModel:'Piec gazowy (nowoczesny)',gasDraw:'Encja modulacji palnika (%)',gasGlow:'Intensywność podświetlenia (%)',gasHelp:'Modulacja to procent mocy palnika, nie zmierzony przepływ gazu. Brak danych wyłącza płomień.'}:{gasModel:'Modern gas boiler',gasDraw:'Burner modulation entity (%)',gasGlow:'Lighting intensity (%)',gasHelp:'Modulation is burner load, not measured gas flow. Missing data disables the flame.'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{electricModel:'Piec elektryczny (nowoczesny)',electricPower:'Encja poboru mocy (W/kW)',electricLoad:'Encja obciążenia (%) — opcjonalna',electricMax:'Moc znamionowa pieca (kW)',electricGlow:'Podświetlenie (%)',electricHelp:'Bez osobnej encji % obciążenie wynika z poboru mocy / mocy znamionowej. Brak odczytu nie jest zastępowany wartością demo.'}:{electricModel:'Modern electric boiler',electricPower:'Electrical power entity (W/kW)',electricLoad:'Load entity (%) — optional',electricMax:'Rated boiler power (kW)',electricGlow:'Lighting (%)',electricHelp:'If no % entity is set, load derives from measured power divided by rated power. Missing data never uses demo values.'});
+  for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{fireplaceModel:'Kominek (nowoczesny)',fireplaceHelp:'Ogień i żar są wizualizacją, automatyka zależy od encji lub temperatury.'}:{fireplaceModel:'Modern fireplace',fireplaceHelp:'Fire and embers are visual only; auto stage uses HA status or temperature.'});
+  const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
+  const pickLang=(config,hass)=>{
+    const setting=config?.studio_language;
+    return setting==='pl'||setting==='en'?setting:
+      (String(hass?.locale?.language||hass?.language||'').toLowerCase().startsWith('pl')?'pl':'en');
+  };
+  const clamp=(n,lo,hi,fallback)=>Number.isFinite(Number(n))?Math.max(lo,Math.min(hi,Number(n))):fallback;
+  const validEntity=(value)=>typeof value==='string' && isEnt(value);
+  const freshId=(prefix)=>prefix+Math.random().toString(36).slice(2,10);
+  const normalized=HASSStudioLayout.normalized;
+  const {canvasSvg,connectionPath,onConnection,variantShape,translateConnectionPoints}=HASSStudioCanvas.create({
+    W,H,colors,normalized,pickLang,words,clamp,validEntity,esc
+  });
+  // Card viewer: fit entire scheme at every responsive width, only zoom after explicit interaction.
+  const nativeRender=WarmwasserSchemaCard.prototype._render;
+  const nativeUpdate=WarmwasserSchemaCard.prototype._update;
+  const nativeCardConnected=WarmwasserSchemaCard.prototype.connectedCallback;
+  const nativeCardDisconnected=WarmwasserSchemaCard.prototype.disconnectedCallback;
+  const disposeCard=function(){
+    this._studioViewerDispose?.();
+    this._studioViewerDispose=null;
+    this._studioCardObserver?.disconnect();
+    this._studioCardObserver=null;
+    this._studioCardResizeTarget=null;
+    this._studioGraphicsState?.clear();
+    this._studioGraphicsState=null;
+  };
+  WarmwasserSchemaCard.prototype.disconnectedCallback=function(){
+    this._studioSuspended=true;
+    disposeCard.call(this);
+    nativeCardDisconnected?.call(this);
+  };
+  WarmwasserSchemaCard.prototype.connectedCallback=function(){
+    nativeCardConnected?.call(this);
+    const wasSuspended=this._studioSuspended===true;
+    this._studioSuspended=false;
+    if(wasSuspended&&this._cfg&&this._hass){
+      // The inherited state key can stay unchanged while the card was detached.
+      this._key=null;
+      this._update();
+    }
+  };
+  WarmwasserSchemaCard.prototype._render=function(){
+    if(this._cfg?.layout_mode!=='custom')return nativeRender.call(this);
+    const {width,height}=viewport.dimensions(this._cfg);
+    const L=words[pickLang(this._cfg,this._hass)];
+    const graphicsState=this._studioGraphicsState||(
+      this._studioGraphicsState=HASSStudioGraphics.createState());
+    const schemeName=String(this._cfg.studio_layout?.name||'').trim().slice(0,64);
+    const label=esc('Home Assistant System Studio')+(schemeName?' - '+esc(schemeName):'');
+    const viewerCss='<style>'+
+      '.ss-card-viewport{position:relative;display:flex;flex-direction:column;width:100%;aspect-ratio:'+width+'/'+height+';min-height:0;overflow:hidden;background:var(--secondary-background-color,#17222d);touch-action:pan-y;user-select:none}'+
+      '.ss-card-viewport svg{display:block;flex:1 1 auto;min-height:0;width:100%;height:100%;max-width:none;max-height:none;touch-action:none}'+
+      '.ss-card-viewport:fullscreen{width:100vw;height:100vh;aspect-ratio:auto;background:#17222d;touch-action:none}'+
+      '.ss-card-viewport:fullscreen svg{touch-action:none}'+
+      HASSStudioEnergyDiagnostics.styles+
+      '.ss-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap;padding:8px 12px;background:var(--card-background-color,#1c1c1c)}'+
+      '.ss-card-header .ss-card-title{font-size:16px;font-weight:600;color:var(--primary-text-color);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
+      '.ss-card-header .ss-view-tools{display:flex;align-items:center;gap:4px;flex-shrink:0}'+
+      '.ss-view-tools button{appearance:none;background:var(--secondary-background-color,#293949);border:1px solid var(--divider-color,#53677c);border-radius:5px;color:var(--primary-text-color,#fff);min-width:28px;min-height:28px;padding:3px;cursor:pointer;font:600 14px sans-serif}'+
+      '.ss-view-tools button:focus-visible{outline:2px solid #52bfff}'+
+      '.ss-card-viewport:fullscreen{display:flex;flex-direction:column}'+
+      '.ss-card-viewport:fullscreen .ss-card-header{flex:0 0 auto}'+
+      '.ss-card-viewport:fullscreen svg{flex:1 1 auto;min-height:0}'+
+      '@media(max-width:600px){.ss-card-header{gap:4px;padding:6px}.ss-card-header .ss-card-title{font-size:12px}.ss-view-tools{gap:2px}.ss-view-tools button{min-width:27px;min-height:27px}}'+
+      '</style>';
+    return viewerCss+'<div class="ss-card-viewport" id="ss-card-viewport" tabindex="0" aria-label="'+esc(L.editor)+'">'+
+      '<div class="ss-card-header"><div class="ss-card-title">'+label+'</div><div class="ss-view-tools">'+
+      '<button type="button" data-view-action="out" title="Zoom −" aria-label="Zoom out">−</button>'+
+      '<button type="button" data-view-action="in" title="Zoom +" aria-label="Zoom in">+</button>'+
+      '<button type="button" data-view-action="fit" title="Dopasuj cały schemat" aria-label="Fit diagram">⤢</button>'+
+      '<button type="button" data-view-action="full" title="Pełny ekran" aria-label="Fullscreen">⛶</button></div></div>'+
+      canvasSvg(this._cfg,this._hass,false,null,graphicsState)+
+      HASSStudioEnergyDiagnostics.render(this._cfg,this._hass,pickLang(this._cfg,this._hass),'viewer')+'</div>';
+  };
+  const updateCardCamera=function(){
+    const view=this._box?.querySelector('#ss-card-viewport'),svg=view?.querySelector('svg');
+    if(!svg)return;
+    const {width,height}=viewport.dimensions(this._cfg);
+    const rect=svg.getBoundingClientRect(),w=Math.max(1,rect.width),h=Math.max(1,rect.height);
+    if(!this._studioCardCamera || this._studioCardShape!==width+'x'+height){
+      this._studioCardCamera=viewport.fresh(width,height);
+      this._studioCardShape=width+'x'+height;
+    }
+    const box=viewport.box(this._studioCardCamera,w,h,width,height);
+    svg.setAttribute('viewBox',[box.x,box.y,box.width,box.height].join(' '));
+    svg.setAttribute('preserveAspectRatio','none');
+    // The diagram must own touch input before the first pinch, at ALL zooms.
+    // Only the header/non-drawing area retains dashboard vertical scrolling.
+    const fullscreen=typeof document!=='undefined'&&document.fullscreenElement===view;
+    const viewTouchMode=fullscreen?'none':'pan-y';
+    if(view.style.touchAction!==viewTouchMode)view.style.touchAction=viewTouchMode;
+    if(svg.style.touchAction!=='none')svg.style.touchAction='none';
+    if(this._studioCardResizeTarget!==view){
+      this._studioCardObserver?.disconnect();
+      if(typeof ResizeObserver!=='undefined'){
+        this._studioCardObserver=new ResizeObserver(()=>updateCardCamera.call(this));
+        this._studioCardObserver.observe(view);
+      }
+      this._studioCardResizeTarget=view;
+    }
+  };
+  WarmwasserSchemaCard.prototype._update=function(){
+    if(this._studioSuspended===true)return;
+    // The inherited key tracks only HA state, not the measurement unit.
+    // Also watch the device entities used by custom layouts (not just _ents).
+    if(HASSStudioStateWatch.changed(this))this._key=null;
+    nativeUpdate.call(this);
+    if(this._cfg?.layout_mode!=='custom'){
+      disposeCard.call(this);
+      return;
+    }
+    const root=this.shadowRoot;
+    if(root&&!this._studioViewerDispose){
+      this._studioViewerDispose=HASSStudioViewerGestures.install({
+        root,host:this,viewport,
+        getView:()=>root.getElementById('ss-card-viewport'),
+        getDimensions:()=>viewport.dimensions(this._cfg),
+        getCamera:()=>this._studioCardCamera,
+        setCamera:camera=>{this._studioCardCamera=camera;updateCardCamera.call(this);}
+      });
+    }
+    updateCardCamera.call(this);
+  };
+  // In automatic mode, retain the complete original Warmwasser settings.
+  const nativeSchema=WarmwasserSchemaCardEditor.prototype._mainSchema;
+  WarmwasserSchemaCardEditor.prototype._mainSchema=function(){
+    const L=words[pickLang(this._config,this._hass)];
+    return [F_('layout_mode',sel.opt([['automatic',L.auto],['custom',L.custom]])),...nativeSchema.call(this)];
+  };
+  const nativeSet=WarmwasserSchemaCardEditor.prototype.setConfig;
+  WarmwasserSchemaCardEditor.prototype.setConfig=function(config){
+    nativeSet.call(this,config);
+    const mode=this._config?.layout_mode||'automatic';
+    if(this._studioMode && mode!==this._studioMode)this._build();
+  };
+  const nativeFire=WarmwasserSchemaCardEditor.prototype._fire;
+  WarmwasserSchemaCardEditor.prototype._fire=function(){
+    const changed=this._studioMode && this._studioMode!==(this._config?.layout_mode||'automatic');
+    nativeFire.call(this);
+    if(changed)this._build();
+  };
+  const nativeBuild=WarmwasserSchemaCardEditor.prototype._build;
+  const nativeEditorConnected=WarmwasserSchemaCardEditor.prototype.connectedCallback;
+  const nativeEditorDisconnected=WarmwasserSchemaCardEditor.prototype.disconnectedCallback;
+  WarmwasserSchemaCardEditor.prototype.disconnectedCallback=function(){
+    this._studioEditorDispose?.();
+    this._studioEditorDispose=null;
+    nativeEditorDisconnected?.call(this);
+  };
+  WarmwasserSchemaCardEditor.prototype.connectedCallback=function(){
+    nativeEditorConnected?.call(this);
+    if(this._config?.layout_mode==='custom'&&!this._studioEditorDispose)
+      this._build();
+  };
+  WarmwasserSchemaCardEditor.prototype._build=function(){
+    this._studioEditorDispose?.();
+    this._studioEditorDispose=null;
+    this._studioMode=this._config?.layout_mode||'automatic';
+    if(this._studioMode!=='custom')return nativeBuild.call(this);
+    this._forms=[]; // Keeps inherited setConfig from recreating the designer on every edit.
+    this._renderStudioEditor();
+  };
+  // Only legacy compatibility stays here. Both editor components call the
+  // one Systems Studio controller; there is no copied second designer.
+  HASSStudioDesignerController.install({
+    W,H,MAX_NODES,MAX_CONNECTIONS,viewport,registry,types,words,pickLang,clamp,validEntity,freshId,normalized,canvasSvg,connectionPath,onConnection,variantShape,translateConnectionPoints,esc,VERSION,colors
+  });
+  WarmwasserSchemaCardEditor.prototype._renderStudioEditor=function(){
+    return HASSStudioDesignerController.render(this);
+  };
   // Shared implementation: a separate HTMLElement owns the new editor lifecycle.
   // The renderer itself moves out of this legacy adapter in later stages.
   if(typeof HASSStudioDesignerBridge!=='undefined')
@@ -8588,7 +8618,7 @@ const HASSStudioTestViewer = (() => {
   const pickLang = (config, hass) => {
     if (config?.studio_language === 'pl' || config?.studio_language === 'en')
       return config.studio_language;
-    return String(hass?.language || hass?.locale?.language || '').toLowerCase()
+    return String(hass?.locale?.language || hass?.language || '').toLowerCase()
       .startsWith('pl') ? 'pl' : 'en';
   };
   const words = {
@@ -8824,6 +8854,12 @@ const HASSStudioTestViewer = (() => {
 (() => {
   const tag='ha-systems-studio-test-editor';
   const type='custom:ha-systems-studio';
+  const resolvedLanguage=(config,hass)=>{
+    const requested=config?.studio_language;
+    if(requested==='pl'||requested==='en')return requested;
+    const locale=String(hass?.locale?.language||hass?.language||'');
+    return locale.toLowerCase().startsWith('pl')?'pl':'en';
+  };
   class HASSStudioTestEditor extends HTMLElement {
     constructor(){
       super();
@@ -8833,6 +8869,7 @@ const HASSStudioTestViewer = (() => {
       this._studioAttached=false;
       this._studioEditorDispose=null;
       this._studioEditorObserver=null;
+      this._studioResolvedLanguage=null;
     }
     setConfig(config){
       if(!config||typeof config!=='object'||Array.isArray(config))
@@ -8851,8 +8888,12 @@ const HASSStudioTestViewer = (() => {
     }
     set hass(hass){
       this._hass=hass;
-      // Do not discard a running edit session on ordinary HA state updates.
-      // The designer reads this._hass for its next redraw/interaction.
+      // A delayed first hass assignment may arrive after setConfig already
+      // rendered English defaults. Rebuild only when the resolved language
+      // changes, never for ordinary sensor updates.
+      if(this._studioAttached&&this._config&&this._studioEditorDispose&&
+         this._studioResolvedLanguage!==resolvedLanguage(this._config,hass))
+        this._build();
     }
     connectedCallback(){
       this._studioAttached=true;
@@ -8871,7 +8912,7 @@ const HASSStudioTestViewer = (() => {
       this._dispose();
       if(!this._studioAttached||!this._config)return;
       HASSStudioDesignerBridge.render(this);
-
+      this._studioResolvedLanguage=resolvedLanguage(this._config,this._hass);
     }
     _renderStudioEditor(){
       return HASSStudioDesignerBridge.render(this);
@@ -8954,8 +8995,11 @@ const HASSStudioTestViewer = (() => {
       }
       if(mode==='unsupported')return;
       // Old editor keeps the original type and automatic mode untouched.
-      this._child.setConfig(this._config);
+      // HA may set the configuration before hass. When a component is
+      // created after hass is already available, supply locale first so its
+      // first _build does not fall back to English.
       if(this._hass)this._child.hass=this._hass;
+      this._child.setConfig(this._config);
     }
   }
   if(!customElements.get(tag))customElements.define(tag,HASSStudioEditorRouter);

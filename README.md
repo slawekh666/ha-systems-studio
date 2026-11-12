@@ -36,12 +36,34 @@ Power balance is an informational visualization, not a control system. Data mark
 
 For development builds, choose the repository's default `main` branch in HACS and use **Redownload / Pobierz ponownie**. Refresh the browser after updating. HACS may cache the JavaScript bundle.
 
-Installed development build: **0.4.59-dev**.
+Installed development build: **0.4.61-dev**.
 
 ## Historia aktualizacji
 
 <!-- HASS-STUDIO-CHANGELOG-BEGIN -->
-<!-- HASS-STUDIO-SOURCE: ee225e044097a2cbfe99b4612c51994d91820173 -->
+<!-- HASS-STUDIO-SOURCE: ac5e728579b5de910b0022fa71c604629a94ec03 -->
+
+### 0.4.61-dev — od 0.4.59-dev
+
+**Poprawki**
+- resolve HA locale before first editor render and refresh delayed locale
+
+**Refaktoryzacja**
+- extract shared designer controller without rewriting SVG or AC/DC
+
+**Dokumentacja, testy i narzędzia**
+- retain stage13/14 UI assertions after controller extraction
+- align static and runtime contracts with extracted controller module
+- load controller in runtime harness and classify injected dependencies
+- preserve designer behavior and bump 0.4.61-dev
+- cover first-render locale and preserve deterministic dev bundle
+
+**Do przetestowania ręcznie w Home Assistant**
+- Po ponownym pobraniu w HACS sprawdzić załadowanie karty i brak błędów konsoli.
+- Sprawdzić edycję właściwości, zapis konfiguracji i ponowne otwarcie projektu.
+- Sprawdzić falownik: encje HA, TEST 0/puste, MPPT oraz odczyty SVG.
+
+---
 
 ### 0.4.59-dev — od 0.4.58-dev
 
