@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.65-dev';
+const VERSION = '0.4.66-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -1345,6 +1345,35 @@ const HASSStudioClassicSolar=(()=>{
 })();
 
 
+/* Stage 17D — classic pump, valve and sensor SVG.
+ * Original three renderer functions are preserved without changing geometry,
+ * colors or animation classes. Adapted artwork retains the MIT attribution.
+ * No Home Assistant side-effects or global state.
+ */
+const HASSStudioClassicAccessories=(()=>{
+  const create=dependencies=>{
+    if(!dependencies||['on','sensorState','color'].some(
+      key=>typeof dependencies[key]!=='function'))
+      throw new TypeError('Classic accessories require explicit renderer functions');
+    const {on,sensorState,color}=dependencies;
+  const pump=(n,h)=>'<circle cx="60" cy="62" r="30" fill="#2b2f35" stroke="'+(on(h,n.entity)?'#66c998':'#8a9099')+'" stroke-width="2"/>'+
+    (on(h,n.entity)?'<circle cx="60" cy="62" r="30" fill="none" stroke="#66c998" stroke-width="1.5" class="ss-pump-pulse"/>':'')+
+    '<path d="M77 62L47 79L47 45Z" fill="'+(on(h,n.entity)?'#66c998':'#7c8894')+'"/>';
+  const valve=(n,h)=>'<path d="M38 46L59 63L38 80ZM80 46L59 63L80 80Z" fill="#222b34" stroke="'+(on(h,n.entity)?'#69cda4':'#9da9b5')+'" stroke-width="2"/>'+
+    (n.variant==='three_way'?'<path d="M42 92L59 63L76 92Z" fill="#222b34" stroke="#9da9b5" stroke-width="2"/>':'')+
+    '<line x1="59" y1="46" x2="59" y2="35" stroke="#989fa8" stroke-width="3"/>'+
+    '<rect x="45" y="25" width="28" height="14" rx="3" fill="#3f4a56" stroke="#9aa7b3"/>'+
+    '<text x="59" y="35" text-anchor="middle" font-size="10" fill="#edf2f7">M</text>'+
+    '<circle cx="59" cy="63" r="3" fill="'+(on(h,n.entity)?'#69cda4':'#9aa7b3')+'"/>';
+  const sensor=(n,h)=>'<rect x="52" y="36" width="14" height="45" rx="7" fill="#29313a" stroke="#bac4cf" stroke-width="2"/>'+
+    '<circle cx="59" cy="83" r="13" fill="'+color(sensorState(h,n.entity))+'" stroke="#a8bccb" stroke-width="1.5"/>'+
+    '<path d="M59 52V83" stroke="'+color(sensorState(h,n.entity))+'" stroke-width="5" stroke-linecap="round"/>';
+    return Object.freeze({pump,valve,sensor});
+  };
+  return Object.freeze({create});
+})();
+
+
 /* Warmwasser-style SVG functions, adapted from mariofritzer's MIT implementation. */
 const HASSStudioGraphics = (() => {
   const id = n=>'ww'+String(n.id).replace(/[^a-z0-9]/gi,'').slice(0,24);
@@ -1419,18 +1448,11 @@ const HASSStudioGraphics = (() => {
     sensorState,numeric,scopedThreshold,temperatureBadge
   }).render;
 
-  const pump=(n,h)=>'<circle cx="60" cy="62" r="30" fill="#2b2f35" stroke="'+(on(h,n.entity)?'#66c998':'#8a9099')+'" stroke-width="2"/>'+
-    (on(h,n.entity)?'<circle cx="60" cy="62" r="30" fill="none" stroke="#66c998" stroke-width="1.5" class="ss-pump-pulse"/>':'')+
-    '<path d="M77 62L47 79L47 45Z" fill="'+(on(h,n.entity)?'#66c998':'#7c8894')+'"/>';
-  const valve=(n,h)=>'<path d="M38 46L59 63L38 80ZM80 46L59 63L80 80Z" fill="#222b34" stroke="'+(on(h,n.entity)?'#69cda4':'#9da9b5')+'" stroke-width="2"/>'+
-    (n.variant==='three_way'?'<path d="M42 92L59 63L76 92Z" fill="#222b34" stroke="#9da9b5" stroke-width="2"/>':'')+
-    '<line x1="59" y1="46" x2="59" y2="35" stroke="#989fa8" stroke-width="3"/>'+
-    '<rect x="45" y="25" width="28" height="14" rx="3" fill="#3f4a56" stroke="#9aa7b3"/>'+
-    '<text x="59" y="35" text-anchor="middle" font-size="10" fill="#edf2f7">M</text>'+
-    '<circle cx="59" cy="63" r="3" fill="'+(on(h,n.entity)?'#69cda4':'#9aa7b3')+'"/>';
-  const sensor=(n,h)=>'<rect x="52" y="36" width="14" height="45" rx="7" fill="#29313a" stroke="#bac4cf" stroke-width="2"/>'+
-    '<circle cx="59" cy="83" r="13" fill="'+color(sensorState(h,n.entity))+'" stroke="#a8bccb" stroke-width="1.5"/>'+
-    '<path d="M59 52V83" stroke="'+color(sensorState(h,n.entity))+'" stroke-width="5" stroke-linecap="round"/>';
+  // Stage 17D: all classic SVG functions now live in independent modules.
+  // Keep the same dispatch API for existing Warmwasser layouts and cards.
+  const {pump,valve,sensor}=HASSStudioClassicAccessories.create({
+    on,sensorState,color
+  });
   const shapes={tank,boiler,solar,pump,valve,sensor};
   // Without an explicit owner rendering is stateless, not silently global.
   const render=(n,h,state)=>shapes[n.type]?shapes[n.type](n,h,state):'';

@@ -36,12 +36,27 @@ Power balance is an informational visualization, not a control system. Data mark
 
 For development builds, choose the repository's default `main` branch in HACS and use **Redownload / Pobierz ponownie**. Refresh the browser after updating. HACS may cache the JavaScript bundle.
 
-Installed development build: **0.4.65-dev**.
+Installed development build: **0.4.66-dev**.
 
 ## Historia aktualizacji
 
 <!-- HASS-STUDIO-CHANGELOG-BEGIN -->
-<!-- HASS-STUDIO-SOURCE: feb77e525dc45fba9540f3d7c5a0901b4f016b7d -->
+<!-- HASS-STUDIO-SOURCE: b2a2a95c4843a5e919670d33aab8a8e2cc9816ec -->
+
+### 0.4.66-dev — od 0.4.65-dev
+
+**Refaktoryzacja**
+- extract original classic pump, valve, sensor SVG functions
+
+**Dokumentacja, testy i narzędzia**
+- verify exact SVG accessories and legacy editor/migration; bump 0.4.66-dev
+
+**Do przetestowania ręcznie w Home Assistant**
+- Po ponownym pobraniu w HACS sprawdzić załadowanie karty i brak błędów konsoli.
+- Sprawdzić edycję właściwości, zapis konfiguracji i ponowne otwarcie projektu.
+- Sprawdzić wyświetlanie SVG, animacje i połączenia urządzeń.
+
+---
 
 ### 0.4.65-dev — od 0.4.63-dev
 
