@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.67-dev';
+const VERSION = '0.4.68-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -980,7 +980,7 @@ if (!window.customCards.some((x) => x.type === 'ha-systems-studio'))
 console.info(`%c WARMWASSER-SCHEMA-CARD %c ${VERSION} `, 'background:#ff4b3e;color:#fff;font-weight:700', 'background:#333;color:#fff');
 
 
-const HASSStudioBuildInfo=Object.freeze({version:'0.4.67-dev'});
+const HASSStudioBuildInfo=Object.freeze({version:'0.4.68-dev'});
 
 /* Shared, read-only Home Assistant state adapters.
  * Unknown/unavailable values are never replaced by demo measurements.
@@ -7305,6 +7305,29 @@ const HASSStudioDesignerBridge=(()=>{
 })();
 
 
+/* Systems Studio: immutable factory contract for NEW cards and empty
+ * layouts. Do not use this factory to rewrite EXISTING legacy cards.
+ * Future example templates must remain separate from the default layout.
+ */
+const HASSStudioProjectDefaults=(()=>{
+  const emptyLayout=()=>({width:1200,height:720,nodes:[],connections:[]});
+  const newCard=()=>({
+    type:'custom:ha-systems-studio',
+    editor_version:1,studio_schema_version:1,
+    layout_mode:'custom',studio_language:'auto',studio_readonly:true,
+    studio_layout:emptyLayout()
+  });
+  const isEmpty=config=>{
+    const layout=config?.studio_layout;
+    if(!layout||!Array.isArray(layout.nodes)||layout.nodes.length)return false;
+    return ['connections','pipes','edges'].every(key=>
+      !Object.hasOwn(layout,key)||
+      (Array.isArray(layout[key])&&layout[key].length===0));
+  };
+  return Object.freeze({emptyLayout,newCard,isEmpty});
+})();
+
+
 /* Stage 14: explicit, non-destructive migration of custom Systems Studio cards.
  * No automatic Warmwasser layout conversion or configuration persistence.
  */
@@ -7325,6 +7348,18 @@ const HASSStudioEditorMigration=(()=>{
     if(config.layout_mode!=='custom')
       return fail('Migracja dotyczy wyłącznie własnych układów Systems Studio.');
     const layout=config.studio_layout;
+    // A fresh legacy stub has no Systems Studio layout until the user opens
+    // the old designer. Opt-in migration of that EMPTY project is safe.
+    // Never infer emptiness from invalid nodes, discarded links or unknown data.
+    const pristine=!own(config,'studio_layout')||
+      (layout&&typeof layout==='object'&&!Array.isArray(layout)&&
+       !own(layout,'nodes')&&
+       Object.keys(layout).every(key=>['name','width','height'].includes(key))&&
+       (!own(layout,'name')||typeof layout.name==='string')&&
+       (!own(layout,'width')||(Number.isFinite(layout.width)&&layout.width>0))&&
+       (!own(layout,'height')||(Number.isFinite(layout.height)&&layout.height>0)));
+    if(pristine)
+      return Object.freeze({ok:true,nodes:0,connections:0,empty:true});
     if(!layout||typeof layout!=='object'||Array.isArray(layout)||
        !Array.isArray(layout.nodes))
       return fail('Brak prawidłowego studio_layout.nodes. Oryginalny projekt pozostał bez zmian.');
@@ -7363,7 +7398,10 @@ const HASSStudioEditorMigration=(()=>{
     // Preserve all existing properties and the original studio_layout object.
     // Do not persist a normalized graph during the editor switch.
     return {...config,type:NEW_TYPE,editor_version:EDITOR_VERSION,
-      studio_schema_version:SCHEMA_VERSION,layout_mode:'custom'};
+      studio_schema_version:SCHEMA_VERSION,layout_mode:'custom',
+      ...(status.empty?{studio_layout:{
+        ...HASSStudioProjectDefaults.emptyLayout(),...(config.studio_layout||{})
+      }}:{})};
   };
   const apply=editor=>{
     if(!editor||typeof editor.dispatchEvent!=='function')
@@ -8795,8 +8833,35 @@ const HASSStudioTestViewer = (() => {
       '.ss-card-viewport:fullscreen{display:flex;flex-direction:column}' +
       '.ss-card-viewport:fullscreen .ss-card-header{flex:0 0 auto}' +
       '.ss-card-viewport:fullscreen svg{flex:1 1 auto;min-height:0}' +
+      '.ss-card-empty{position:absolute;inset:48px 0 0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:10px;padding:20px;box-sizing:border-box;pointer-events:none;text-align:center;color:var(--primary-text-color,#eaf2fa)}'+
+      '.ss-card-empty-icon{width:min(220px,75%);max-height:125px;flex:none;opacity:.93}'+
+      '.ss-card-empty-icon svg{display:block!important;width:100%!important;height:auto!important;max-height:125px!important;min-height:0!important;flex:none!important;touch-action:auto!important}'+
+      '.ss-card-empty-title{font-size:16px;font-weight:650;line-height:1.2}'+
+      '.ss-card-empty-hint{font-size:12px;line-height:1.5;max-width:270px;color:var(--secondary-text-color,#aebdcb)}'+
+      '@media(max-width:400px){.ss-card-empty{gap:6px;padding:10px}.ss-card-empty-icon{width:min(170px,65%)}.ss-card-empty-title{font-size:14px}.ss-card-empty-hint{font-size:11px}}'+
       '@media(max-width:600px){.ss-card-header{gap:4px;padding:6px}.ss-card-header .ss-card-title{font-size:12px}.ss-view-tools{gap:2px}.ss-view-tools button{min-width:27px;min-height:27px}}' +
       '</style>';
+    // Preview-only illustration. No fake device data and no YAML writes.
+    // The live canvas remains the first SVG for existing gesture handlers.
+    const empty=HASSStudioProjectDefaults.isEmpty(config);
+    const emptyMarkup=empty?
+      '<div class="ss-card-empty" role="status">'+
+      '<div class="ss-card-empty-icon" aria-hidden="true">'+
+      '<svg viewBox="0 0 260 118" xmlns="http://www.w3.org/2000/svg">'+
+      '<path d="M56 58H112M148 58H204" stroke="#60b8d9" stroke-width="3" stroke-dasharray="6 5" fill="none"/>'+
+      '<circle cx="48" cy="58" r="24" fill="#233f50" stroke="#5ebcdd" stroke-width="2"/>'+
+      '<path d="M32 58L64 58M36 48L60 48M36 68L60 68M39 43L33 73M52 43L46 73M65 43L59 73" fill="none" stroke="#7fcee5" stroke-width="1.7"/>'+
+      '<rect x="108" y="38" width="44" height="40" rx="8" fill="#263e4f" stroke="#76aecb" stroke-width="2"/>'+
+      '<path d="M118 58q6-12 12 0t12 0" fill="none" stroke="#f1c36c" stroke-width="3" stroke-linecap="round"/>'+
+      '<path d="M198 56l30-22 30 22v30h-60z" transform="translate(-9 -2)" fill="#263e4f" stroke="#76aecb" stroke-width="2" stroke-linejoin="round"/>'+
+      '<rect x="208" y="60" width="11" height="24" rx="2" fill="#5e9bab"/>'+
+      '<path d="M36 91H224" stroke="#456073" stroke-width="1" stroke-dasharray="3 6"/>'+
+      '</svg></div>'+
+      '<div class="ss-card-empty-title">'+escape(language==='pl'?'Nowy schemat instalacji':'New system diagram')+'</div>'+
+      '<div class="ss-card-empty-hint">'+escape(language==='pl'
+        ?'Schemat jest pusty. W konfiguracji wybierz „Otwórz projektant”, aby dodać urządzenia i połączenia.'
+        :'This diagram is empty. Use “Open designer” in card settings to add devices and connections.')+
+      '</div></div>':'';
     return css+'<div class="ss-card-viewport" id="ss-card-viewport" tabindex="0" aria-label="'+
       escape(words[language].editor)+'">'+
       '<div class="ss-card-header"><div class="ss-card-title">'+title+
@@ -8806,6 +8871,7 @@ const HASSStudioTestViewer = (() => {
       '<button type="button" data-view-action="fit" title="Dopasuj cały schemat" aria-label="Fit diagram">⤢</button>'+
       '<button type="button" data-view-action="full" title="Pełny ekran" aria-label="Fullscreen">⛶</button></div></div>'+
       canvas.canvasSvg(config,hass,false,null,graphicsState)+
+      emptyMarkup+
       HASSStudioEnergyDiagnostics.render(config,hass,language,'viewer')+'</div>';
   };
   const updateCamera = card => {
@@ -9144,6 +9210,9 @@ const HASSStudioTestViewer = (() => {
   }
   if(!customElements.get(tag))customElements.define(tag,HASSStudioEditorRouter);
   WarmwasserSchemaCard.getConfigElement=()=>document.createElement(tag);
+  // Only fresh cards receive v1. Saved configs without editor_version still
+  // route to the legacy editor, including the original automatic layout.
+  WarmwasserSchemaCard.getStubConfig=()=>HASSStudioProjectDefaults.newCard();
   // Route only migrated projects through the independent stage-12 viewer.
   // Other cards, including all inherited automatic layouts, retain exactly
   // the existing production renderer.
