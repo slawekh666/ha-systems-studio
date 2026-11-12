@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.63-dev';
+const VERSION = '0.4.65-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -1221,69 +1221,17 @@ const HASSStudioClassicTank=(()=>{
 })();
 
 
-/* Warmwasser-style SVG functions, adapted from mariofritzer's MIT implementation. */
-const HASSStudioGraphics = (() => {
-  const id = n=>'ww'+String(n.id).replace(/[^a-z0-9]/gi,'').slice(0,24);
-  const sensorState=(h,e)=>e&&h?.states?.[e]?h.states[e].state:'unknown';
-  const numeric=v=>v!==''&&v!==null&&v!==undefined&&Number.isFinite(Number(v));
-  const on=(h,e)=>['on','open','active','running','heating'].includes(String(sensorState(h,e)).toLowerCase());
-  const thresholdActive=(states,id,value,onAt,offAt)=>{
-    if(!numeric(value)){states.delete(id);return false;}
-    const active=states.get(id)===true;
-    const next=active?Number(value)>offAt:Number(value)>=onAt;
-    states.set(id,next);return next;
-  };
-  // Hysteresis belongs to a specific card/editor, never to a module-wide node ID.
-  // The graphics/threshold algorithms remain unchanged; only state ownership moves.
-  const createState=()=>{
-    const burning=new Map(),collectors=new Map();
-    return Object.freeze({
-      threshold:(kind,id,value,onAt,offAt)=>{
-        if(kind!=='boiler'&&kind!=='solar')throw new Error('Unknown hysteresis kind: '+kind);
-        return thresholdActive(kind==='boiler'?burning:collectors,id,value,onAt,offAt);
-      },
-      retain:nodes=>{
-        const boilers=new Set(),solar=new Set();
-        for(const node of nodes||[]){
-          if(node.visual!=='warmwasser')continue;
-          if(node.type==='boiler')boilers.add(node.id);
-          if(node.type==='solar')solar.add(node.id);
-        }
-        for(const id of burning.keys())if(!boilers.has(id))burning.delete(id);
-        for(const id of collectors.keys())if(!solar.has(id))collectors.delete(id);
-      },
-      clear:()=>{burning.clear();collectors.clear();}
-    });
-  };
-  const scopedThreshold=(state,kind,id,value,onAt,offAt)=>
-    state?state.threshold(kind,id,value,onAt,offAt):
-      numeric(value)&&Number(value)>=onAt;
-  const color=value=>{
-    if(!numeric(value))return 'rgb(138,144,153)';
-    const x=Math.max(0,Math.min(1,Number(value)/90));
-    if(x<.5){const k=x*2;return 'rgb('+Math.trunc(47+119*k)+','+Math.trunc(107-37*k)+','+Math.trunc(255-15*k)+')';}
-    const k=(x-.5)*2;return 'rgb('+Math.trunc(166+89*k)+','+Math.trunc(70-11*k)+','+Math.trunc(240-192*k)+')';
-  };
-  const defs=(n,h)=>{
-    const temps=(n.parts||[]).filter(p=>p.kind==='sensor'&&numeric(sensorState(h,p.entity)))
-      .map(p=>({y:100-Number(p.height),t:Number(sensorState(h,p.entity))})).sort((a,b)=>a.y-b.y);
-    const stops=temps.length?
-      [{y:0,t:temps[0].t},...temps,{y:100,t:temps[temps.length-1].t}]:
-      [{y:0,t:null},{y:100,t:null}];
-    return (n.type==='boiler'?'<clipPath id="'+id(n)+'FireClip"><rect x="35" y="99" width="64" height="56" rx="4"/></clipPath>':'')+
-      '<linearGradient id="'+id(n)+'Temp" x1="0" y1="0" x2="0" y2="1">'+
-      stops.map(p=>'<stop offset="'+p.y+'%" stop-color="'+color(p.t)+'"/>').join('')+
-      '</linearGradient><linearGradient id="'+id(n)+'Cyl" x1="0" x2="1" y1="0" y2="0">'+
-      '<stop stop-color="#fff" stop-opacity=".3"/><stop offset=".18" stop-color="#fff" stop-opacity=".12"/>'+
-      '<stop offset=".42" stop-color="#fff" stop-opacity="0"/><stop offset=".62" stop-color="#000" stop-opacity="0"/>'+
-      '<stop offset="1" stop-color="#000" stop-opacity=".45"/></linearGradient>'+
-      '<linearGradient id="'+id(n)+'Steel" x1="0" y1="0" x2="1" y2="0">'+
-      '<stop stop-color="#69717d"/><stop offset=".5" stop-color="#39414a"/><stop offset="1" stop-color="#222a32"/></linearGradient>';
-  };
-  // Stage 17A: preserve the exact legacy HASSStudioGraphics public contract;
-  // the working classic tank and solar share one temperature badge renderer.
-  const {temperatureBadge}=HASSStudioClassicBadges.create({sensorState,numeric,color,esc});
-  const tank=HASSStudioClassicTank.create({id,sensorState,numeric,on,esc,temperatureBadge}).render;
+/* Stage 17B — classic boiler artwork adapted from mariofritzer's MIT code.
+ * Unmodified existing SVG and flame path logic, no inherited HA classes.
+ * The owner of the graphic state supplies scopedThreshold; this module does
+ * not allocate hysteresis maps or influence other dashboard cards.
+ */
+const HASSStudioClassicBoiler=(()=>{
+  const create=dependencies=>{
+    if(!dependencies||['id','sensorState','numeric','on','esc','scopedThreshold'].some(
+      key=>typeof dependencies[key]!=='function'))
+      throw new TypeError('Classic boiler requires explicit renderer functions');
+    const {id,sensorState,numeric,on,esc,scopedThreshold}=dependencies;
   // Warmwasser-inspired tall boiler with full chimney and an enclosed firebox.
   const boiler=(n,h,state)=>{
     const v=n.variant,temp=sensorState(h,n.entity);
@@ -1347,6 +1295,22 @@ const HASSStudioGraphics = (() => {
       (burning?(isWood?'Burning':isGas?'Burner on':electric?'Heating':'Running'):'Off')+'</text></g>';
     return out;
   };
+    return Object.freeze({render:boiler});
+  };
+  return Object.freeze({create});
+})();
+
+
+/* Stage 17C — classic solar collector SVG adapted from the MIT artwork.
+ * Original geometry, labels, state thresholds and animation class unchanged.
+ * Hysteresis is owned by the caller's card/editor state, not this module.
+ */
+const HASSStudioClassicSolar=(()=>{
+  const create=dependencies=>{
+    if(!dependencies||['sensorState','numeric','scopedThreshold','temperatureBadge'].some(
+      key=>typeof dependencies[key]!=='function'))
+      throw new TypeError('Classic solar requires explicit renderer functions');
+    const {sensorState,numeric,scopedThreshold,temperatureBadge}=dependencies;
   const solar=(n,h,state)=>{
     const collectorPart=(n.parts||[]).find(p=>p.kind==='sensor'&&p.entity&&/kolektor|collector/i.test(p.label||''))||
       (n.parts||[]).find(p=>p.kind==='sensor'&&p.entity);
@@ -1375,6 +1339,85 @@ const HASSStudioGraphics = (() => {
     }
     return out;
   };
+    return Object.freeze({render:solar});
+  };
+  return Object.freeze({create});
+})();
+
+
+/* Warmwasser-style SVG functions, adapted from mariofritzer's MIT implementation. */
+const HASSStudioGraphics = (() => {
+  const id = n=>'ww'+String(n.id).replace(/[^a-z0-9]/gi,'').slice(0,24);
+  const sensorState=(h,e)=>e&&h?.states?.[e]?h.states[e].state:'unknown';
+  const numeric=v=>v!==''&&v!==null&&v!==undefined&&Number.isFinite(Number(v));
+  const on=(h,e)=>['on','open','active','running','heating'].includes(String(sensorState(h,e)).toLowerCase());
+  const thresholdActive=(states,id,value,onAt,offAt)=>{
+    if(!numeric(value)){states.delete(id);return false;}
+    const active=states.get(id)===true;
+    const next=active?Number(value)>offAt:Number(value)>=onAt;
+    states.set(id,next);return next;
+  };
+  // Hysteresis belongs to a specific card/editor, never to a module-wide node ID.
+  // The graphics/threshold algorithms remain unchanged; only state ownership moves.
+  const createState=()=>{
+    const burning=new Map(),collectors=new Map();
+    return Object.freeze({
+      threshold:(kind,id,value,onAt,offAt)=>{
+        if(kind!=='boiler'&&kind!=='solar')throw new Error('Unknown hysteresis kind: '+kind);
+        return thresholdActive(kind==='boiler'?burning:collectors,id,value,onAt,offAt);
+      },
+      retain:nodes=>{
+        const boilers=new Set(),solar=new Set();
+        for(const node of nodes||[]){
+          if(node.visual!=='warmwasser')continue;
+          if(node.type==='boiler')boilers.add(node.id);
+          if(node.type==='solar')solar.add(node.id);
+        }
+        for(const id of burning.keys())if(!boilers.has(id))burning.delete(id);
+        for(const id of collectors.keys())if(!solar.has(id))collectors.delete(id);
+      },
+      clear:()=>{burning.clear();collectors.clear();}
+    });
+  };
+  const scopedThreshold=(state,kind,id,value,onAt,offAt)=>
+    state?state.threshold(kind,id,value,onAt,offAt):
+      numeric(value)&&Number(value)>=onAt;
+  const color=value=>{
+    if(!numeric(value))return 'rgb(138,144,153)';
+    const x=Math.max(0,Math.min(1,Number(value)/90));
+    if(x<.5){const k=x*2;return 'rgb('+Math.trunc(47+119*k)+','+Math.trunc(107-37*k)+','+Math.trunc(255-15*k)+')';}
+    const k=(x-.5)*2;return 'rgb('+Math.trunc(166+89*k)+','+Math.trunc(70-11*k)+','+Math.trunc(240-192*k)+')';
+  };
+  const defs=(n,h)=>{
+    const temps=(n.parts||[]).filter(p=>p.kind==='sensor'&&numeric(sensorState(h,p.entity)))
+      .map(p=>({y:100-Number(p.height),t:Number(sensorState(h,p.entity))})).sort((a,b)=>a.y-b.y);
+    const stops=temps.length?
+      [{y:0,t:temps[0].t},...temps,{y:100,t:temps[temps.length-1].t}]:
+      [{y:0,t:null},{y:100,t:null}];
+    return (n.type==='boiler'?'<clipPath id="'+id(n)+'FireClip"><rect x="35" y="99" width="64" height="56" rx="4"/></clipPath>':'')+
+      '<linearGradient id="'+id(n)+'Temp" x1="0" y1="0" x2="0" y2="1">'+
+      stops.map(p=>'<stop offset="'+p.y+'%" stop-color="'+color(p.t)+'"/>').join('')+
+      '</linearGradient><linearGradient id="'+id(n)+'Cyl" x1="0" x2="1" y1="0" y2="0">'+
+      '<stop stop-color="#fff" stop-opacity=".3"/><stop offset=".18" stop-color="#fff" stop-opacity=".12"/>'+
+      '<stop offset=".42" stop-color="#fff" stop-opacity="0"/><stop offset=".62" stop-color="#000" stop-opacity="0"/>'+
+      '<stop offset="1" stop-color="#000" stop-opacity=".45"/></linearGradient>'+
+      '<linearGradient id="'+id(n)+'Steel" x1="0" y1="0" x2="1" y2="0">'+
+      '<stop stop-color="#69717d"/><stop offset=".5" stop-color="#39414a"/><stop offset="1" stop-color="#222a32"/></linearGradient>';
+  };
+  // Stage 17A: preserve the exact legacy HASSStudioGraphics public contract;
+  // the working classic tank and solar share one temperature badge renderer.
+  const {temperatureBadge}=HASSStudioClassicBadges.create({sensorState,numeric,color,esc});
+  const tank=HASSStudioClassicTank.create({id,sensorState,numeric,on,esc,temperatureBadge}).render;
+  // 17B: same legacy public API and per-card hysteresis ownership.
+  // Only the artwork moves; original automatic Warmwasser UI is untouched.
+  const boiler=HASSStudioClassicBoiler.create({
+    id,sensorState,numeric,on,esc,scopedThreshold
+  }).render;
+  // 17C: classic solar artwork uses the same badges and per-instance
+  // threshold resolver as before. Legacy card and migration stay intact.
+  const solar=HASSStudioClassicSolar.create({
+    sensorState,numeric,scopedThreshold,temperatureBadge
+  }).render;
 
   const pump=(n,h)=>'<circle cx="60" cy="62" r="30" fill="#2b2f35" stroke="'+(on(h,n.entity)?'#66c998':'#8a9099')+'" stroke-width="2"/>'+
     (on(h,n.entity)?'<circle cx="60" cy="62" r="30" fill="none" stroke="#66c998" stroke-width="1.5" class="ss-pump-pulse"/>':'')+
