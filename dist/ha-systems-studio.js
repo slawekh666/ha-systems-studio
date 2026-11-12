@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.66-dev';
+const VERSION = '0.4.67-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -979,6 +979,8 @@ if (!window.customCards.some((x) => x.type === 'ha-systems-studio'))
   });
 console.info(`%c WARMWASSER-SCHEMA-CARD %c ${VERSION} `, 'background:#ff4b3e;color:#fff;font-weight:700', 'background:#333;color:#fff');
 
+
+const HASSStudioBuildInfo=Object.freeze({version:'0.4.67-dev'});
 
 /* Shared, read-only Home Assistant state adapters.
  * Unknown/unavailable values are never replaced by demo measurements.
@@ -8499,11 +8501,12 @@ const HASSStudioDesignerController=(()=>{
 })();
 
 
-/* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
- * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
- * No external dependencies or service calls in the designer.
+/* Stage 18 — independent designer bootstrap.
+ * Common vocabulary, canvas and controller registration are owned by
+ * Systems Studio. Legacy Warmwasser remains an adapter only.
+ * The renderer and event handling keep the existing proven implementation.
  */
-(() => {
+const HASSStudioDesignerRuntime=(()=>{
   const W=1200,H=720,MAX_NODES=60,MAX_CONNECTIONS=80;
   const viewport=HASSStudioViewport;
   const registry=HASSStudioDeviceRegistry;
@@ -8570,9 +8573,34 @@ const HASSStudioDesignerController=(()=>{
   const {colors,pickLang,clamp,validEntity}=HASSStudioSVGShared;
   const freshId=(prefix)=>prefix+Math.random().toString(36).slice(2,10);
   const normalized=HASSStudioLayout.normalized;
+  const esc=HASSStudioSVGShared.escape;
   const {canvasSvg,connectionPath,onConnection,variantShape,translateConnectionPoints}=HASSStudioCanvas.create({
     W,H,colors,normalized,pickLang,words,clamp,validEntity,esc
   });
+  // Stage 18: the designer is bootstrapped without calling or patching
+  // Warmwasser card/editor classes. The bundle provides version independently
+  // from the upstream VERSION binding using the root VERSION file.
+  HASSStudioDesignerController.install({
+    W,H,MAX_NODES,MAX_CONNECTIONS,viewport,registry,types,words,pickLang,
+    clamp,validEntity,freshId,normalized,canvasSvg,connectionPath,onConnection,
+    variantShape,translateConnectionPoints,esc,
+    VERSION:HASSStudioBuildInfo.version,colors
+  });
+  HASSStudioDesignerBridge.install(function(){
+    return HASSStudioDesignerController.render(this);
+  });
+  return Object.freeze({viewport,words,pickLang,canvasSvg,esc});
+})();
+
+
+/* Home Assistant Systems Studio - Custom Designer v0.3 (opt-in).
+ * Based on Warmwasser Schema Card. The original automatic renderer stays intact.
+ * No external dependencies or service calls in the designer.
+ */
+(() => {
+  // The legacy adapter consumes the already initialized Systems Studio
+  // runtime; it never registers the designer or provides its dependencies.
+  const {viewport,words,pickLang,canvasSvg,esc}=HASSStudioDesignerRuntime;
   // Card viewer: fit entire scheme at every responsive width, only zoom after explicit interaction.
   const nativeRender=WarmwasserSchemaCard.prototype._render;
   const nativeUpdate=WarmwasserSchemaCard.prototype._update;
@@ -8723,18 +8751,11 @@ const HASSStudioDesignerController=(()=>{
     this._forms=[]; // Keeps inherited setConfig from recreating the designer on every edit.
     this._renderStudioEditor();
   };
-  // Only legacy compatibility stays here. Both editor components call the
-  // one Systems Studio controller; there is no copied second designer.
-  HASSStudioDesignerController.install({
-    W,H,MAX_NODES,MAX_CONNECTIONS,viewport,registry,types,words,pickLang,clamp,validEntity,freshId,normalized,canvasSvg,connectionPath,onConnection,variantShape,translateConnectionPoints,esc,VERSION,colors
-  });
+  // Compatibility with existing pre-migration cards only.
+  // Both versions call the same independently registered Systems Studio bridge.
   WarmwasserSchemaCardEditor.prototype._renderStudioEditor=function(){
-    return HASSStudioDesignerController.render(this);
+    return HASSStudioDesignerBridge.render(this);
   };
-  // Shared implementation: a separate HTMLElement owns the new editor lifecycle.
-  // The renderer itself moves out of this legacy adapter in later stages.
-  if(typeof HASSStudioDesignerBridge!=='undefined')
-    HASSStudioDesignerBridge.install(WarmwasserSchemaCardEditor.prototype._renderStudioEditor);
 })();
 
 /* Stage 12: standalone adapter for the existing Systems Studio canvas.

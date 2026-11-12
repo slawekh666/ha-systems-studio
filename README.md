@@ -36,12 +36,31 @@ Power balance is an informational visualization, not a control system. Data mark
 
 For development builds, choose the repository's default `main` branch in HACS and use **Redownload / Pobierz ponownie**. Refresh the browser after updating. HACS may cache the JavaScript bundle.
 
-Installed development build: **0.4.66-dev**.
+Installed development build: **0.4.67-dev**.
 
 ## Historia aktualizacji
 
 <!-- HASS-STUDIO-CHANGELOG-BEGIN -->
-<!-- HASS-STUDIO-SOURCE: b2a2a95c4843a5e919670d33aab8a8e2cc9816ec -->
+<!-- HASS-STUDIO-SOURCE: 9cedc71872ce9808087c119a784453207a4f2381 -->
+
+### 0.4.67-dev — od 0.4.66-dev
+
+**Refaktoryzacja**
+- bootstrap Systems Studio designer independently of Warmwasser editor
+
+**Dokumentacja, testy i narzędzia**
+- inspect independent runtime alongside compatibility adapter in regression suites B
+- inspect independent runtime alongside compatibility adapter in regression suites A
+- verify standalone bootstrap and retain legacy migration; bump 0.4.67-dev
+- switch legacy harnesses to independent designer bootstrap and enforce dependency boundary
+
+**Do przetestowania ręcznie w Home Assistant**
+- Po ponownym pobraniu w HACS sprawdzić załadowanie karty i brak błędów konsoli.
+- Sprawdzić edycję właściwości, zapis konfiguracji i ponowne otwarcie projektu.
+- Sprawdzić falownik: encje HA, TEST 0/puste, MPPT oraz odczyty SVG.
+- Sprawdzić wyświetlanie SVG, animacje i połączenia urządzeń.
+
+---
 
 ### 0.4.66-dev — od 0.4.65-dev
 
