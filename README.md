@@ -36,12 +36,31 @@ Power balance is an informational visualization, not a control system. Data mark
 
 For development builds, choose the repository's default `main` branch in HACS and use **Redownload / Pobierz ponownie**. Refresh the browser after updating. HACS may cache the JavaScript bundle.
 
-Installed development build: **0.4.61-dev**.
+Installed development build: **0.4.62-dev**.
 
 ## Historia aktualizacji
 
 <!-- HASS-STUDIO-CHANGELOG-BEGIN -->
-<!-- HASS-STUDIO-SOURCE: ac5e728579b5de910b0022fa71c604629a94ec03 -->
+<!-- HASS-STUDIO-SOURCE: 021a2d48fb802ea67ed0418de03baa69ba5ac623 -->
+
+### 0.4.62-dev — od 0.4.61-dev
+
+**Refaktoryzacja**
+- share SVG defaults, language and exact animation CSS across viewers
+
+**Dokumentacja, testy i narzędzia**
+- load SVG animation CSS before canvas in connection harnesses
+- preserve exact SVG animation CSS, migration and deterministic build
+- load shared SVG contract before legacy adapter in isolated VM tests
+- load shared SVG defaults in standalone icon preview
+- load extracted animation modules in standalone test harnesses
+
+**Do przetestowania ręcznie w Home Assistant**
+- Po ponownym pobraniu w HACS sprawdzić załadowanie karty i brak błędów konsoli.
+- Sprawdzić edycję właściwości, zapis konfiguracji i ponowne otwarcie projektu.
+- Sprawdzić wyświetlanie SVG, animacje i połączenia urządzeń.
+
+---
 
 ### 0.4.61-dev — od 0.4.59-dev
 

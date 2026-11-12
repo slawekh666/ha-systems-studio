@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.61-dev';
+const VERSION = '0.4.62-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -1069,6 +1069,51 @@ const HASSStudioAnimation = (() => {
 })();
 
 
+/* Stage 16: one read-only SVG rendering contract shared by both viewers
+ * and the designer. No Home Assistant services or stateful global resources.
+ */
+const HASSStudioSVGShared=(()=>{
+  const colors=Object.freeze({hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'});
+  const clamp=(n,lo,hi,fallback)=>
+    Number.isFinite(Number(n))?Math.max(lo,Math.min(hi,Number(n))):fallback;
+  const pickLang=(config,hass)=>{
+    const setting=config?.studio_language;
+    return setting==='pl'||setting==='en'?setting:
+      (String(hass?.locale?.language||hass?.language||'').toLowerCase().startsWith('pl')?'pl':'en');
+  };
+  const escape=value=>String(value??'').replace(/[&<>"']/g,char=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[char]);
+  const validEntity=value=>
+    typeof value==='string'&&/^[a-z_]+\.[a-z0-9_]+$/i.test(value);
+  return Object.freeze({colors,clamp,pickLang,escape,validEntity});
+})();
+
+
+/* Stage 16: one CSS animation source for legacy devices, custom SVG,
+ * editor preview, AC/DC power flows and the standalone viewer.
+ * The CSS bytes are preserved from the previously working renderer.
+ */
+const HASSStudioSVGAnimations=(()=>{
+  const styles='<style>'+
+    '@keyframes ssWWPulse{0%{opacity:.8;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}'+
+    '@keyframes ssWWFire{33%{opacity:.8;transform:scale(1.04,.92)}66%{opacity:.95;transform:scale(.96,1.06)}}'+
+    '@keyframes ssWWFlow{to{stroke-dashoffset:-28}}'+
+    '@keyframes ssElectricFlow{to{stroke-dashoffset:var(--ss-flow-cycle,-28)}}'+
+    '.ss-pump-pulse{animation:ssWWPulse 1.6s infinite;transform-box:fill-box;transform-origin:center}'+
+    '.ss-fire{animation:ssWWFire .9s infinite;transform-box:fill-box;transform-origin:center}'+
+    '.ss-solar-sun{animation:ssWWFire 3s infinite;transform-box:fill-box;transform-origin:center}'+
+    '@keyframes ssWWEmbers{50%{opacity:.45}}'+
+    '@keyframes ssWWRotate{to{transform:rotate(360deg)}}'+
+    '.ss-embers{animation:ssWWEmbers 1.7s infinite}'+
+    '.ss-fan{animation:ssWWRotate 1.8s linear infinite;transform-box:fill-box;transform-origin:center}'+
+    '.ss-flow{stroke:#fff;stroke-width:2.5;stroke-dasharray:1 13;animation:ssWWFlow var(--ss-speed,1s) linear infinite;fill:none;stroke-linecap:round}'+
+    '.ss-flow-power{animation-name:ssElectricFlow}'+
+    '</style>';
+  return Object.freeze({styles});
+})();
+
+
 /* Warmwasser-style SVG functions, adapted from mariofritzer's MIT implementation. */
 const HASSStudioGraphics = (() => {
   const id = n=>'ww'+String(n.id).replace(/[^a-z0-9]/gi,'').slice(0,24);
@@ -1308,21 +1353,9 @@ const HASSStudioGraphics = (() => {
   const shapes={tank,boiler,solar,pump,valve,sensor};
   // Without an explicit owner rendering is stateless, not silently global.
   const render=(n,h,state)=>shapes[n.type]?shapes[n.type](n,h,state):'';
-  const styles='<style>'+
-    '@keyframes ssWWPulse{0%{opacity:.8;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}'+
-    '@keyframes ssWWFire{33%{opacity:.8;transform:scale(1.04,.92)}66%{opacity:.95;transform:scale(.96,1.06)}}'+
-    '@keyframes ssWWFlow{to{stroke-dashoffset:-28}}'+
-    '@keyframes ssElectricFlow{to{stroke-dashoffset:var(--ss-flow-cycle,-28)}}'+
-    '.ss-pump-pulse{animation:ssWWPulse 1.6s infinite;transform-box:fill-box;transform-origin:center}'+
-    '.ss-fire{animation:ssWWFire .9s infinite;transform-box:fill-box;transform-origin:center}'+
-    '.ss-solar-sun{animation:ssWWFire 3s infinite;transform-box:fill-box;transform-origin:center}'+
-    '@keyframes ssWWEmbers{50%{opacity:.45}}'+
-    '@keyframes ssWWRotate{to{transform:rotate(360deg)}}'+
-    '.ss-embers{animation:ssWWEmbers 1.7s infinite}'+
-    '.ss-fan{animation:ssWWRotate 1.8s linear infinite;transform-box:fill-box;transform-origin:center}'+
-    '.ss-flow{stroke:#fff;stroke-width:2.5;stroke-dasharray:1 13;animation:ssWWFlow var(--ss-speed,1s) linear infinite;fill:none;stroke-linecap:round}'+
-    '.ss-flow-power{animation-name:ssElectricFlow}'+
-    '</style>';
+  // Legacy renderer API still exposes the same CSS string; do not delete it
+  // while older layouts remain supported through and beyond stage 29.
+  const styles=HASSStudioSVGAnimations.styles;
   return Object.freeze({defs,render,styles,on,createState});
 })();
 
@@ -6198,7 +6231,7 @@ const HASSStudioCanvas = (() => {
         '</g>';
     }).join('');
     return '<svg class="ss-svg'+(editable?' ss-svg-editor':'')+'" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System diagram">'+
-      HASSStudioGraphics.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
+      HASSStudioSVGAnimations.styles+HASSStudioTank.styles+HASSStudioSolidFuel.styles+HASSStudioPellet.styles+HASSStudioHeatPump.styles+HASSStudioGasBoiler.styles+HASSStudioFireplace.styles+'<defs>'+wwDefs+'<linearGradient id="ssTank" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e7845c"/><stop offset="1" stop-color="#4a8dbd"/></linearGradient></defs>'+
       '<rect class="ss-project-boundary" width="'+w+'" height="'+h+'" rx="4" fill="var(--secondary-background-color,#17222d)" stroke="'+
       (editable?'#52bfff':'none')+'" stroke-width="2" stroke-dasharray="'+(editable?'12 7':'none')+'"/>'+
       '<g class="ss-devices">'+nodes+'</g><g class="ss-connection-layer" stroke-linecap="round" stroke-linejoin="round">'+connections+'</g><g class="ss-pump-layer">'+accessories+'</g><g class="ss-port-layer">'+ports+'</g><g class="ss-connection-handles">'+handles+'</g></svg>';
@@ -8430,14 +8463,8 @@ const HASSStudioDesignerController=(()=>{
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{gasModel:'Piec gazowy (nowoczesny)',gasDraw:'Encja modulacji palnika (%)',gasGlow:'Intensywność podświetlenia (%)',gasHelp:'Modulacja to procent mocy palnika, nie zmierzony przepływ gazu. Brak danych wyłącza płomień.'}:{gasModel:'Modern gas boiler',gasDraw:'Burner modulation entity (%)',gasGlow:'Lighting intensity (%)',gasHelp:'Modulation is burner load, not measured gas flow. Missing data disables the flame.'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{electricModel:'Piec elektryczny (nowoczesny)',electricPower:'Encja poboru mocy (W/kW)',electricLoad:'Encja obciążenia (%) — opcjonalna',electricMax:'Moc znamionowa pieca (kW)',electricGlow:'Podświetlenie (%)',electricHelp:'Bez osobnej encji % obciążenie wynika z poboru mocy / mocy znamionowej. Brak odczytu nie jest zastępowany wartością demo.'}:{electricModel:'Modern electric boiler',electricPower:'Electrical power entity (W/kW)',electricLoad:'Load entity (%) — optional',electricMax:'Rated boiler power (kW)',electricGlow:'Lighting (%)',electricHelp:'If no % entity is set, load derives from measured power divided by rated power. Missing data never uses demo values.'});
   for(const lang of ['pl','en'])Object.assign(words[lang],lang==='pl'?{fireplaceModel:'Kominek (nowoczesny)',fireplaceHelp:'Ogień i żar są wizualizacją, automatyka zależy od encji lub temperatury.'}:{fireplaceModel:'Modern fireplace',fireplaceHelp:'Fire and embers are visual only; auto stage uses HA status or temperature.'});
-  const colors={hot:'#ed835a',cold:'#57a6db',solar:'#e5b35e',return:'#778cbe'};
-  const pickLang=(config,hass)=>{
-    const setting=config?.studio_language;
-    return setting==='pl'||setting==='en'?setting:
-      (String(hass?.locale?.language||hass?.language||'').toLowerCase().startsWith('pl')?'pl':'en');
-  };
-  const clamp=(n,lo,hi,fallback)=>Number.isFinite(Number(n))?Math.max(lo,Math.min(hi,Number(n))):fallback;
-  const validEntity=(value)=>typeof value==='string' && isEnt(value);
+  // The adapter and the standalone viewer share the same SVG contract.
+  const {colors,pickLang,clamp,validEntity}=HASSStudioSVGShared;
   const freshId=(prefix)=>prefix+Math.random().toString(36).slice(2,10);
   const normalized=HASSStudioLayout.normalized;
   const {canvasSvg,connectionPath,onConnection,variantShape,translateConnectionPoints}=HASSStudioCanvas.create({
@@ -8612,27 +8639,16 @@ const HASSStudioDesignerController=(()=>{
  * existing modules; no Warmwasser class or editor is referenced here.
  */
 const HASSStudioTestViewer = (() => {
-  const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  })[char]);
-  const pickLang = (config, hass) => {
-    if (config?.studio_language === 'pl' || config?.studio_language === 'en')
-      return config.studio_language;
-    return String(hass?.locale?.language || hass?.language || '').toLowerCase()
-      .startsWith('pl') ? 'pl' : 'en';
-  };
+  const {escape,pickLang,colors,clamp,validEntity}=HASSStudioSVGShared;
   const words = {
     pl: { editor: 'Projektant instalacji', pump: 'Pompa', valve: 'Zawór' },
     en: { editor: 'System diagram designer', pump: 'Pump', valve: 'Valve' }
   };
   const canvas = HASSStudioCanvas.create({
     W: 1200, H: 720,
-    colors: { hot:'#ed835a', cold:'#57a6db', solar:'#e5b35e', return:'#778cbe' },
+    colors,
     normalized: HASSStudioLayout.normalized, pickLang, words,
-    clamp: (n, lo, hi, fallback) => Number.isFinite(Number(n))
-      ? Math.max(lo, Math.min(hi, Number(n))) : fallback,
-    validEntity: value => typeof value === 'string' && /^[a-z_]+\.[a-z0-9_]+$/i.test(value),
-    esc: escape
+    clamp,validEntity,esc:escape
   });
   const render = (config, hass, graphicsState) => {
     const { width, height } = HASSStudioViewport.dimensions(config);
