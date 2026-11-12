@@ -36,12 +36,24 @@ Power balance is an informational visualization, not a control system. Data mark
 
 For development builds, choose the repository's default `main` branch in HACS and use **Redownload / Pobierz ponownie**. Refresh the browser after updating. HACS may cache the JavaScript bundle.
 
-Installed development build: **0.4.62-dev**.
+Installed development build: **0.4.63-dev**.
 
 ## Historia aktualizacji
 
 <!-- HASS-STUDIO-CHANGELOG-BEGIN -->
-<!-- HASS-STUDIO-SOURCE: 021a2d48fb802ea67ed0418de03baa69ba5ac623 -->
+<!-- HASS-STUDIO-SOURCE: 206a997cdcdb43d5dec4c78e12694519a9caa7c7 -->
+
+### 0.4.63-dev — od 0.4.62-dev
+
+**Refaktoryzacja**
+- extract unchanged classic tank and shared temperature badge SVG
+
+**Do przetestowania ręcznie w Home Assistant**
+- Po ponownym pobraniu w HACS sprawdzić załadowanie karty i brak błędów konsoli.
+- Sprawdzić edycję właściwości, zapis konfiguracji i ponowne otwarcie projektu.
+- Sprawdzić wyświetlanie SVG, animacje i połączenia urządzeń.
+
+---
 
 ### 0.4.62-dev — od 0.4.61-dev
 

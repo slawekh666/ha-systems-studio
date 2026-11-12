@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.62-dev';
+const VERSION = '0.4.63-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -1114,6 +1114,113 @@ const HASSStudioSVGAnimations=(()=>{
 })();
 
 
+/* 17A — reusable temperature labels from the adapted classic MIT shapes.
+ * Used by both classic tank and solar collector, not coupled to Warmwasser
+ * prototypes or global HA state. SVG content/geometry are unchanged.
+ * Original graphic attribution remains in the project license/documentation.
+ */
+const HASSStudioClassicBadges=(()=>{
+  const create=dependencies=>{
+    if(!dependencies||['sensorState','numeric','color','esc'].some(
+      key=>typeof dependencies[key]!=='function'))
+      throw new TypeError('Classic badges require explicit renderer functions');
+    const {sensorState,numeric,color,esc}=dependencies;
+  // Fit badges to measured string lengths rather than stretching all to 94px.
+  const approxTextWidth=(text,size)=>Array.from(String(text)).reduce((total,ch)=>{
+    const fraction=/[ilI1.,:!'|]/.test(ch)?0.34:/[MW@%]/.test(ch)?0.88:/[0-9]/.test(ch)?0.60:0.58;
+    return total+size*fraction;
+  },0);
+  const clampBadge=(v,lo=0.5,hi=2)=>Number.isFinite(Number(v))&&Number(v)>0?
+    Math.max(lo,Math.min(hi,Number(v))):1;
+  const temperatureBadge=(part,h,x,y,side='left',parentScale=1)=>{
+    const v=sensorState(h,part.entity),c=color(v);
+    const rawLabel=String(part.label||'').slice(0,24),label=esc(rawLabel);
+    const reading=numeric(v)?Number(v).toFixed(1)+'°':'—';
+    const hasLabel=rawLabel.trim().length>0;
+    const width=Math.ceil(Math.max(30,approxTextWidth(reading,13)+18,
+      hasLabel?approxTextWidth(rawLabel,8.5)+18:0));
+    const height=hasLabel?32:25;
+    const left=side==='left',inside=side==='inside';
+    const bx=inside?x-width/2:(left?x-width-8:x+8),by=y-height/2;
+    const badgeScale=clampBadge(part.display_scale)/clampBadge(parentScale,0.5,2.4);
+    return '<g class="ss-temperature-badge" transform="translate('+x+' '+y+') scale('+badgeScale+') translate('+(-x)+' '+(-y)+')"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>'+
+      (!inside?'<path d="M'+x+' '+y+'H'+(left?x-8:x+8)+'" stroke="'+c+'" stroke-width="1.6"/>':'')+
+      '<rect x="'+bx+'" y="'+by+'" width="'+width+'" height="'+height+'" rx="10" fill="#22272d" fill-opacity=".97" stroke="'+c+'" stroke-width="1.5"/>'+
+      (hasLabel?'<text x="'+(bx+width/2)+'" y="'+(y-4)+'" font-size="8.5" text-anchor="middle" font-weight="600" letter-spacing=".45" fill="#c5cbd2">'+label+'</text>':'')+
+      '<text x="'+(bx+width/2)+'" y="'+(hasLabel?y+10:y+4.5)+'" font-size="13" font-weight="700" text-anchor="middle" fill="#f0f3f6">'+reading+'</text>'+
+      '<circle cx="'+x+'" cy="'+y+'" r="4" fill="'+c+'" stroke="#fff" stroke-width="1.4"/></g>';
+  };
+    return Object.freeze({temperatureBadge});
+  };
+  return Object.freeze({create});
+})();
+
+
+/* 17A — classic tank SVG, byte-identical to the prior integrated renderer.
+ * Separate from the modern modular tank. Receives shared badge implementation
+ * by injection, without owning HA entities, IDs, or hysteresis maps.
+ * Adapted classic artwork retains mariofritzer's MIT attribution.
+ */
+const HASSStudioClassicTank=(()=>{
+  const create=dependencies=>{
+    if(!dependencies||['id','sensorState','numeric','on','esc','temperatureBadge'].some(
+      key=>typeof dependencies[key]!=='function'))
+      throw new TypeError('Classic tank requires explicit renderer functions');
+    const {id,sensorState,numeric,on,esc,temperatureBadge}=dependencies;
+  const tank=(n,h)=>{
+    let out='<g transform="translate(0 2) scale(.45 .29)">'+
+      '<rect x="72" y="14" width="130" height="360" rx="65" ry="22" fill="url(#'+id(n)+'Temp)"/>'+
+      '<rect x="72" y="14" width="130" height="360" rx="65" ry="22" fill="url(#'+id(n)+'Cyl)"/>'+
+      '<rect x="86" y="44" width="7" height="300" rx="3.5" fill="#fff" opacity=".14"/>'+
+      '<path d="M72 40Q137 60 202 40" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1.2"/>'+
+      '<path d="M72 348Q137 368 202 348" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="1.2"/>'+
+      '<rect x="72" y="14" width="130" height="360" rx="65" ry="22" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="1.5"/>';
+    if(n.variant==='combi')out+='<rect x="105" y="35" width="64" height="138" rx="25" fill="#acc6d0" fill-opacity=".35" stroke="#e2eff5" stroke-width="3"/>';
+    if(n.variant==='stratified')out+='<rect x="73" y="188" width="128" height="4" fill="#c3d0dd" fill-opacity=".4"/>';
+    const coil=y=>'<path d="M100 '+y+'C100 '+(y-11)+' 176 '+(y-5)+' 176 '+(y-18)+
+      'C176 '+(y-31)+' 100 '+(y-22)+' 100 '+(y-36)+'" fill="none" stroke="#d8e0e7" stroke-width="4"/>';
+    if(['coil','dual_coil'].includes(n.variant))out+=coil(342);
+    if(n.variant==='dual_coil')out+=coil(145);
+    if(n.variant==='hygiene'){
+      let p='M110 18V348H100';for(let y=348;y>70;y-=24)p+='C100 '+(y-8)+' 176 '+(y-4)+' 176 '+(y-12)+'C176 '+(y-20)+' 100 '+(y-16)+' 100 '+(y-24);
+      out+='<path d="'+p+'L164 32V18" fill="none" stroke="#d8e0e7" stroke-width="3.5" opacity=".7"/>';
+    }
+    out+='</g>';
+    let sensorIndex=0;
+    for(const part of n.parts||[]){
+      const y=107-Number(part.height)*.95,x=part.side==='left'?32:part.side==='right'?91:61;
+      if(part.kind==='sensor'){
+        out+=temperatureBadge({...part,label:part.label||'T'+(++sensorIndex)},h,x,y,part.side,n.scale);
+      }else if(part.kind==='heater'){
+        const active=on(h,part.entity)||(numeric(sensorState(h,part.entity))&&Number(sensorState(h,part.entity))>5);
+        out+='<g class="ss-heater"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>';
+        const c=active?'#ffc52f':'#b9c0c8',length=part.variant==='extended'?76:part.variant==='compact'?42:60;
+        const right=part.side!=='left';
+        const connector=right?93:29,sign=right?-1:1;
+        const x0=connector+sign*11,pitch=length/8;
+        let d='M'+x0+' '+y;
+        for(let k=1;k<=8;k++) d+='L'+(x0+sign*k*pitch).toFixed(2)+' '+(y+(k%2?-4:4));
+        out+='<g><path d="'+d+'" stroke="'+c+'" stroke-width="3" stroke-linejoin="round" fill="none"/>'+
+          '<rect x="'+(connector-(right?0:16))+'" y="'+(y-11)+'" width="16" height="22" rx="3" fill="#343940" stroke="'+c+'" stroke-width="1.6"/>'+
+          '<text x="'+(right?connector-4:connector+20)+'" y="'+(y-15)+'" text-anchor="'+(right?'end':'start')+
+          '" font-size="9" fill="'+c+'">'+esc(String(part.label||'').slice(0,25))+'</text></g></g>';
+      }else if(part.kind==='coil'){
+        out+='<g class="ss-coil"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>';
+        const reach=part.variant==='extended'?28:part.variant==='compact'?11:19;
+        const mid=part.side==='left'?45:part.side==='right'?78:61;
+        out+='<path d="M'+(mid-reach)+' '+y+'C'+(mid-reach)+' '+(y-13)+' '+(mid+reach)+' '+(y-7)+' '+(mid+reach)+' '+(y-19)+
+          'C'+(mid+reach)+' '+(y-31)+' '+(mid-reach)+' '+(y-23)+' '+(mid-reach)+' '+(y-35)+
+          '" fill="none" stroke="#d1d9e0" stroke-width="2.6" stroke-linecap="round"/></g>';
+      }
+    }
+    return out;
+  };
+    return Object.freeze({render:tank});
+  };
+  return Object.freeze({create});
+})();
+
+
 /* Warmwasser-style SVG functions, adapted from mariofritzer's MIT implementation. */
 const HASSStudioGraphics = (() => {
   const id = n=>'ww'+String(n.id).replace(/[^a-z0-9]/gi,'').slice(0,24);
@@ -1173,79 +1280,10 @@ const HASSStudioGraphics = (() => {
       '<linearGradient id="'+id(n)+'Steel" x1="0" y1="0" x2="1" y2="0">'+
       '<stop stop-color="#69717d"/><stop offset=".5" stop-color="#39414a"/><stop offset="1" stop-color="#222a32"/></linearGradient>';
   };
-  // Fit badges to measured string lengths rather than stretching all to 94px.
-  const approxTextWidth=(text,size)=>Array.from(String(text)).reduce((total,ch)=>{
-    const fraction=/[ilI1.,:!'|]/.test(ch)?0.34:/[MW@%]/.test(ch)?0.88:/[0-9]/.test(ch)?0.60:0.58;
-    return total+size*fraction;
-  },0);
-  const clampBadge=(v,lo=0.5,hi=2)=>Number.isFinite(Number(v))&&Number(v)>0?
-    Math.max(lo,Math.min(hi,Number(v))):1;
-  const temperatureBadge=(part,h,x,y,side='left',parentScale=1)=>{
-    const v=sensorState(h,part.entity),c=color(v);
-    const rawLabel=String(part.label||'').slice(0,24),label=esc(rawLabel);
-    const reading=numeric(v)?Number(v).toFixed(1)+'°':'—';
-    const hasLabel=rawLabel.trim().length>0;
-    const width=Math.ceil(Math.max(30,approxTextWidth(reading,13)+18,
-      hasLabel?approxTextWidth(rawLabel,8.5)+18:0));
-    const height=hasLabel?32:25;
-    const left=side==='left',inside=side==='inside';
-    const bx=inside?x-width/2:(left?x-width-8:x+8),by=y-height/2;
-    const badgeScale=clampBadge(part.display_scale)/clampBadge(parentScale,0.5,2.4);
-    return '<g class="ss-temperature-badge" transform="translate('+x+' '+y+') scale('+badgeScale+') translate('+(-x)+' '+(-y)+')"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>'+
-      (!inside?'<path d="M'+x+' '+y+'H'+(left?x-8:x+8)+'" stroke="'+c+'" stroke-width="1.6"/>':'')+
-      '<rect x="'+bx+'" y="'+by+'" width="'+width+'" height="'+height+'" rx="10" fill="#22272d" fill-opacity=".97" stroke="'+c+'" stroke-width="1.5"/>'+
-      (hasLabel?'<text x="'+(bx+width/2)+'" y="'+(y-4)+'" font-size="8.5" text-anchor="middle" font-weight="600" letter-spacing=".45" fill="#c5cbd2">'+label+'</text>':'')+
-      '<text x="'+(bx+width/2)+'" y="'+(hasLabel?y+10:y+4.5)+'" font-size="13" font-weight="700" text-anchor="middle" fill="#f0f3f6">'+reading+'</text>'+
-      '<circle cx="'+x+'" cy="'+y+'" r="4" fill="'+c+'" stroke="#fff" stroke-width="1.4"/></g>';
-  };
-  const tank=(n,h)=>{
-    let out='<g transform="translate(0 2) scale(.45 .29)">'+
-      '<rect x="72" y="14" width="130" height="360" rx="65" ry="22" fill="url(#'+id(n)+'Temp)"/>'+
-      '<rect x="72" y="14" width="130" height="360" rx="65" ry="22" fill="url(#'+id(n)+'Cyl)"/>'+
-      '<rect x="86" y="44" width="7" height="300" rx="3.5" fill="#fff" opacity=".14"/>'+
-      '<path d="M72 40Q137 60 202 40" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1.2"/>'+
-      '<path d="M72 348Q137 368 202 348" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="1.2"/>'+
-      '<rect x="72" y="14" width="130" height="360" rx="65" ry="22" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="1.5"/>';
-    if(n.variant==='combi')out+='<rect x="105" y="35" width="64" height="138" rx="25" fill="#acc6d0" fill-opacity=".35" stroke="#e2eff5" stroke-width="3"/>';
-    if(n.variant==='stratified')out+='<rect x="73" y="188" width="128" height="4" fill="#c3d0dd" fill-opacity=".4"/>';
-    const coil=y=>'<path d="M100 '+y+'C100 '+(y-11)+' 176 '+(y-5)+' 176 '+(y-18)+
-      'C176 '+(y-31)+' 100 '+(y-22)+' 100 '+(y-36)+'" fill="none" stroke="#d8e0e7" stroke-width="4"/>';
-    if(['coil','dual_coil'].includes(n.variant))out+=coil(342);
-    if(n.variant==='dual_coil')out+=coil(145);
-    if(n.variant==='hygiene'){
-      let p='M110 18V348H100';for(let y=348;y>70;y-=24)p+='C100 '+(y-8)+' 176 '+(y-4)+' 176 '+(y-12)+'C176 '+(y-20)+' 100 '+(y-16)+' 100 '+(y-24);
-      out+='<path d="'+p+'L164 32V18" fill="none" stroke="#d8e0e7" stroke-width="3.5" opacity=".7"/>';
-    }
-    out+='</g>';
-    let sensorIndex=0;
-    for(const part of n.parts||[]){
-      const y=107-Number(part.height)*.95,x=part.side==='left'?32:part.side==='right'?91:61;
-      if(part.kind==='sensor'){
-        out+=temperatureBadge({...part,label:part.label||'T'+(++sensorIndex)},h,x,y,part.side,n.scale);
-      }else if(part.kind==='heater'){
-        const active=on(h,part.entity)||(numeric(sensorState(h,part.entity))&&Number(sensorState(h,part.entity))>5);
-        out+='<g class="ss-heater"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>';
-        const c=active?'#ffc52f':'#b9c0c8',length=part.variant==='extended'?76:part.variant==='compact'?42:60;
-        const right=part.side!=='left';
-        const connector=right?93:29,sign=right?-1:1;
-        const x0=connector+sign*11,pitch=length/8;
-        let d='M'+x0+' '+y;
-        for(let k=1;k<=8;k++) d+='L'+(x0+sign*k*pitch).toFixed(2)+' '+(y+(k%2?-4:4));
-        out+='<g><path d="'+d+'" stroke="'+c+'" stroke-width="3" stroke-linejoin="round" fill="none"/>'+
-          '<rect x="'+(connector-(right?0:16))+'" y="'+(y-11)+'" width="16" height="22" rx="3" fill="#343940" stroke="'+c+'" stroke-width="1.6"/>'+
-          '<text x="'+(right?connector-4:connector+20)+'" y="'+(y-15)+'" text-anchor="'+(right?'end':'start')+
-          '" font-size="9" fill="'+c+'">'+esc(String(part.label||'').slice(0,25))+'</text></g></g>';
-      }else if(part.kind==='coil'){
-        out+='<g class="ss-coil"'+(part.entity?' data-more="'+esc(part.entity)+'"':'')+'>';
-        const reach=part.variant==='extended'?28:part.variant==='compact'?11:19;
-        const mid=part.side==='left'?45:part.side==='right'?78:61;
-        out+='<path d="M'+(mid-reach)+' '+y+'C'+(mid-reach)+' '+(y-13)+' '+(mid+reach)+' '+(y-7)+' '+(mid+reach)+' '+(y-19)+
-          'C'+(mid+reach)+' '+(y-31)+' '+(mid-reach)+' '+(y-23)+' '+(mid-reach)+' '+(y-35)+
-          '" fill="none" stroke="#d1d9e0" stroke-width="2.6" stroke-linecap="round"/></g>';
-      }
-    }
-    return out;
-  };
+  // Stage 17A: preserve the exact legacy HASSStudioGraphics public contract;
+  // the working classic tank and solar share one temperature badge renderer.
+  const {temperatureBadge}=HASSStudioClassicBadges.create({sensorState,numeric,color,esc});
+  const tank=HASSStudioClassicTank.create({id,sensorState,numeric,on,esc,temperatureBadge}).render;
   // Warmwasser-inspired tall boiler with full chimney and an enclosed firebox.
   const boiler=(n,h,state)=>{
     const v=n.variant,temp=sensorState(h,n.entity);
