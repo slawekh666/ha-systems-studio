@@ -14,7 +14,7 @@
  * Install: copy to /config/www/, add resource /local/ha-systems-studio.js (JavaScript module)
  */
 
-const VERSION = '0.4.58-dev';
+const VERSION = '0.4.59-dev';
 
 /* ---------- Texte / Texts ---------- */
 const T = {
@@ -7172,7 +7172,9 @@ const HASSStudioDesignerBridge=(()=>{
  */
 const HASSStudioEditorMigration=(()=>{
   const LEGACY_TYPE='custom:ha-systems-studio';
-  const NEW_TYPE='custom:ha-systems-studio-test';
+  const NEW_TYPE='custom:ha-systems-studio';
+  const EDITOR_VERSION=1;
+  const SCHEMA_VERSION=1;
   const fail=reason=>Object.freeze({ok:false,reason});
   const own=(obj,key)=>Object.prototype.hasOwnProperty.call(obj,key);
   const preflight=config=>{
@@ -7180,6 +7182,8 @@ const HASSStudioEditorMigration=(()=>{
       return fail('Nieprawidłowa konfiguracja karty.');
     if(config.type&&config.type!==LEGACY_TYPE)
       return fail('To nie jest karta starego projektanta Systems Studio.');
+    if(config.editor_version!==undefined&&config.editor_version!==null)
+      return fail('Konfiguracja ma już wersję edytora. Migracja nie jest potrzebna.');
     if(config.layout_mode!=='custom')
       return fail('Migracja dotyczy wyłącznie własnych układów Systems Studio.');
     const layout=config.studio_layout;
@@ -7220,7 +7224,8 @@ const HASSStudioEditorMigration=(()=>{
     if(!status.ok)throw new Error(status.reason);
     // Preserve all existing properties and the original studio_layout object.
     // Do not persist a normalized graph during the editor switch.
-    return {...config,type:NEW_TYPE,layout_mode:'custom',studio_editor:'standalone'};
+    return {...config,type:NEW_TYPE,editor_version:EDITOR_VERSION,
+      studio_schema_version:SCHEMA_VERSION,layout_mode:'custom'};
   };
   const apply=editor=>{
     if(!editor||typeof editor.dispatchEvent!=='function')
@@ -7233,7 +7238,8 @@ const HASSStudioEditorMigration=(()=>{
     }));
     return next;
   };
-  return Object.freeze({LEGACY_TYPE,NEW_TYPE,preflight,migrate,apply});
+  return Object.freeze({LEGACY_TYPE,NEW_TYPE,EDITOR_VERSION,SCHEMA_VERSION,
+    preflight,migrate,apply});
 })();
 
 
@@ -8817,14 +8823,13 @@ const HASSStudioTestViewer = (() => {
  */
 (() => {
   const tag='ha-systems-studio-test-editor';
-  const type='custom:ha-systems-studio-test';
+  const type='custom:ha-systems-studio';
   class HASSStudioTestEditor extends HTMLElement {
     constructor(){
       super();
       this._config=null;
       this._hass=null;
       this._studioStandalone=true;
-      this._studioAutoOpened=false;
       this._studioAttached=false;
       this._studioEditorDispose=null;
       this._studioEditorObserver=null;
@@ -8838,7 +8843,8 @@ const HASSStudioTestViewer = (() => {
       const model=HASSStudioLayout.normalized(config);
       if(!model||!Array.isArray(model.nodes)||!Array.isArray(model.connections))
         throw new Error('Systems Studio editor: invalid layout');
-      this._config={...config,type,layout_mode:'custom'};
+      const testAlias=config.type==='custom:ha-systems-studio-test';
+      this._config={...config,type:testAlias?config.type:type,layout_mode:'custom'};
       // Home Assistant calls setConfig again on each config-changed event.
       // Rebuilding here would close the dialog and destroy undo/selection state.
       if(this._studioAttached&&!this._studioEditorDispose)this._build();
@@ -8865,15 +8871,7 @@ const HASSStudioTestViewer = (() => {
       this._dispose();
       if(!this._studioAttached||!this._config)return;
       HASSStudioDesignerBridge.render(this);
-      // Automatically launch once per editor instance, not on every HA update,
-      // designer rebuild, disconnect/reconnect, or closing the modal.
-      if(!this._studioAutoOpened){
-        const open=this.shadowRoot?.getElementById?.('ss-open');
-        if(open){
-          this._studioAutoOpened=true;
-          open.click();
-        }
-      }
+
     }
     _renderStudioEditor(){
       return HASSStudioDesignerBridge.render(this);
@@ -8882,7 +8880,7 @@ const HASSStudioTestViewer = (() => {
       if(!this._config)return;
       // User edits are saved through the standard Lovelace Save button.
       // Do not rewrite an existing production card or add a schema flag.
-      const config={...this._config,type,layout_mode:'custom'};
+      const config={...this._config,layout_mode:'custom'};
       this.dispatchEvent(new CustomEvent('config-changed',{
         detail:{config},bubbles:true,composed:true
       }));
@@ -8890,4 +8888,87 @@ const HASSStudioTestViewer = (() => {
   }
   if(!customElements.get(tag))
     customElements.define(tag,HASSStudioTestEditor);
+})();
+
+
+/* Stage 14.1: one public card type, editor selection by configuration version.
+ * For pre-migration projects keep the inherited editor and all old Warmwasser
+ * controls. Version 1 uses the existing Systems Studio designer unchanged.
+ * The test tag remains an alias until user test projects have been retired.
+ */
+(() => {
+  const tag='ha-systems-studio-editor-router';
+  const baseType='custom:ha-systems-studio';
+  const versionOf=config=>config?.editor_version==null?'legacy':
+    config.editor_version===1?'studio1':'unsupported';
+  const legacyEditor=WarmwasserSchemaCard.getConfigElement;
+  const legacyCardRender=WarmwasserSchemaCard.prototype._render;
+  class HASSStudioEditorRouter extends HTMLElement {
+    constructor(){
+      super();
+      this._config=null;
+      this._hass=null;
+      this._mode=null;
+      this._child=null;
+      this._attached=false;
+    }
+    setConfig(config){
+      if(!config||typeof config!=='object'||Array.isArray(config))
+        throw new Error('Systems Studio: invalid card configuration');
+      this._config={...config};
+      if(this._attached)this._sync();
+    }
+    set hass(hass){
+      this._hass=hass;
+      if(this._child)this._child.hass=hass;
+    }
+    connectedCallback(){
+      this._attached=true;
+      this._sync();
+    }
+    disconnectedCallback(){
+      this._attached=false;
+      // Removing the child triggers its native disconnectedCallback and
+      // resource teardown. This editor router is owner of its sole child.
+      this._child?.remove();
+      this._child=null;
+      this._mode=null;
+    }
+    _sync(){
+      if(!this._config)return;
+      const mode=versionOf(this._config);
+      if(mode!==this._mode){
+        this._child?.remove();
+        this._child=null;
+        this._mode=mode;
+        if(mode==='legacy')this._child=legacyEditor.call(WarmwasserSchemaCard);
+        else if(mode==='studio1')
+          this._child=document.createElement('ha-systems-studio-test-editor');
+        else {
+          const message=document.createElement('p');
+          message.textContent='Nieobsługiwana wersja edytora: '+
+            String(this._config.editor_version)+'. Konfiguracja nie została zmieniona.';
+          this._child=message;
+        }
+        if(this._child)this.appendChild(this._child);
+      }
+      if(mode==='unsupported')return;
+      // Old editor keeps the original type and automatic mode untouched.
+      this._child.setConfig(this._config);
+      if(this._hass)this._child.hass=this._hass;
+    }
+  }
+  if(!customElements.get(tag))customElements.define(tag,HASSStudioEditorRouter);
+  WarmwasserSchemaCard.getConfigElement=()=>document.createElement(tag);
+  // Route only migrated projects through the independent stage-12 viewer.
+  // Other cards, including all inherited automatic layouts, retain exactly
+  // the existing production renderer.
+  WarmwasserSchemaCard.prototype._render=function(){
+    if(this._cfg?.editor_version===1&&this._cfg?.layout_mode==='custom'){
+      if(!this._studioGraphicsState)
+        this._studioGraphicsState=HASSStudioGraphics.createState();
+      return HASSStudioTestViewer.render(this._cfg,this._hass,this._studioGraphicsState);
+    }
+    return legacyCardRender.call(this);
+  };
 })();
